@@ -16,18 +16,20 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { isModelRefValid } from '../lib/refs';
+import { useI18n } from '@/i18n';
 
-function formatAge(ms: number): string {
+function formatAge(ms: number, t: (key: string, values?: Record<string, string | number>) => string): string {
   const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 60) return t('gateway.sessions.secondsAgo', { count: seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('gateway.sessions.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t('gateway.sessions.hoursAgo', { count: hours });
+  return t('gateway.sessions.daysAgo', { count: Math.floor(hours / 24) });
 }
 
 export function SessionsTab() {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const { sessions, sessionsLoading, sessionsError, fetchSessions, models, fetchModels } = useGatewayStore();
   const [refreshHover, setRefreshHover] = useState(false);
@@ -46,7 +48,7 @@ export function SessionsTab() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        Loading sessions...
+        {t('gateway.sessions.loading')}
       </div>
     );
   }
@@ -74,7 +76,7 @@ export function SessionsTab() {
             fontSize: '0.8125rem', color: 'var(--text-dim)',
             fontFamily: 'var(--font-sans)',
           }}>
-            {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+            {t(sessions.length === 1 ? 'gateway.sessions.countOne' : 'gateway.sessions.countMany', { count: sessions.length })}
           </span>
           <button
             onClick={() => fetchSessions()}
@@ -91,7 +93,7 @@ export function SessionsTab() {
               display: 'flex', alignItems: 'center',
             }}
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={14} aria-label={t('gateway.common.refresh')} />
           </button>
         </div>
 
@@ -102,7 +104,7 @@ export function SessionsTab() {
           }}>
             <MessageSquare size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
             <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              No active sessions
+              {t('gateway.sessions.empty')}
             </span>
           </div>
         ) : (
@@ -144,7 +146,7 @@ export function SessionsTab() {
                       fontSize: '0.875rem', fontWeight: 500,
                       color: 'var(--text)', fontFamily: 'var(--font-sans)',
                     }}>
-                      {session.agent || 'main'}
+                      {session.agent || t('gateway.sessions.main')}
                     </span>
                     <span style={{
                       fontSize: '0.6875rem',
@@ -168,14 +170,14 @@ export function SessionsTab() {
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           color: valid ? undefined : '#f43f5e',
                           display: 'inline-flex', alignItems: 'center', gap: 4,
-                        }} title={valid ? undefined : 'Session model is not in the configured list'}>
+                        }} title={valid ? undefined : t('gateway.sessions.invalidModel')}>
                           {!valid && <AlertTriangle size={10} />}
                           {session.model}
                         </span>
                       );
                     })()}
                     <span>&middot;</span>
-                    <span>{(session.tokens_used / 1000).toFixed(1)}k tokens</span>
+                    <span>{t('gateway.sessions.tokens', { count: (session.tokens_used / 1000).toFixed(1) })}</span>
                     {session.context_tokens > 0 && (
                       <span style={{
                         background: 'var(--surface)',
@@ -196,7 +198,7 @@ export function SessionsTab() {
                   fontFamily: 'var(--font-sans)', flexShrink: 0,
                 }}>
                   <Clock size={11} />
-                  {session.age_ms != null ? formatAge(session.age_ms) : '—'}
+                  {session.age_ms != null ? formatAge(session.age_ms, t) : '—'}
                 </div>
               </div>
             ))}

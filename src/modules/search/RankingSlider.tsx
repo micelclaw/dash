@@ -32,6 +32,7 @@ export function RankingSlider({ label, value, onChange, color, disabled }: Ranki
       </span>
       <input
         type="range"
+        aria-label={label}
         min={0}
         max={100}
         step={5}

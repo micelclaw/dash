@@ -12,6 +12,7 @@
 
 import { X, Download } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
+import { useI18n } from '@/i18n';
 
 interface YouTubeOverlayProps {
   videoId: string;
@@ -19,6 +20,7 @@ interface YouTubeOverlayProps {
 }
 
 export function YouTubeOverlay({ videoId, onClose }: YouTubeOverlayProps) {
+  const { t } = useI18n();
   const startDownload = usePlayerStore((s) => s.startDownload);
 
   return (
@@ -54,7 +56,7 @@ export function YouTubeOverlay({ videoId, onClose }: YouTubeOverlayProps) {
               fontSize: '0.8rem',
             }}
           >
-            <Download size={14} /> Download
+            <Download size={14} /> {t('player.download')}
           </button>
           <button
             onClick={onClose}
@@ -69,11 +71,11 @@ export function YouTubeOverlay({ videoId, onClose }: YouTubeOverlayProps) {
               fontSize: '0.85rem',
             }}
           >
-            <X size={16} /> Close
+            <X size={16} /> {t('media.close')}
           </button>
         </div>
         <iframe
-          title="YouTube video"
+          title={t('player.youtubeVideo')}
           src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
           allowFullScreen

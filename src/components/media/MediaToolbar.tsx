@@ -15,6 +15,7 @@ import { Search } from 'lucide-react';
 import { AI_MEDIA_ENABLED } from './flags';
 import { AiSearchToggle } from './AiSearchToggle';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 interface MediaToolbarProps {
   search?: string;
@@ -43,7 +44,7 @@ interface MediaToolbarProps {
 export function MediaToolbar({
   search = '',
   onSearchChange,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder,
   left,
   right,
   aiSlot = false,
@@ -51,6 +52,7 @@ export function MediaToolbar({
   onAiToggle,
   aiPlaceholder,
 }: MediaToolbarProps) {
+  const { t } = useI18n();
   const [localSearch, setLocalSearch] = useState(search);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const isMobile = useIsMobile();
@@ -111,7 +113,8 @@ export function MediaToolbar({
             <Search size={14} style={{ color: aiActive ? 'var(--amber)' : 'var(--text-muted)', flexShrink: 0 }} />
             <input
               type="text"
-              placeholder={aiActive && aiPlaceholder ? aiPlaceholder : searchPlaceholder}
+              placeholder={aiActive && aiPlaceholder ? aiPlaceholder : searchPlaceholder ?? t('media.searchPlaceholder')}
+              aria-label={t('media.search')}
               value={localSearch}
               autoFocus={isMobile && searchOpen}
               onChange={(e) => handleSearchInput(e.target.value)}
@@ -140,8 +143,8 @@ export function MediaToolbar({
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
-              title="Search"
-              aria-label="Search"
+              title={t('media.search')}
+              aria-label={t('media.search')}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'var(--surface)', border: 'none', borderRadius: 'var(--radius-sm)',

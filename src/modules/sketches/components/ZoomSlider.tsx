@@ -13,8 +13,10 @@
 import { useCallback } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export function ZoomSlider() {
+  const { t } = useI18n();
   const reactFlow = useReactFlow();
   const { zoom } = useViewport();
 
@@ -61,12 +63,13 @@ export function ZoomSlider() {
         zIndex: 5,
       }}
     >
-      <button onClick={handleZoomIn} style={btnStyle} title="Zoom In">
+      <button onClick={handleZoomIn} style={btnStyle} title={t('sketches.zoom.in')} aria-label={t('sketches.zoom.in')}>
         <ZoomIn size={14} />
       </button>
 
       <input
         type="range"
+        aria-label={t('sketches.zoom.level')}
         min={10}
         max={400}
         value={zoomPercent}
@@ -82,7 +85,7 @@ export function ZoomSlider() {
         }}
       />
 
-      <button onClick={handleZoomOut} style={btnStyle} title="Zoom Out">
+      <button onClick={handleZoomOut} style={btnStyle} title={t('sketches.zoom.out')} aria-label={t('sketches.zoom.out')}>
         <ZoomOut size={14} />
       </button>
 
@@ -105,12 +108,13 @@ export function ZoomSlider() {
           width: 'auto',
           padding: '2px 4px',
         }}
-        title="Click: 100% | Double-click: Fit View"
+        title={t('sketches.zoom.resetAndFitHelp')}
+        aria-label={t('sketches.zoom.resetAndFitHelp')}
       >
         {zoomPercent}%
       </button>
 
-      <button onClick={handleFitView} style={btnStyle} title="Fit View">
+      <button onClick={handleFitView} style={btnStyle} title={t('sketches.zoom.fitView')} aria-label={t('sketches.zoom.fitView')}>
         <Maximize size={14} />
       </button>
     </div>

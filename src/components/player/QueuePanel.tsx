@@ -13,8 +13,10 @@
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { X, Trash2 } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
+import { useI18n } from '@/i18n';
 
 export function QueuePanel() {
+  const { t } = useI18n();
   const queue = usePlayerStore((s) => s.queue);
   const queueIndex = usePlayerStore((s) => s.queueIndex);
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
@@ -47,18 +49,21 @@ export function QueuePanel() {
           borderBottom: '1px solid var(--border)',
         }}
       >
-        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Queue ({queue.length})</span>
+        <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{t('player.queueTitle', { count: queue.length })}</span>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
             onClick={clearQueue}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-muted)' }}
-            title="Clear queue"
+            title={t('player.clearQueue')}
+            aria-label={t('player.clearQueue')}
           >
             <Trash2 size={13} />
           </button>
           <button
             onClick={toggleQueuePanel}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-muted)' }}
+            title={t('media.close')}
+            aria-label={t('media.close')}
           >
             <X size={13} />
           </button>
@@ -86,6 +91,8 @@ export function QueuePanel() {
             </span>
             <button
               onClick={() => removeFromQueue(i)}
+              title={t('player.removeFromQueue')}
+              aria-label={t('player.removeFromQueue')}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-muted)', flexShrink: 0 }}
             >
               <X size={12} />

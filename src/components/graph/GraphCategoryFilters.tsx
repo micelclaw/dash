@@ -16,6 +16,7 @@ import { GRAPH_RECORD_DOMAINS } from '@/config/graph-domains';
 import { resolveEntity } from '@/config/entity-registry';
 import { labelOfResultDomain } from '@/config/search-domains';
 import type { LucideIcon } from 'lucide-react';
+import { useI18n, hasMessage } from '@/i18n';
 
 interface GraphCategoryFiltersProps {
   enabled: Record<string, boolean>;
@@ -43,6 +44,7 @@ const RECORD_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] =
   }));
 
 export function GraphCategoryFilters({ enabled, onToggle, mode = 'entities' }: GraphCategoryFiltersProps) {
+  const { t } = useI18n();
   const categories = mode === 'records' ? RECORD_CATEGORIES : ENTITY_CATEGORIES;
 
   return (
@@ -50,11 +52,17 @@ export function GraphCategoryFilters({ enabled, onToggle, mode = 'entities' }: G
       {categories.map(({ type, label, icon: Icon }) => {
         const isOn = enabled[type] !== false; // default true
         const color = entityTypeColor(type);
+        const key = mode === 'records'
+          ? `graph.type.${type}`
+          : `graph.category.${type === 'person' ? 'people' : type === 'project' ? 'projects' : type === 'location' ? 'locations' : type === 'topic' ? 'topics' : type === 'organization' ? 'organizations' : type === 'event' ? 'events' : 'unknown'}`;
+        const categoryLabel = mode === 'records' && !hasMessage(key) ? label : t(key);
         return (
           <button
             key={type}
             onClick={() => onToggle(type)}
-            title={`${isOn ? 'Hide' : 'Show'} ${label}`}
+            title={t(isOn ? 'graph.category.hide' : 'graph.category.show', { label: categoryLabel })}
+            aria-label={t(isOn ? 'graph.category.hide' : 'graph.category.show', { label: categoryLabel })}
+            aria-pressed={isOn}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -72,7 +80,7 @@ export function GraphCategoryFilters({ enabled, onToggle, mode = 'entities' }: G
             }}
           >
             <Icon size={12} />
-            {label}
+            {categoryLabel}
           </button>
         );
       })}

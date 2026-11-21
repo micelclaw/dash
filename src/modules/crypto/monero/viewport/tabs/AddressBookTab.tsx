@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Plus, Trash2, Search, Loader2, Copy, Check } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
@@ -22,6 +23,7 @@ interface AddressBookEntry {
 }
 
 export function AddressBookTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [entries, setEntries] = useState<AddressBookEntry[]>([]);
@@ -78,10 +80,10 @@ export function AddressBookTab() {
   return (
     <div className="ab-root">
       <div className="ab-header">
-        <h3 className="ab-title">Address Book</h3>
+        <h3 className="ab-title">{t('crypto.wallet.addressBook')}</h3>
         <div style={{ flex: 1 }} />
         <button className="ab-add-btn" onClick={() => setShowAdd(!showAdd)}>
-          <Plus size={12} /> Add Contact
+          <Plus size={12} /> {t('crypto.wallet.addContact')}
         </button>
       </div>
 
@@ -89,29 +91,29 @@ export function AddressBookTab() {
       {showAdd && (
         <div className="ab-add-form">
           <div className="ab-field">
-            <label className="ab-label">Address</label>
+            <label className="ab-label">{t('crypto.wallet.address')}</label>
             <input
               className="ab-input"
-              placeholder="4... or 8... Monero address"
+              placeholder={t('crypto.wallet.addressPlaceholder')}
               value={newAddr}
               onChange={(e) => setNewAddr(e.target.value)}
               spellCheck={false}
             />
           </div>
           <div className="ab-field">
-            <label className="ab-label">Description</label>
+            <label className="ab-label">{t('crypto.wallet.description')}</label>
             <input
               className="ab-input"
-              placeholder="Contact name or note"
+              placeholder={t('crypto.wallet.contactPlaceholder')}
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addEntry()}
             />
           </div>
           <div className="ab-add-actions">
-            <button className="ab-btn ab-btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
+            <button className="ab-btn ab-btn-ghost" onClick={() => setShowAdd(false)}>{t('crypto.wallet.cancel')}</button>
             <button className="ab-btn ab-btn-primary" onClick={addEntry} disabled={!newAddr.trim() || adding}>
-              {adding ? <><Loader2 size={12} className="spin" /> Adding...</> : 'Add'}
+              {adding ? <><Loader2 size={12} className="spin" /> {t('crypto.wallet.adding')}</> : t('crypto.wallet.addContact')}
             </button>
           </div>
         </div>
@@ -122,33 +124,33 @@ export function AddressBookTab() {
         <Search size={13} style={{ color: 'var(--text-muted)' }} />
         <input
           className="ab-search-input"
-          placeholder="Search contacts..."
+          placeholder={t('crypto.wallet.searchContacts')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <span className="ab-count">{filtered.length} contacts</span>
+        <span className="ab-count">{t('crypto.wallet.contactsCount', { count: filtered.length })}</span>
       </div>
 
       {/* List */}
       {loading ? (
-        <div className="ab-loading"><Loader2 size={16} className="spin" /> Loading address book...</div>
+        <div className="ab-loading"><Loader2 size={16} className="spin" /> {t('crypto.wallet.loadingAddressBook')}</div>
       ) : filtered.length === 0 ? (
-        <div className="ab-empty">{entries.length === 0 ? 'No contacts saved yet' : 'No matches'}</div>
+        <div className="ab-empty">{entries.length === 0 ? t('crypto.wallet.noContacts') : t('crypto.wallet.noMatches')}</div>
       ) : (
         <div className="ab-list">
           {filtered.map((e) => (
             <div key={e.index} className="ab-entry">
               <div className="ab-entry-top">
-                <span className="ab-entry-desc">{e.description || 'Unnamed'}</span>
+                <span className="ab-entry-desc">{e.description || t('crypto.wallet.unnamed')}</span>
                 <div className="ab-entry-actions">
-                  <button className="ab-entry-btn" onClick={() => copyAddr(e.address, e.index)} title="Copy address">
+                  <button className="ab-entry-btn" onClick={() => copyAddr(e.address, e.index)} title={t('crypto.wallet.copyAddress')}>
                     {copied === e.index ? <Check size={11} style={{ color: '#22c55e' }} /> : <Copy size={11} />}
                   </button>
                   <button
                     className="ab-entry-btn ab-entry-btn-danger"
                     onClick={() => deleteEntry(e.index)}
                     disabled={deleting === e.index}
-                    title="Delete"
+                    title={t('crypto.wallet.delete')}
                   >
                     {deleting === e.index ? <Loader2 size={11} className="spin" /> : <Trash2 size={11} />}
                   </button>

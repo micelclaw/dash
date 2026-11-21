@@ -13,8 +13,10 @@
 import { useState, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { useI18n } from '@/i18n';
 
 export function NewCardInput({ boardId, columnId }: { boardId: string; columnId: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const createCard = useProjectsStore((s) => s.createCard);
@@ -45,7 +47,7 @@ export function NewCardInput({ boardId, columnId }: { boardId: string; columnId:
           borderRadius: '0 0 8px 8px',
         }}
       >
-        <Plus size={12} /> Add card
+        <Plus size={12} /> {t('projects.addCard')}
       </button>
     );
   }
@@ -61,7 +63,7 @@ export function NewCardInput({ boardId, columnId }: { boardId: string; columnId:
           if (e.key === 'Escape') { setOpen(false); setTitle(''); }
         }}
         onBlur={() => { if (!title.trim()) setOpen(false); }}
-        placeholder="Card title..."
+        placeholder={t('projects.cardTitle')}
         style={{
           width: '100%',
           background: 'var(--card)',

@@ -28,6 +28,8 @@ import { hasActiveFilters } from './filtering';
 import { PILLS, countPill, buildDiagIndex } from './pills';
 import { workboardApi } from './workboard.service';
 import type { ManagedAgent } from '../types';
+import { SessionsBoardPanel } from './SessionsBoardPanel';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   agents: ManagedAgent[];
@@ -38,6 +40,14 @@ const readLS = (k: string, fallback: string) => {
 };
 
 export function WorkboardTab({ agents }: Props) {
+  const [tab, setTab] = useState<'coordination' | 'sessions'>('coordination');
+  return <div className="flex min-w-0 flex-col gap-4"><div className="flex gap-2" role="tablist" aria-label="Tipo de Workboard">
+    <Button role="tab" aria-selected={tab === 'coordination'} variant={tab === 'coordination' ? 'secondary' : 'ghost'} onClick={() => setTab('coordination')}>Coordinación</Button>
+    <Button role="tab" aria-selected={tab === 'sessions'} variant={tab === 'sessions' ? 'secondary' : 'ghost'} onClick={() => setTab('sessions')}>Conversaciones</Button>
+  </div>{tab === 'coordination' ? <CoordinationWorkboardTab agents={agents} /> : <SessionsBoardPanel />}</div>;
+}
+
+function CoordinationWorkboardTab({ agents }: Props) {
   const isMobile = useIsMobile();
   const { status, statusError, cards, diagnostics, loading, autoRefresh, setAutoRefresh, refreshStatus, loadCards } = useWorkboard();
   const [showNew, setShowNew] = useState(false);

@@ -1,100 +1,39 @@
-/**
- * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
- * All rights reserved.
- *
- * This file is part of Micelclaw OS and is proprietary software.
- * Unauthorized copying, modification, distribution, or use of this
- * file, via any medium, is strictly prohibited.
- *
- * See LICENSE in the root of this repository for full terms.
- * https://micelclaw.com
- */
+/** Portable Claws exchange, with legacy Agentar import compatibility. */
+import { api } from './api';
 
-// Wraps `/api/v1/agentar/*` — Agentar package export, validate, install.
-// Validate and install both accept a multipart upload; the dash holds the
-// File client-side and uploads it once for validate (preview), then again
-// for install when the user confirms. Server-side state isn't shared
-// between the two calls, so re-uploading is the simplest contract.
-
-import { useAuthStore } from '@/stores/auth.store';
-import { api, ApiError } from './api';
-
-const BASE_URL = import.meta.env.VITE_API_URL ?? '';
-const API_PREFIX = '/api/v1';
-
-export interface AgentarValidationIssue {
-  level: 'error' | 'warning';
-  code: string;
-  message: string;
-}
-
-export interface AgentarManifestPreview {
-  spec_version: number;
-  name: string;
-  display_name: string;
-  version: string;
-  description?: string;
-  model?: string;
-  color?: string;
-  avatar?: string;
-  scopes: string[];
-  skills: string[];
-  is_chief: boolean;
-  role?: string;
-}
-
+export interface AgentarValidationIssue { level: 'error' | 'warning'; code: string; message: string }
 export interface AgentarValidationResult {
-  manifest: AgentarManifestPreview;
-  embedded_skills: string[];
-  file_count: number;
-  valid: boolean;
-  issues: AgentarValidationIssue[];
-  missing_skills: string[];
+  format: 'claws' | 'agentar'; preview_hash: string;
+  manifest: { spec_version: number; name: string; display_name: string; version: string; description?: string; model?: string; scopes: string[]; skills: string[]; is_chief: boolean };
+  embedded_skills: string[]; file_count: number; valid: boolean; issues: AgentarValidationIssue[]; missing_skills: string[];
+  files: Array<{ path: string; bytes: number; sha256: string }>; private_files: string[]; excluded_fields: string[]; permissions_granted: false;
 }
-
 export interface AgentarInstallResult {
-  agent_id: string;
-  per_user_agent_id: string;
-  workspace_path: string;
-  token: string;
-  warnings: AgentarValidationIssue[];
-  missing_skills: string[];
-  readme_path: string;
+  agent_id: string; token: string; format: 'claws' | 'agentar'; source_hash: string;
+  installed_files: string[]; excluded_fields: string[]; permissions_granted: false;
+  warnings: AgentarValidationIssue[]; missing_skills: string[];
 }
+export interface AgentImportSelection { preview_hash: string; name: string; include_user: boolean; include_memory: boolean; selected_skills: string[] }
+export interface ClawsExportPreview { format: 'claws'; preview_hash: string; files: Array<{ path: string; bytes: number; sha256: string }>; excluded_fields: string[] }
 
-/** Stream the .tar.gz of an existing managed agent. */
-export async function downloadAgentarExport(
-  agentId: string,
-  embedSkills: boolean,
-): Promise<Blob> {
-  const token = useAuthStore.getState().tokens?.accessToken ?? null;
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const res = await fetch(`${BASE_URL}${API_PREFIX}/agentar/export/${agentId}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ embed_skills: embedSkills }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new ApiError('EXPORT_FAILED', text || `Export failed: ${res.status}`, undefined, res.status);
-  }
-  return res.blob();
+export async function inspectClawsExport(agentId: string, selectedSkills: string[]): Promise<ClawsExportPreview> {
+  return (await api.post<{ data: ClawsExportPreview }>(`/claws/preview/${encodeURIComponent(agentId)}`, { selected_skills: selectedSkills })).data;
 }
-
-/** Upload a .claw-agent or .tar.gz file and return the validation report. */
+export async function downloadClawsExport(agentId: string, preview: ClawsExportPreview, selectedSkills: string[]): Promise<{ blob: Blob; filename: string; sha256: string }> {
+  const generated = (await api.post<{ data: { download_id: string; filename: string; sha256: string } }>(`/claws/export/${encodeURIComponent(agentId)}`, { selected_skills: selectedSkills, preview_hash: preview.preview_hash }, { timeout: 90_000 })).data;
+  const downloaded = await api.getBlob(`/claws/download/${encodeURIComponent(generated.download_id)}`);
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await downloaded.blob.arrayBuffer())), b => b.toString(16).padStart(2, '0')).join('');
+  if (digest !== generated.sha256) throw new Error('Downloaded package does not match its SHA-256 receipt. Generate it again.');
+  return { blob: downloaded.blob, filename: generated.filename, sha256: generated.sha256 };
+}
 export async function validateAgentarPackage(file: File): Promise<AgentarValidationResult> {
-  const fd = new FormData();
-  fd.append('package', file);
-  const res = await api.upload<{ data: AgentarValidationResult }>('/agentar/validate', fd);
-  return res.data;
+  const fd = new FormData(); fd.append('package', file);
+  return (await api.upload<{ data: AgentarValidationResult }>('/agentar/validate', fd, 'POST', { timeout: 90_000 })).data;
 }
-
-/** Re-upload the same file and commit the install. */
-export async function installAgentarPackage(file: File): Promise<AgentarInstallResult> {
+export async function installAgentarPackage(file: File, selection: AgentImportSelection): Promise<AgentarInstallResult> {
   const fd = new FormData();
-  fd.append('package', file);
-  const res = await api.upload<{ data: AgentarInstallResult }>('/agentar/install', fd);
-  return res.data;
+  fd.append('preview_hash', selection.preview_hash); fd.append('name', selection.name);
+  fd.append('include_user', String(selection.include_user)); fd.append('include_memory', String(selection.include_memory));
+  fd.append('selected_skills', JSON.stringify(selection.selected_skills)); fd.append('package', file);
+  return (await api.upload<{ data: AgentarInstallResult }>('/agentar/install', fd, 'POST', { timeout: 90_000 })).data;
 }

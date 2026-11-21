@@ -16,6 +16,7 @@ import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { api } from '@/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AppIcon } from '@/components/shared/AppIcon';
+import { useI18n } from '@/i18n';
 import type { AgentSkill } from './types';
 
 /** Quita el bloque frontmatter YAML inicial (`---\n...\n---`) para mostrar solo el cuerpo legible. */
@@ -50,6 +51,9 @@ interface AppDetailModalProps {
 }
 
 export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, onClose, onChanged }: AppDetailModalProps) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const skillId = skill ? (skill.skill_id ?? `claw-${skill.domain}`) : '';
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,7 +71,7 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
     setLoading(true);
     api.get<{ data: SkillDetail }>(`/managed-agents/skills/${encodeURIComponent(skillId)}/detail`)
       .then((res) => setDetail(res.data))
-      .catch(() => toast.error('No se pudo cargar el detalle de la app'))
+      .catch(() => toast.error(tRef.current('agents.skills.detailLoadFailed')))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, skillId]);
@@ -82,11 +86,14 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
         skills: allSkillIds,
         skill_modes: { ...skillModes, [skillId]: next },
       });
-      toast.success(`${skill?.name}: modo ${next === 'core' ? 'núcleo' : 'completo'}`);
+      toast.success(tRef.current('agents.skills.modeSaved', {
+        name: skill?.name ?? '',
+        mode: tRef.current(next === 'core' ? 'agents.skills.mode.core' : 'agents.skills.mode.full'),
+      }));
       changed.current = true; // refresco diferido al cierre
     } catch {
       setMode(prev);
-      toast.error('No se pudo cambiar el modo');
+      toast.error(tRef.current('agents.skills.modeChangeFailed'));
     } finally {
       setSaving(false);
     }
@@ -128,24 +135,24 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
                 borderRadius: 'var(--radius-sm)',
               }}
             >
-              {m === 'core' ? 'Resumida (núcleo)' : 'Completa'}
+              {t(m === 'core' ? 'agents.skills.mode.coreLabel' : 'agents.skills.mode.fullLabel')}
             </button>
           ))}
         </div>
         {detail && !hasFull && (
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: 0 }}>
-            Esta app no tiene funciones avanzadas: núcleo y completa son iguales.
+            {t('agents.skills.noAdvancedTools')}
           </p>
         )}
 
-        {loading && <p style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Cargando…</p>}
+        {loading && <p style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>{t('agents.skills.loading')}</p>}
 
         {detail && (
           <>
-            <ToolGroup title={`Núcleo (${detail.tools.core.length})`} tools={detail.tools.core} />
+            <ToolGroup title={t('agents.skills.tools.core', { count: detail.tools.core.length })} tools={detail.tools.core} />
             {hasFull && mode === 'full' && (
               <ToolGroup
-                title={`Adicionales en Completa (+${detail.tools.full_only.length})`}
+                title={t('agents.skills.tools.full', { count: detail.tools.full_only.length })}
                 tools={detail.tools.full_only}
               />
             )}
@@ -157,7 +164,7 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
               const guide = mode === 'core' ? (detail.skill_md_core || detail.skill_md) : detail.skill_md;
               return guide ? (
                 <div style={{ marginTop: 8 }}>
-                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Guía</h4>
+                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>{t('agents.skills.guide')}</h4>
                   <div className="prose prose-invert prose-sm max-w-none" style={{ fontSize: '0.75rem' }}>
                     <MarkdownRenderer content={stripFrontmatter(guide)} highlight={false} />
                   </div>

@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useI18n } from '@/i18n';
+
 interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
@@ -35,12 +37,13 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'default',
   closeOnConfirm = true,
   pending = false,
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   const confirmColor = VARIANT_COLORS[variant] ?? 'var(--amber)';
@@ -106,7 +109,7 @@ export function ConfirmDialog({
               color: 'var(--text-dim)',
             }}
           >
-            {cancelLabel}
+            {cancelLabel ?? t('shared.action.cancel')}
           </button>
           <button
             disabled={pending}
@@ -123,7 +126,7 @@ export function ConfirmDialog({
               fontWeight: 600,
             }}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('shared.action.confirm')}
           </button>
         </div>
       </div>

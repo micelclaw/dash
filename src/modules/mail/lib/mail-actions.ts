@@ -84,8 +84,9 @@ function n(ctx: MailActionsCtx): string {
  * que aplica es restaurar), y en Spam lo que se quiere es sacarlo de ahí. Ofrecer
  * lo que no tiene sentido es lo que hace dudar de si la acción hizo algo.
  */
-export function buildMailActions(ctx: MailActionsCtx): MailAction[] {
+export function buildMailActions(ctx: MailActionsCtx, t: (key: string) => string): MailAction[] {
   const s = n(ctx);
+  const label = (key: string) => `${t(key)}${s}`;
   const enPapelera = ctx.folder === 'TRASH';
   const enSpam = ctx.folder === 'SPAM';
   const enArchivo = ctx.folder === 'ARCHIVE' || ctx.folder === 'Archive';
@@ -93,39 +94,39 @@ export function buildMailActions(ctx: MailActionsCtx): MailAction[] {
 
   // Leído / no leído: los DOS siempre, en vez de alternar. Con varios correos en
   // estados mezclados, alternar obliga a adivinar qué va a pasar.
-  salida.push({ key: 'read', label: `Mark as read${s}`, icon: 'mail-open' });
-  salida.push({ key: 'unread', label: `Mark as unread${s}`, icon: 'mail' });
+  salida.push({ key: 'read', label: label('mail.actionRead'), icon: 'mail-open' });
+  salida.push({ key: 'unread', label: label('mail.actionUnread'), icon: 'mail' });
 
   // La estrella SÍ alterna: es un interruptor, y con todos destacados lo único
   // que se puede querer es quitarlo.
   salida.push(ctx.allStarred
-    ? { key: 'unstar', label: `Unstar${s}`, icon: 'star-off' }
-    : { key: 'star', label: `Star${s}`, icon: 'star' });
+    ? { key: 'unstar', label: label('mail.actionUnstar'), icon: 'star-off' }
+    : { key: 'star', label: label('mail.actionStar'), icon: 'star' });
 
   if (!enPapelera) {
     salida.push(enArchivo
-      ? { key: 'unarchive', label: `Move to Inbox${s}`, icon: 'inbox' }
-      : { key: 'archive', label: `Archive${s}`, icon: 'archive' });
-    salida.push({ key: 'snooze', label: `Snooze…${s}`, icon: 'clock' });
+      ? { key: 'unarchive', label: label('mail.actionMoveInbox'), icon: 'inbox' }
+      : { key: 'archive', label: label('mail.actionArchive'), icon: 'archive' });
+    salida.push({ key: 'snooze', label: label('mail.actionSnooze'), icon: 'clock' });
   }
 
   if ((ctx.moveTargets?.length ?? 0) > 0) {
-    salida.push({ key: 'move', label: `Move to…${s}`, icon: 'folder', submenu: ctx.moveTargets });
+    salida.push({ key: 'move', label: label('mail.actionMove'), icon: 'folder', submenu: ctx.moveTargets });
   }
 
   if (!enPapelera) {
     salida.push(enSpam
-      ? { key: 'notspam', label: `Not spam${s}`, icon: 'inbox' }
-      : { key: 'spam', label: `Move to Spam${s}`, icon: 'shield-alert' });
+      ? { key: 'notspam', label: label('mail.actionNotSpam'), icon: 'inbox' }
+      : { key: 'spam', label: label('mail.actionSpam'), icon: 'shield-alert' });
   }
 
   if (ctx.canRelate) {
-    salida.push({ key: 'relate', label: 'Relate', icon: 'link' });
+    salida.push({ key: 'relate', label: t('mail.actionRelate'), icon: 'link' });
   }
 
   salida.push(enPapelera
-    ? { key: 'restore', label: `Restore${s}`, icon: 'inbox' }
-    : { key: 'delete', label: `Delete${s}`, icon: 'trash', danger: true });
+    ? { key: 'restore', label: label('mail.actionRestore'), icon: 'inbox' }
+    : { key: 'delete', label: label('mail.actionDelete'), icon: 'trash', danger: true });
 
   return salida;
 }

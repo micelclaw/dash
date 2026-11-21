@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Search, Newspaper, Network, Power, RotateCcw, Settings, LogOut } from 'lucide-react';
+import { Search, Newspaper, Network, Power, RotateCcw, Settings, LogOut, Database } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { ClipboardButton } from './ClipboardButton';
 import { BriefingPanel } from '@/components/BriefingPanel';
@@ -20,14 +20,18 @@ import { GraphViewModal } from '@/components/graph/GraphViewModal';
 import { ProUpsellModal } from '@/components/shared/ProUpsellModal';
 import { useDigestStore } from '@/stores/digest.store';
 import { MODULES } from '@/config/modules';
+import { officeColor } from '@/config/office-colors';
+import { OfficeSourceOffer } from '@/modules/office/OfficeSourceOffer';
+import { useOfficeProviders } from '@/modules/office/office-providers.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { lucideLookup } from '@/config/lucide-lookup';
 import { useIsPhone } from '@/hooks/use-media-query';
 import { hasNativeNotify } from '@/lib/native-notify';
-import { hasNativeAccessReset, nativeResetAccess } from '@/lib/native-session';
+import { hasNativeAccessReset } from '@/lib/native-session';
 import { settingsRouteForPath } from '@/config/settings-route-map';
 import { api } from '@/services/api';
+import { useSignOut } from '@/hooks/use-sign-out';
 
 /**
  * Menú de sesión y servidor.
@@ -41,19 +45,16 @@ import { api } from '@/services/api';
 function PowerMenu() {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState<'shutdown' | 'restart' | 'signout' | null>(null);
-  const logout = useAuthStore((s) => s.logout);
-  const navigate = useNavigate();
+  const { signOut, revoking, error: logoutError } = useSignOut();
   const inApp = hasNativeAccessReset();
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    if (revoking) return;
     if (confirming !== 'signout') {
       setConfirming('signout');
       return;
     }
-    // La sesión del dash es lo único que vive en ESTE origen: se limpia siempre.
-    logout();
-    // En la app, el envoltorio suelta el acceso y navega al onboarding él mismo.
-    if (!nativeResetAccess()) navigate('/login', { replace: true });
+    if (!await signOut()) return;
     setOpen(false);
     setConfirming(null);
   };
@@ -101,6 +102,7 @@ function PowerMenu() {
           }}>
             <button
               onClick={handleSignOut}
+              disabled={revoking}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 width: '100%', padding: '8px 12px',
@@ -115,10 +117,11 @@ function PowerMenu() {
               data-testid="power-signout"
             >
               <LogOut size={14} />
-              {confirming === 'signout'
+              {revoking ? 'Revocando sesión…' : logoutError ? 'Reintentar salida' : confirming === 'signout'
                 ? (inApp ? 'Click to confirm — back to connection setup' : 'Click to confirm')
                 : (inApp ? 'Sign out & reconnect' : 'Sign out')}
             </button>
+            {logoutError && <p role="alert" style={{ color: 'var(--error)', maxWidth: 280, padding: 8 }}>{logoutError}</p>}
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
             <button
               onClick={() => handleAction('restart')}
@@ -235,9 +238,12 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const appName = location.pathname.match(/^\/app\/([^/]+)/)?.[1];
   const appMod = appName ? uiModules.find((m) => m.app_name === decodeURIComponent(appName)) : undefined;
 
+  const officeProvider = useOfficeProviders(s => s.providers.find(p => p.app_name === appName));
+  const databasePage = location.pathname === '/office/databases';
+  const officeSlot = databasePage ? 'databases' : appMod?.office_provider?.slot ?? appName;
   const moduleLabel = currentModule?.label ?? appMod?.label ?? 'Micelclaw';
-  const moduleColor = currentModule?.color ?? appMod?.color ?? undefined;
-  const ModIcon = currentModule?.icon ?? (appMod ? lucideLookup(appMod.icon) : undefined);
+  const moduleColor = officeColor(officeSlot) ?? currentModule?.color ?? appMod?.color ?? undefined;
+  const ModIcon = databasePage ? Database : currentModule?.icon ?? (appMod ? lucideLookup(appMod.icon) : undefined);
 
   return (
     <div
@@ -264,7 +270,8 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
       {/* Left zone (en móvil la navegación vive en la bottom-nav — sin hamburguesa) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         {ModIcon && (
-          <ModIcon size={18} style={{ color: moduleColor, flexShrink: 0 }} />
+          officeProvider ? <OfficeSourceOffer provider={officeProvider}><ModIcon size={18} style={{ color: moduleColor, flexShrink: 0 }} /></OfficeSourceOffer>
+            : <ModIcon size={18} style={{ color: moduleColor, flexShrink: 0 }} />
         )}
         <h2
           style={{

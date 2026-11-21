@@ -63,6 +63,16 @@ export function ContactsListItem({ contact, selected, onClick, onDelete }: Conta
       onDelete={onDelete}
       trigger={
         <div
+          role="button"
+          tabIndex={0}
+          aria-pressed={selected}
+          aria-label={contact.display_name}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onClick();
+            }
+          }}
           onClick={onClick}
           style={{
             display: 'flex',

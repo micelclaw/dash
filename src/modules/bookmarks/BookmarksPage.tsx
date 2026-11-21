@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBookmarksStore } from '@/stores/bookmarks.store';
+import { useI18n } from '@/i18n';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import type { Bookmark } from '@/stores/bookmarks.store';
@@ -26,21 +27,22 @@ import { api } from '@/services/api';
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: 'en' | 'es'): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return locale === 'es' ? 'ahora mismo' : 'just now';
+  if (mins < 60) return locale === 'es' ? `hace ${mins} min` : `${mins}m ago`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return locale === 'es' ? `hace ${hours} h` : `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  if (days < 30) return locale === 'es' ? `hace ${days} d` : `${days}d ago`;
+  return new Date(iso).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB');
 }
 
 // ─── Add Bookmark Modal ──────────────────────────────────
 
 function AddBookmarkModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const createBookmark = useBookmarksStore((s) => s.createBookmark);
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -71,10 +73,10 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
         description: description || undefined,
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : undefined,
       });
-      toast.success('Bookmark saved');
+      toast.success(t('bookmarks.saved'));
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save');
+      toast.error(err instanceof Error ? err.message : t('bookmarks.saveFailed'));
     }
     setSaving(false);
   };
@@ -112,15 +114,15 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-            Add Bookmark
+            {t('bookmarks.addDialog')}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
+          <button onClick={onClose} aria-label={t('bookmarks.close')} title={t('bookmarks.close')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
             <X size={18} />
           </button>
         </div>
 
         <div>
-          <label htmlFor="bm-url" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>URL *</label>
+          <label htmlFor="bm-url" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>{t('bookmarks.url')} *</label>
           <input
             id="bm-url"
             style={inputStyle}
@@ -134,18 +136,18 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
 
         <div>
           <label htmlFor="bm-title" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-            Title {fetching && <span style={{ color: 'var(--amber)' }}>fetching...</span>}
+            {t('bookmarks.title')} {fetching && <span style={{ color: 'var(--amber)' }}>{t('bookmarks.fetching')}</span>}
           </label>
-          <input id="bm-title" style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Page title" />
+          <input id="bm-title" style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('bookmarks.pageTitle')} />
         </div>
 
         <div>
-          <label htmlFor="bm-description" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Description</label>
-          <input id="bm-description" style={inputStyle} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
+          <label htmlFor="bm-description" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>{t('bookmarks.description')}</label>
+          <input id="bm-description" style={inputStyle} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('bookmarks.briefDescription')} />
         </div>
 
         <div>
-          <label htmlFor="bm-tags" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Tags (comma-separated)</label>
+          <label htmlFor="bm-tags" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>{t('bookmarks.tags')}</label>
           <input id="bm-tags" style={inputStyle} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="dev, reading, ai" />
         </div>
 
@@ -164,7 +166,7 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
             cursor: !url || saving ? 'default' : 'pointer',
           }}
         >
-          {saving ? 'Saving...' : 'Save Bookmark'}
+          {saving ? t('bookmarks.saving') : t('bookmarks.save')}
         </button>
       </div>
     </div>
@@ -199,6 +201,7 @@ function BookmarkCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t, locale } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const checkAlive = useBookmarksStore((s) => s.checkAlive);
@@ -229,7 +232,7 @@ function BookmarkCard({
           width: 8, height: 8, borderRadius: '50%', marginTop: 6, flexShrink: 0,
           background: bookmark.is_alive ? '#22c55e' : '#ef4444',
         }}
-        title={bookmark.is_alive ? 'Link is alive' : 'Dead link'}
+        title={bookmark.is_alive ? t('bookmarks.alive') : t('bookmarks.dead')}
       />
 
       {/* Favicon */}
@@ -304,12 +307,12 @@ function BookmarkCard({
               fontFamily: 'var(--font-sans)',
               fontWeight: 600,
             }}>
-              Dead link
+              {t('bookmarks.dead')}
             </span>
           )}
 
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginLeft: 'auto' }}>
-            {timeAgo(bookmark.created_at)}
+            {timeAgo(bookmark.created_at, locale)}
           </span>
         </div>
       </div>
@@ -318,6 +321,8 @@ function BookmarkCard({
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={t('bookmarks.actions')}
+          title={t('bookmarks.actions')}
           style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}
         >
           <MoreHorizontal size={16} />
@@ -335,12 +340,12 @@ function BookmarkCard({
               }}
             >
               {[
-                { icon: Pencil, label: 'Edit', action: () => { onEdit(); setMenuOpen(false); } },
-                { icon: Share2, label: 'Compartir', action: () => { setShareOpen(true); setMenuOpen(false); } },
-                { icon: Copy, label: 'Copy URL', action: () => { navigator.clipboard.writeText(bookmark.url); toast.success('Copied'); setMenuOpen(false); } },
-                { icon: ExternalLink, label: 'Open in new tab', action: () => { window.open(bookmark.url, '_blank'); setMenuOpen(false); } },
-                { icon: RefreshCw, label: 'Check link', action: () => { checkAlive([bookmark.id]); setMenuOpen(false); } },
-                { icon: Trash2, label: 'Delete', action: () => { onDelete(); setMenuOpen(false); }, danger: true },
+                { icon: Pencil, label: t('bookmarks.edit'), action: () => { onEdit(); setMenuOpen(false); } },
+                { icon: Share2, label: t('bookmarks.share'), action: () => { setShareOpen(true); setMenuOpen(false); } },
+                { icon: Copy, label: t('bookmarks.copyUrl'), action: () => { navigator.clipboard.writeText(bookmark.url); toast.success(t('bookmarks.copied')); setMenuOpen(false); } },
+                { icon: ExternalLink, label: t('bookmarks.openNewTab'), action: () => { window.open(bookmark.url, '_blank'); setMenuOpen(false); } },
+                { icon: RefreshCw, label: t('bookmarks.checkLink'), action: () => { checkAlive([bookmark.id]); setMenuOpen(false); } },
+                { icon: Trash2, label: t('bookmarks.delete'), action: () => { onDelete(); setMenuOpen(false); }, danger: true },
               ].map((item) => (
                 <button
                   key={item.label}
@@ -383,6 +388,7 @@ function BookmarkCard({
 // ─── Main Page ───────────────────────────────────────────
 
 export function Component() {
+  const { t } = useI18n();
   const bookmarks = useBookmarksStore((s) => s.bookmarks);
   const total = useBookmarksStore((s) => s.total);
   const loading = useBookmarksStore((s) => s.loading);
@@ -432,9 +438,9 @@ export function Component() {
   const performDelete = async (id: string) => {
     try {
       await deleteBookmark(id);
-      toast.success('Bookmark deleted');
+      toast.success(t('bookmarks.deleted'));
     } catch {
-      toast.error('Failed to delete');
+      toast.error(t('bookmarks.deleteFailed'));
     }
   };
 
@@ -480,7 +486,7 @@ export function Component() {
             <input
               value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search bookmarks..."
+              placeholder={t('bookmarks.search')}
               style={{
                 flex: 1, background: 'transparent', border: 'none',
                 color: 'var(--text)', fontSize: '0.8125rem',
@@ -495,7 +501,7 @@ export function Component() {
             value={filters.tag ?? ''}
             onChange={(e) => setFilter('tag', e.target.value || null)}
           >
-            <option value="">All tags</option>
+            <option value="">{t('bookmarks.allTags')}</option>
             {allTags.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
 
@@ -505,7 +511,7 @@ export function Component() {
             value={filters.domain ?? ''}
             onChange={(e) => setFilter('domain', e.target.value || null)}
           >
-            <option value="">All domains</option>
+            <option value="">{t('bookmarks.allDomains')}</option>
             {allDomains.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
         </div>
@@ -524,7 +530,7 @@ export function Component() {
             }}
           >
             <Plus size={14} />
-            Add Bookmark
+            {t('bookmarks.add')}
           </button>
         </div>
       </div>
@@ -533,7 +539,7 @@ export function Component() {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {loading && bookmarks.length === 0 && (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            Loading bookmarks...
+            {t('bookmarks.loading')}
           </div>
         )}
 
@@ -544,10 +550,10 @@ export function Component() {
           }}>
             <BookmarkIcon size={48} style={{ color: 'var(--text-muted)', opacity: 0.4 }} />
             <div style={{ fontSize: '1rem', color: 'var(--text-dim)', fontWeight: 500 }}>
-              No bookmarks yet
+              {t('bookmarks.noBookmarks')}
             </div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', maxWidth: 360 }}>
-              Save your favorite links here — your agent can also save them from web searches.
+              {t('bookmarks.emptyDescription')}
             </div>
             <button
               onClick={() => setAddOpen(true)}
@@ -561,7 +567,7 @@ export function Component() {
               }}
             >
               <Plus size={14} />
-              Add your first bookmark
+              {t('bookmarks.addFirst')}
             </button>
           </div>
         )}
@@ -602,7 +608,7 @@ export function Component() {
           color: 'var(--text-muted)',
           fontFamily: 'var(--font-sans)',
         }}>
-          <span>Showing {bookmarks.length} of {total} bookmarks</span>
+          <span>{t('bookmarks.showing', { count: bookmarks.length, total })}</span>
           <button
             onClick={() => checkAlive()}
             disabled={checkingAlive}
@@ -620,7 +626,7 @@ export function Component() {
             }}
           >
             <RefreshCw size={12} style={{ animation: checkingAlive ? 'spin 1s linear infinite' : 'none' }} />
-            {checkingAlive ? 'Checking...' : 'Check All Links'}
+            {checkingAlive ? t('bookmarks.checking') : t('bookmarks.checkAll')}
           </button>
         </div>
       )}
@@ -632,13 +638,13 @@ export function Component() {
         open={confirmDeleteId !== null}
         onClose={() => setConfirmDeleteId(null)}
         onConfirm={() => { if (confirmDeleteId) void performDelete(confirmDeleteId); setConfirmDeleteId(null); }}
-        title="Delete bookmark"
+        title={t('bookmarks.delete')}
         description={(() => {
           const b = bookmarks.find(x => x.id === confirmDeleteId);
-          return b ? `Delete "${b.title || b.url}"?` : 'Delete this bookmark?';
+          return b ? t('bookmarks.deleteConfirm', { name: b.title || b.url }) : t('bookmarks.deleteConfirmFallback');
         })()}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        confirmLabel={t('bookmarks.delete')}
+        cancelLabel={t('bookmarks.cancel')}
         variant="danger"
       />
     </div>

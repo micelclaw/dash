@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Waypoints, Shapes, Layout, Loader2, Pencil, Trash2, PenTool } from 'lucide-react';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { FileRecord } from '@/types/files';
@@ -31,6 +32,7 @@ interface TemplateInfo {
 }
 
 export function SketchesLauncher() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [whiteboards, setWhiteboards] = useState<FileRecord[]>([]);
@@ -161,7 +163,7 @@ export function SketchesLauncher() {
   // Build context menu items for a diagram card
   const getContextItems = useCallback((file: FileRecord): ContextMenuItem[] => [
     {
-      label: 'Rename',
+      label: t('sketches.launcher.contextRename'),
       icon: Pencil,
       onClick: () => {
         setRenamingId(file.id);
@@ -170,12 +172,12 @@ export function SketchesLauncher() {
     },
     { label: '', onClick: () => {}, separator: true },
     {
-      label: 'Delete',
+      label: t('sketches.launcher.contextDelete'),
       icon: Trash2,
       variant: 'danger',
       onClick: () => handleDelete(file),
     },
-  ], [handleDelete]);
+  ], [handleDelete, t]);
 
   // ─── Whiteboards (Excalidraw) — movidos desde Tools ─────────────────
 
@@ -199,7 +201,7 @@ export function SketchesLauncher() {
 
   const getWbContextItems = useCallback((file: FileRecord): ContextMenuItem[] => [
     {
-      label: 'Rename',
+      label: t('sketches.launcher.contextRename'),
       icon: Pencil,
       onClick: () => {
         setRenamingId(file.id);
@@ -208,22 +210,22 @@ export function SketchesLauncher() {
     },
     { label: '', onClick: () => {}, separator: true },
     {
-      label: 'Delete',
+      label: t('sketches.launcher.contextDelete'),
       icon: Trash2,
       variant: 'danger',
       onClick: () => handleDeleteWb(file),
     },
-  ], [handleDeleteWb]);
+  ], [handleDeleteWb, t]);
 
   // Format relative time
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 60) return t('sketches.launcher.minutesAgo', { count: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t('sketches.launcher.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    return t('sketches.launcher.daysAgo', { count: days });
   };
 
   return (
@@ -266,7 +268,7 @@ export function SketchesLauncher() {
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #333)'; }}
           >
             <PenTool size={14} />
-            New Whiteboard
+            {t('sketches.launcher.newWhiteboard')}
           </button>
           <button
             onClick={handleNewDiagram}
@@ -288,7 +290,7 @@ export function SketchesLauncher() {
             }}
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            New Diagram
+            {t('sketches.launcher.newDiagram')}
           </button>
         </div>
       </div>
@@ -308,7 +310,7 @@ export function SketchesLauncher() {
             gap: 6,
           }}>
             <Layout size={12} />
-            Templates
+            {t('sketches.launcher.templates')}
           </h2>
           <div style={{
             display: 'grid',
@@ -360,7 +362,7 @@ export function SketchesLauncher() {
           gap: 6,
         }}>
           <Waypoints size={12} />
-          Diagrams
+          {t('sketches.launcher.diagrams')}
         </h2>
 
         {loading ? (
@@ -415,7 +417,7 @@ export function SketchesLauncher() {
             fontSize: 13,
             lineHeight: 1.5,
           }}>
-            No diagrams yet. Create a new one or start from a template.
+            {t('sketches.launcher.emptyDiagrams')}
           </div>
         ) : (
           <div style={{
@@ -452,6 +454,7 @@ export function SketchesLauncher() {
                       {renamingId === file.id ? (
                         <input
                           autoFocus
+                          aria-label={t('sketches.launcher.renameDiagram')}
                           value={renameValue}
                           onChange={(e) => setRenameValue(e.target.value)}
                           onBlur={() => handleRename(file.id, renameValue)}
@@ -512,7 +515,7 @@ export function SketchesLauncher() {
           gap: 6,
         }}>
           <PenTool size={12} />
-          Whiteboards
+          {t('sketches.launcher.whiteboards')}
         </h2>
 
         {whiteboards.length === 0 && !loading ? (
@@ -523,7 +526,7 @@ export function SketchesLauncher() {
             fontSize: 13,
             lineHeight: 1.5,
           }}>
-            No whiteboards yet. Use “New Whiteboard” to start drawing.
+            {t('sketches.launcher.emptyWhiteboards')}
           </div>
         ) : (
           <div style={{
@@ -560,6 +563,7 @@ export function SketchesLauncher() {
                       {renamingId === wb.id ? (
                         <input
                           autoFocus
+                          aria-label={t('sketches.launcher.renameWhiteboard')}
                           value={renameValue}
                           onChange={(e) => setRenameValue(e.target.value)}
                           onBlur={() => handleRenameWb(wb.id, renameValue)}

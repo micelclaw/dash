@@ -13,9 +13,11 @@
 // ─── Estadísticas de la selección múltiple ──────────────
 
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import { Section, SectionTitle, miniLabelStyle, readOnlyValue, statBoxStyle } from './shared';
 
 export function SelectionStats() {
+  const { t } = useI18n();
   const nodes = useDiagramsStore((s) => s.nodes);
   const edges = useDiagramsStore((s) => s.edges);
 
@@ -43,25 +45,25 @@ export function SelectionStats() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <SectionTitle>Selection</SectionTitle>
+      <SectionTitle>{t('sketches.selectionStats.selection')}</SectionTitle>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <div style={statBoxStyle}>
           <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text, #e2e8f0)', fontFamily: 'var(--font-mono, monospace)' }}>
             {selectedNodes.length}
           </span>
-          <span style={miniLabelStyle}>nodes</span>
+          <span style={miniLabelStyle}>{t('sketches.selectionStats.nodes')}</span>
         </div>
         <div style={statBoxStyle}>
           <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text, #e2e8f0)', fontFamily: 'var(--font-mono, monospace)' }}>
             {selectedEdges.length}
           </span>
-          <span style={miniLabelStyle}>edges</span>
+          <span style={miniLabelStyle}>{t('sketches.selectionStats.edges')}</span>
         </div>
       </div>
 
       {typeCounts.size > 0 && (
-        <Section title="By Type" defaultOpen={false}>
+        <Section title={t('sketches.selectionStats.byType')} defaultOpen={false}>
           {Array.from(typeCounts.entries())
             .sort((a, b) => b[1] - a[1])
             .map(([type, count]) => (
@@ -74,14 +76,14 @@ export function SelectionStats() {
       )}
 
       {selectedNodes.length >= 2 && minX !== Infinity && (
-        <Section title="Bounding Box" defaultOpen={false}>
+        <Section title={t('sketches.selectionStats.boundingBox')} defaultOpen={false}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
             <div>
-              <span style={miniLabelStyle}>Width</span>
+              <span style={miniLabelStyle}>{t('sketches.selectionStats.width')}</span>
               <span style={{ ...readOnlyValue, fontSize: 10, padding: '2px 6px' }}>{Math.round(maxX - minX)}</span>
             </div>
             <div>
-              <span style={miniLabelStyle}>Height</span>
+              <span style={miniLabelStyle}>{t('sketches.selectionStats.height')}</span>
               <span style={{ ...readOnlyValue, fontSize: 10, padding: '2px 6px' }}>{Math.round(maxY - minY)}</span>
             </div>
           </div>

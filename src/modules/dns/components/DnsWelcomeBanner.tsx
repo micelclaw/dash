@@ -12,6 +12,7 @@
 
 import { Globe, RefreshCw, Settings2 } from 'lucide-react';
 import type { DnsSection } from '../DnsSidebar';
+import { useI18n } from '@/i18n';
 
 interface DnsWelcomeBannerProps {
   onNavigate: (section: DnsSection) => void;
@@ -20,28 +21,29 @@ interface DnsWelcomeBannerProps {
 const CARDS = [
   {
     icon: Globe,
-    title: 'Tu dirección en internet',
-    description: 'Como la dirección de tu casa, pero en internet. Conecta tu nombre de dominio con el servidor donde viven tus servicios.',
+    titleKey: 'dns.card1Title',
+    descriptionKey: 'dns.card1Description',
   },
   {
     icon: RefreshCw,
-    title: 'IP dinámica sin problemas',
-    description: 'Si tu IP cambia (como en la mayoría de conexiones domésticas), Micelclaw la actualiza automáticamente para que tus servicios sigan accesibles.',
+    titleKey: 'dns.card2Title',
+    descriptionKey: 'dns.card2Description',
   },
   {
     icon: Settings2,
-    title: 'Gestiona tus dominios propios',
-    description: 'Si tienes un dominio como \'miempresa.com\', puedes gestionarlo aquí directamente, sin entrar al panel de tu proveedor.',
+    titleKey: 'dns.card3Title',
+    descriptionKey: 'dns.card3Description',
   },
 ];
 
-const ACTIONS: { label: string; section: DnsSection }[] = [
-  { label: 'Obtener mi subdominio gratis', section: 'subdomain' },
-  { label: 'Configurar IP dinámica', section: 'ddns' },
-  { label: 'Conectar mi dominio', section: 'providers' },
+const ACTIONS: { labelKey: string; section: DnsSection }[] = [
+  { labelKey: 'dns.getSubdomain', section: 'subdomain' },
+  { labelKey: 'dns.configureDynamicIp', section: 'ddns' },
+  { labelKey: 'dns.connectDomain', section: 'providers' },
 ];
 
 export function DnsWelcomeBanner({ onNavigate }: DnsWelcomeBannerProps) {
+  const { t } = useI18n();
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
       <div style={{
@@ -54,14 +56,14 @@ export function DnsWelcomeBanner({ onNavigate }: DnsWelcomeBannerProps) {
           fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)',
           margin: '0 0 16px', fontFamily: 'var(--font-sans)',
         }}>
-          ¿Para qué sirve este módulo?
+          {t('dns.purposeTitle')}
         </h2>
 
         {/* Feature cards */}
         <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
           {CARDS.map(card => (
             <div
-              key={card.title}
+              key={card.titleKey}
               style={{
                 flex: 1,
                 padding: 16,
@@ -75,12 +77,12 @@ export function DnsWelcomeBanner({ onNavigate }: DnsWelcomeBannerProps) {
                 fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)',
                 marginBottom: 6,
               }}>
-                {card.title}
+                {t(card.titleKey)}
               </div>
               <div style={{
                 fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5,
               }}>
-                {card.description}
+                {t(card.descriptionKey)}
               </div>
             </div>
           ))}
@@ -91,7 +93,7 @@ export function DnsWelcomeBanner({ onNavigate }: DnsWelcomeBannerProps) {
           fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)',
           marginBottom: 12,
         }}>
-          ¿Por dónde empiezo?
+          {t('dns.quickStart')}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {ACTIONS.map(action => (
@@ -112,7 +114,7 @@ export function DnsWelcomeBanner({ onNavigate }: DnsWelcomeBannerProps) {
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(212, 160, 23, 0.5)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
             >
-              {action.label}
+              {t(action.labelKey)}
             </button>
           ))}
         </div>

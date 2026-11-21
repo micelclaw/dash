@@ -17,6 +17,7 @@ import '@excalidraw/excalidraw/index.css';
 import { toast } from 'sonner';
 import { Save, Download } from 'lucide-react';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 import type { FileRecord } from '@/types/files';
 
 const PARENT_FOLDER = '/Tools/Whiteboards';
@@ -46,6 +47,7 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const { fileId } = useParams<{ fileId?: string }>();
   const navigate = useNavigate();
 
@@ -60,6 +62,9 @@ export function Component() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>('');
   const defaultLibIdsRef = useRef<Set<string>>(new Set());
+  const tRef = useRef(t);
+
+  useEffect(() => { tRef.current = t; }, [t]);
 
   // Protocolo #addLibrary: el botón "Add to Excalidraw" de
   // libraries.excalidraw.com vuelve a esta URL con
@@ -146,7 +151,7 @@ export function Component() {
         });
         lastSavedRef.current = JSON.stringify({ elements: json.elements || [], files: json.files });
       } catch {
-        toast.error('Failed to load whiteboard');
+        toast.error(tRef.current('sketches.whiteboard.failedToLoad'));
       } finally {
         setLoading(false);
       }
@@ -196,7 +201,7 @@ export function Component() {
       lastSavedRef.current = contentKey;
       setDirty(false);
     } catch {
-      toast.error('Failed to save whiteboard');
+      toast.error(tRef.current('sketches.whiteboard.failedToSave'));
     } finally {
       setSaving(false);
     }
@@ -235,7 +240,7 @@ export function Component() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error('Export failed');
+      toast.error(tRef.current('sketches.whiteboard.exportFailed'));
     }
   }, [excalidrawAPI, currentFilename]);
 
@@ -245,7 +250,7 @@ export function Component() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        Loading whiteboard...
+        {t('sketches.whiteboard.loading')}
       </div>
     );
   }
@@ -262,14 +267,14 @@ export function Component() {
           fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)',
           fontFamily: 'var(--font-sans)',
         }}>
-          {currentFilename || 'New Whiteboard'}
-          {dirty && <span style={{ color: 'var(--text-dim)', marginLeft: 6 }}>• unsaved</span>}
-          {saving && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>saving...</span>}
+          {currentFilename || t('sketches.whiteboard.new')}
+          {dirty && <span style={{ color: 'var(--text-dim)', marginLeft: 6 }}>{t('sketches.whiteboard.unsaved')}</span>}
+          {saving && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>{t('sketches.whiteboard.saving')}</span>}
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
             onClick={() => saveToFile(true)}
-            title="Save"
+            title={t('sketches.whiteboard.save')}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '4px 10px', fontSize: '0.75rem', fontWeight: 500,
@@ -278,11 +283,11 @@ export function Component() {
               fontFamily: 'var(--font-sans)',
             }}
           >
-            <Save size={12} /> Save
+            <Save size={12} /> {t('sketches.whiteboard.save')}
           </button>
           <button
             onClick={handleExportPng}
-            title="Export PNG"
+            title={t('sketches.whiteboard.exportPng')}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '4px 10px', fontSize: '0.75rem', fontWeight: 500,

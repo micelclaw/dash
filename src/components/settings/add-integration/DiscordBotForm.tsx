@@ -18,8 +18,12 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as syncSvc from '@/services/sync.service';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 export function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [botToken, setBotToken] = useState('');
   const [guildId, setGuildId] = useState('');
   const [guilds, setGuilds] = useState<Array<{ id: string; name: string }>>([]);
@@ -43,7 +47,7 @@ export function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => voi
     } catch {
       if (current !== generation.current) return;
       setDiscovery('error');
-      toast.error('No se pudieron consultar los servidores. Comprueba el token y los permisos del bot y vuelve a intentarlo.');
+      toast.error(tRef.current('settings.discord.lookupFailed'));
     } finally {
       if (current === generation.current) discovering.current = false;
     }
@@ -70,7 +74,7 @@ export function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => voi
       });
       onComplete();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to connect Discord');
+      toast.error(err?.message || tRef.current('settings.discord.connectFailed'));
     } finally {
       setSaving(false);
     }
@@ -79,27 +83,19 @@ export function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => voi
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Micelclaw reads your server through a Discord <strong>bot</strong> — you'll see the server
-        channels the bot can access, not your personal DMs.
+        {t('settings.discord.intro')}
       </div>
       <ol style={{
         margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3,
         fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.55,
       }}>
         <li>
-          In the{' '}
           <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" style={{ color: 'var(--amber)' }}>
-            Discord Developer Portal
-          </a>{' '}
-          → New Application → <strong>Bot</strong> → Reset Token → copy it.
+            {t('settings.discord.portal')}
+          </a>{' '}{t('settings.discord.stepApp')}
         </li>
-        <li>
-          Add the bot to a server you own — if you don't have one, create it in Discord first (the
-          <strong> + </strong> button → <em>Create My Own</em>). Then: OAuth2 → URL Generator → scope
-          <strong> bot</strong> + <em>View Channels</em>, <em>Read Message History</em>,
-          <em> Send Messages</em> → open the generated URL → Authorize on your server.
-        </li>
-        <li>Pega el token y pulsa <strong>Buscar servidores</strong> para elegir dónde está el bot.</li>
+        <li>{t('settings.discord.stepBot')} {t('settings.discord.stepInvite')}</li>
+        <li>{t('settings.discord.stepSearch')}</li>
       </ol>
       {/* LA trampa del modelo bot: sin el Message Content Intent, Discord devuelve
           content vacío → se sincronizan mensajes en blanco EN SILENCIO. */}
@@ -110,51 +106,49 @@ export function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => voi
       }}>
         <AlertTriangle size={15} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
         <span>
-          <strong>Required:</strong> in your bot's settings, under <em>Privileged Gateway Intents</em>,
-          turn on <strong>Message Content Intent</strong>. Without it Discord sends empty message text
-          and Micelclaw will sync blank messages.
+          {t('settings.discord.intentRequired')}
         </span>
       </div>
-      <Field label="Bot Token">
+      <Field label={t('settings.discord.token')}>
         <Input
           type="password"
-          aria-label="Bot Token"
+          aria-label={t('settings.discord.token')}
           value={botToken}
           onChange={e => {
             ++generation.current; discovering.current = false;
             setBotToken(e.target.value); setGuildId(''); setGuilds([]); setPartial(false); setDiscovery('idle');
           }}
-          placeholder="Bot token from Discord Developer Portal"
+          placeholder={t('settings.discord.tokenPlaceholder')}
           required
         />
       </Field>
       <Button type="button" variant="outline" disabled={!botToken.trim() || discovery === 'loading' || saving} onClick={() => { void findGuilds(); }}>
-        {discovery === 'loading' ? 'Buscando servidores…' : 'Buscar servidores'}
+        {discovery === 'loading' ? t('settings.discord.searching') : t('settings.discord.search')}
       </Button>
       <div aria-live="polite">
-        {discovery === 'done' && guilds.length === 0 && 'El bot no está en ningún servidor. Invítalo a uno y vuelve a buscar.'}
-        {discovery === 'error' && 'No se pudo consultar Discord. Puedes reintentar o introducir el ID manualmente.'}
-        {partial && 'La lista es parcial. Si no aparece tu servidor, introduce su ID manualmente.'}
+        {discovery === 'done' && guilds.length === 0 && t('settings.discord.empty')}
+        {discovery === 'error' && t('settings.discord.lookupFailed')}
+        {partial && t('settings.discord.partial')}
       </div>
-      {!manual && guilds.length > 0 && <Field label="Servidor">
+      {!manual && guilds.length > 0 && <Field label={t('settings.discord.server')}>
         <Select value={guildId} onValueChange={setGuildId} disabled={saving || discovery === 'loading'}>
-          <SelectTrigger aria-label="Servidor"><SelectValue placeholder="Elige un servidor" /></SelectTrigger>
+          <SelectTrigger aria-label={t('settings.discord.server')}><SelectValue placeholder={t('settings.discord.selectServer')} /></SelectTrigger>
           <SelectContent>{guilds.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
         </Select>
       </Field>}
       <Button type="button" variant="ghost" disabled={saving || discovery === 'loading'} aria-expanded={manual} onClick={() => { setManual(v => !v); setGuildId(''); }}>
-        {manual ? 'Volver al selector' : 'Introducir Server ID manualmente'}
+        {manual ? t('settings.discord.manualBack') : t('settings.discord.manualId')}
       </Button>
-      {manual && <Field label="Server (Guild) ID" hint="Discord → Developer Mode → clic derecho en el servidor → Copy Server ID (no el Client ID del bot).">
-        <Input aria-label="Server (Guild) ID" type="text" value={guildId} onChange={e => setGuildId(e.target.value)} placeholder="Server ID de 17–20 dígitos" required disabled={saving} />
+      {manual && <Field label={t('settings.discord.serverId')} hint={t('settings.discord.serverIdHint')}>
+        <Input aria-label={t('settings.discord.serverId')} type="text" value={guildId} onChange={e => setGuildId(e.target.value)} placeholder={t('settings.discord.serverIdPlaceholder')} required disabled={saving} />
       </Field>}
       <Field
-        label="Your Discord user ID"
-        hint="Discord → User Settings → Advanced → turn on Developer Mode, then right-click your own name → Copy User ID. Without it, everything you write from your own account shows up as received."
+        label={t('settings.discord.ownerId')}
+        hint={t('settings.discord.ownerIdHint')}
       >
         <Input
           type="text"
-          aria-label="Your Discord user ID"
+          aria-label={t('settings.discord.ownerId')}
           value={ownerId}
           onChange={e => setOwnerId(e.target.value)}
           placeholder="348132819840434177"
@@ -162,7 +156,7 @@ export function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => voi
         />
         {ownerId.trim() && !ownerIdValido && (
           <p style={{ fontSize: '0.625rem', color: '#fbbf24', marginTop: 4 }}>
-            That looks like a username. It should be 17–20 digits — copy it with Developer Mode on.
+            {t('settings.discord.ownerIdInvalid')}
           </p>
         )}
       </Field>

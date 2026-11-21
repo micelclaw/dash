@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Loader2, RefreshCw, ArrowDownLeft, ArrowUpRight, Clock } from 'lucide-react';
 import { api } from '@/services/api';
 import { useWalletBalance, type AccountBalance } from '../hooks/useWalletBalance';
@@ -45,6 +46,7 @@ function truncHash(h: string): string {
 }
 
 export function OverviewTab() {
+  const { t, locale } = useI18n();
   const { balance, isLoading: balLoading, refresh: refreshBalance } = useWalletBalance();
   const { convertXmr } = useFiatPrice();
   const [status, setStatus] = useState<WalletStatus | null>(null);
@@ -91,7 +93,7 @@ export function OverviewTab() {
   if (loading && balLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
-        <Loader2 size={16} className="spin" /> Loading wallet data...
+        <Loader2 size={16} className="spin" /> {t('crypto.wallet.loadingData')}
       </div>
     );
   }
@@ -104,26 +106,26 @@ export function OverviewTab() {
   return (
     <div className="ov-root">
       <div className="ov-header">
-        <h3 className="ov-title">Overview</h3>
-        <button className="ov-refresh" onClick={handleRefresh} title="Refresh">
+        <h3 className="ov-title">{t('crypto.wallet.overview')}</h3>
+        <button className="ov-refresh" onClick={handleRefresh} title={t('crypto.wallet.refresh')}>
           <RefreshCw size={13} />
         </button>
       </div>
 
       {/* Balance card */}
       <div className="ov-balance-card">
-        <div className="ov-balance-label">Total Balance</div>
+        <div className="ov-balance-label">{t('crypto.wallet.totalBalance')}</div>
         <div className="ov-balance-main">{totalXmr} <span className="ov-balance-unit">XMR</span></div>
         {fiatStr && <div className="ov-balance-fiat">{fiatStr}</div>}
         <div className="ov-balance-sub">
-          Unlocked: {unlockedXmr} XMR
+          {t('crypto.wallet.unlocked', { amount: unlockedXmr })} XMR
         </div>
       </div>
 
       {/* Accounts */}
       {balance && balance.accounts.length > 1 && (
         <div className="ov-section">
-          <div className="ov-section-title">Accounts</div>
+          <div className="ov-section-title">{t('crypto.wallet.accounts')}</div>
           <div className="ov-accounts">
             {balance.accounts.map((a: AccountBalance) => (
               <div key={a.index} className="ov-account-row">
@@ -137,9 +139,9 @@ export function OverviewTab() {
 
       {/* Recent transactions */}
       <div className="ov-section">
-        <div className="ov-section-title">Recent Transactions</div>
+        <div className="ov-section-title">{t('crypto.wallet.recentTransactions')}</div>
         {recentTxs.length === 0 ? (
-          <div className="ov-empty">No transactions yet</div>
+          <div className="ov-empty">{t('crypto.wallet.noTransactions')}</div>
         ) : (
           <div className="ov-txlist">
             {recentTxs.map((tx) => {
@@ -153,11 +155,11 @@ export function OverviewTab() {
                     <div className="ov-tx-hash">{truncHash(tx.txid)}</div>
                     <div className="ov-tx-time">
                       {tx.type === 'pending' || tx.type === 'pool' ? (
-                        <><Clock size={10} /> Pending</>
+                        <><Clock size={10} /> {t('crypto.wallet.pending')}</>
                       ) : (
-                        formatRelativeTime(tx.timestamp)
+                        formatRelativeTime(tx.timestamp, locale)
                       )}
-                      {tx.confirmations > 0 && ` · ${tx.confirmations} conf`}
+                      {tx.confirmations > 0 && ` · ${t('crypto.wallet.confirmations', { count: tx.confirmations })}`}
                     </div>
                   </div>
                   <div className={`ov-tx-amount ${isIn ? 'ov-tx-in' : 'ov-tx-out'}`}>
@@ -172,24 +174,24 @@ export function OverviewTab() {
 
       {/* Wallet info */}
       <div className="ov-section">
-        <div className="ov-section-title">Wallet Info</div>
+        <div className="ov-section-title">{t('crypto.wallet.info')}</div>
         <div className="ov-info-grid">
           <div className="ov-info-item">
-            <span className="ov-info-label">Wallet</span>
+            <span className="ov-info-label">{t('crypto.wallet.walletLabel')}</span>
             <span className="ov-info-value">{status?.active_wallet ?? '-'}</span>
           </div>
           <div className="ov-info-item">
-            <span className="ov-info-label">Height</span>
+            <span className="ov-info-label">{t('crypto.wallet.height')}</span>
             <span className="ov-info-value">{status?.height?.toLocaleString() ?? '-'}</span>
           </div>
           <div className="ov-info-item">
-            <span className="ov-info-label">RPC Version</span>
+            <span className="ov-info-label">{t('crypto.wallet.rpcVersion')}</span>
             <span className="ov-info-value">{status?.version ?? '-'}</span>
           </div>
           <div className="ov-info-item">
-            <span className="ov-info-label">Status</span>
+            <span className="ov-info-label">{t('crypto.wallet.status')}</span>
             <span className="ov-info-value" style={{ color: status?.rpc_reachable ? '#22c55e' : '#ef4444' }}>
-              {status?.rpc_reachable ? 'Connected' : 'Disconnected'}
+              {status?.rpc_reachable ? t('crypto.wallet.connected') : t('crypto.wallet.disconnected')}
             </span>
           </div>
         </div>

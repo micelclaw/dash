@@ -14,29 +14,45 @@ import { useState, useCallback } from 'react';
 import { Plus, Trash2, Zap } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import type { Automation } from '../types';
+import { useI18n } from '@/i18n';
 
 const TRIGGER_TYPES = [
-  { value: 'card_moved', label: 'Card moved' },
-  { value: 'card_created', label: 'Card created' },
-  { value: 'card_updated', label: 'Card updated' },
-  { value: 'due_date_reached', label: 'Due date reached' },
+  { value: 'card_moved', labelKey: 'projects.automationEditor.trigger.cardMoved' },
+  { value: 'card_created', labelKey: 'projects.automationEditor.trigger.cardCreated' },
+  { value: 'card_updated', labelKey: 'projects.automationEditor.trigger.cardUpdated' },
+  { value: 'due_date_reached', labelKey: 'projects.automationEditor.trigger.dueDateReached' },
 ];
 
 const CONDITION_TYPES = [
-  { value: 'none', label: 'No condition' },
-  { value: 'column_is', label: 'Column is' },
-  { value: 'priority_is', label: 'Priority is' },
-  { value: 'tag_contains', label: 'Tag contains' },
-  { value: 'assignee_is', label: 'Assignee is' },
+  { value: 'none', labelKey: 'projects.automationEditor.condition.none' },
+  { value: 'column_is', labelKey: 'projects.automationEditor.condition.columnIs' },
+  { value: 'priority_is', labelKey: 'projects.automationEditor.condition.priorityIs' },
+  { value: 'tag_contains', labelKey: 'projects.automationEditor.condition.tagContains' },
+  { value: 'assignee_is', labelKey: 'projects.automationEditor.condition.assigneeIs' },
 ];
 
 const ACTION_TYPES = [
-  { value: 'set_priority', label: 'Set priority' },
-  { value: 'add_tag', label: 'Add tag' },
-  { value: 'remove_tag', label: 'Remove tag' },
-  { value: 'move_to_column', label: 'Move to column' },
-  { value: 'set_assignee', label: 'Set assignee' },
+  { value: 'set_priority', labelKey: 'projects.automationEditor.action.setPriority' },
+  { value: 'add_tag', labelKey: 'projects.automationEditor.action.addTag' },
+  { value: 'remove_tag', labelKey: 'projects.automationEditor.action.removeTag' },
+  { value: 'move_to_column', labelKey: 'projects.automationEditor.action.moveToColumn' },
+  { value: 'set_assignee', labelKey: 'projects.automationEditor.action.setAssignee' },
 ];
+
+const PRIORITY_LABEL_KEYS: Record<string, string> = {
+  urgent: 'projects.automationEditor.priority.urgent',
+  high: 'projects.automationEditor.priority.high',
+  medium: 'projects.automationEditor.priority.medium',
+  low: 'projects.automationEditor.priority.low',
+  none: 'projects.automationEditor.priority.none',
+};
+const TRIGGER_LABEL_KEYS = Object.fromEntries(TRIGGER_TYPES.map(({ value, labelKey }) => [value, labelKey]));
+const ACTION_LABEL_KEYS = Object.fromEntries(ACTION_TYPES.map(({ value, labelKey }) => [value, labelKey]));
+
+function knownLabel(t: (key: string) => string, keys: Record<string, string>, value: string): string {
+  const key = keys[value];
+  return key ? t(key) : value;
+}
 
 interface AutomationFormState {
   name: string;
@@ -57,6 +73,7 @@ const emptyForm: AutomationFormState = {
 };
 
 export function AutomationEditor({ boardId }: { boardId: string }) {
+  const { t } = useI18n();
   const automations = useProjectsStore((s) => s.automations);
   const createAutomation = useProjectsStore((s) => s.createAutomation);
   const updateAutomation = useProjectsStore((s) => s.updateAutomation);
@@ -91,18 +108,18 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
 
   const handleDelete = useCallback(
     (autoId: string) => {
-      if (confirm('Delete this automation?')) {
+      if (confirm(t('projects.automationEditor.deleteConfirm'))) {
         deleteAutomation(boardId, autoId);
       }
     },
-    [boardId, deleteAutomation],
+    [boardId, deleteAutomation, t],
   );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {automations.length === 0 && !showNew && (
         <div style={{ color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', padding: 20 }}>
-          No automations yet.
+          {t('projects.automationEditor.empty')}
         </div>
       )}
 
@@ -125,6 +142,8 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <button
                 onClick={() => handleToggle(auto)}
+                aria-pressed={auto.enabled}
+                aria-label={t(auto.enabled ? 'projects.automationEditor.disable' : 'projects.automationEditor.enable', { name: auto.name })}
                 style={{
                   padding: '2px 8px',
                   borderRadius: 4,
@@ -136,10 +155,11 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
                   fontFamily: 'var(--font-sans)',
                 }}
               >
-                {auto.enabled ? 'On' : 'Off'}
+                {t(auto.enabled ? 'projects.automationEditor.enabled' : 'projects.automationEditor.disabled')}
               </button>
               <button
                 onClick={() => handleDelete(auto.id)}
+                aria-label={t('projects.automationEditor.delete', { name: auto.name })}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}
               >
                 <Trash2 size={12} />
@@ -147,12 +167,12 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
             </div>
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-            When <strong>{auto.trigger_type}</strong>
+            {t('projects.automationEditor.when')} <strong>{knownLabel(t, TRIGGER_LABEL_KEYS, auto.trigger_type)}</strong>
             {' → '}
-            <strong>{auto.action_type}</strong>
+            <strong>{knownLabel(t, ACTION_LABEL_KEYS, auto.action_type)}</strong>
             {auto.execution_count > 0 && (
               <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>
-                ({auto.execution_count} runs)
+                ({t(auto.execution_count === 1 ? 'projects.automationEditor.runs.one' : 'projects.automationEditor.runs.many', { count: auto.execution_count })})
               </span>
             )}
           </div>
@@ -165,29 +185,32 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
             autoFocus
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="Automation name..."
+            placeholder={t('projects.automationEditor.name.placeholder')}
+            aria-label={t('projects.automationEditor.name.label')}
             style={inputStyle}
           />
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>When</span>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('projects.automationEditor.when')}</span>
             <select
               value={form.trigger_type}
               onChange={(e) => setForm({ ...form, trigger_type: e.target.value })}
               style={selectStyle}
+              aria-label={t('projects.automationEditor.when')}
             >
-              {TRIGGER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {TRIGGER_TYPES.map((trigger) => <option key={trigger.value} value={trigger.value}>{t(trigger.labelKey)}</option>)}
             </select>
           </div>
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>If</span>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('projects.automationEditor.if')}</span>
             <select
               value={form.condition_type}
               onChange={(e) => setForm({ ...form, condition_type: e.target.value })}
               style={selectStyle}
+              aria-label={t('projects.automationEditor.if')}
             >
-              {CONDITION_TYPES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              {CONDITION_TYPES.map((condition) => <option key={condition.value} value={condition.value}>{t(condition.labelKey)}</option>)}
             </select>
             {form.condition_type !== 'none' && (
               form.condition_type === 'column_is' ? (
@@ -195,8 +218,9 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
                   value={form.condition_value}
                   onChange={(e) => setForm({ ...form, condition_value: e.target.value })}
                   style={selectStyle}
+                  aria-label={t('projects.automationEditor.column.label')}
                 >
-                  <option value="">Select column</option>
+                  <option value="">{t('projects.automationEditor.column.placeholder')}</option>
                   {Object.values(columns).map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </select>
               ) : form.condition_type === 'priority_is' ? (
@@ -204,15 +228,17 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
                   value={form.condition_value}
                   onChange={(e) => setForm({ ...form, condition_value: e.target.value })}
                   style={selectStyle}
+                  aria-label={t('projects.automationEditor.priority.label')}
                 >
-                  <option value="">Select priority</option>
-                  {['urgent', 'high', 'medium', 'low', 'none'].map((p) => <option key={p} value={p}>{p}</option>)}
+                  <option value="">{t('projects.automationEditor.priority.placeholder')}</option>
+                  {['urgent', 'high', 'medium', 'low', 'none'].map((priority) => <option key={priority} value={priority}>{knownLabel(t, PRIORITY_LABEL_KEYS, priority)}</option>)}
                 </select>
               ) : (
                 <input
                   value={form.condition_value}
                   onChange={(e) => setForm({ ...form, condition_value: e.target.value })}
-                  placeholder="Value..."
+                  placeholder={t('projects.automationEditor.value.placeholder')}
+                  aria-label={t('projects.automationEditor.value.placeholder')}
                   style={{ ...inputStyle, width: 120 }}
                 />
               )
@@ -220,21 +246,23 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
           </div>
 
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Then</span>
+            <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('projects.automationEditor.then')}</span>
             <select
               value={form.action_type}
               onChange={(e) => setForm({ ...form, action_type: e.target.value })}
               style={selectStyle}
+              aria-label={t('projects.automationEditor.then')}
             >
-              {ACTION_TYPES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              {ACTION_TYPES.map((action) => <option key={action.value} value={action.value}>{t(action.labelKey)}</option>)}
             </select>
             {form.action_type === 'move_to_column' ? (
               <select
                 value={form.action_value}
                 onChange={(e) => setForm({ ...form, action_value: e.target.value })}
                 style={selectStyle}
+                aria-label={t('projects.automationEditor.column.label')}
               >
-                <option value="">Select column</option>
+                <option value="">{t('projects.automationEditor.column.placeholder')}</option>
                 {Object.values(columns).map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
             ) : form.action_type === 'set_priority' ? (
@@ -242,15 +270,17 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
                 value={form.action_value}
                 onChange={(e) => setForm({ ...form, action_value: e.target.value })}
                 style={selectStyle}
+                aria-label={t('projects.automationEditor.priority.label')}
               >
-                <option value="">Select priority</option>
-                {['urgent', 'high', 'medium', 'low', 'none'].map((p) => <option key={p} value={p}>{p}</option>)}
+                <option value="">{t('projects.automationEditor.priority.placeholder')}</option>
+                {['urgent', 'high', 'medium', 'low', 'none'].map((priority) => <option key={priority} value={priority}>{knownLabel(t, PRIORITY_LABEL_KEYS, priority)}</option>)}
               </select>
             ) : (
               <input
                 value={form.action_value}
                 onChange={(e) => setForm({ ...form, action_value: e.target.value })}
-                placeholder="Value..."
+                placeholder={t('projects.automationEditor.value.placeholder')}
+                aria-label={t('projects.automationEditor.value.placeholder')}
                 style={{ ...inputStyle, width: 120 }}
               />
             )}
@@ -261,13 +291,13 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
               onClick={() => { setShowNew(false); setForm({ ...emptyForm }); }}
               style={{ padding: '4px 10px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-dim)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
             >
-              Cancel
+              {t('projects.automationEditor.cancel')}
             </button>
             <button
               onClick={handleCreate}
               style={{ padding: '4px 10px', background: 'var(--amber)', border: 'none', borderRadius: 4, color: '#06060a', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
             >
-              Create
+              {t('projects.automationEditor.create')}
             </button>
           </div>
         </div>
@@ -288,7 +318,7 @@ export function AutomationEditor({ boardId }: { boardId: string }) {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <Plus size={12} /> New Automation
+          <Plus size={12} /> {t('projects.automationEditor.new')}
         </button>
       )}
     </div>

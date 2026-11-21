@@ -11,6 +11,7 @@
  */
 
 import { create } from 'zustand';
+import { useChatWorkspaceStore, workspaceFileId, workspaceContentPath } from './chat-workspace.store';
 
 // ─── Canvas State ───────────────────────────────────────────────────
 //
@@ -75,6 +76,7 @@ export interface BrowserAction {
 
 export interface BrowserSessionState {
   sessionId: string;
+  conversationId?: string;
   currentUrl: string | null;
   humanizedAction: string | null;
   snapshot: string | null;
@@ -108,7 +110,7 @@ interface CanvasStore {
   setWorkspaceFile: (
     convId: string,
     file: NonNullable<CanvasState['workspaceFile']>,
-    options?: { content?: string | null; status?: CanvasStatus },
+    options?: { content?: string | null; status?: CanvasStatus; focus?: boolean },
   ) => void;
   /** Ola 7: bump reloadKey on the active canvas to force iframe re-render. */
   reloadCanvas: (convId: string) => void;
@@ -125,7 +127,7 @@ interface CanvasStore {
   removeCanvasHistoryItem: (convId: string, id: string) => void;
 
   // Browser actions
-  browserStarted: (sessionId: string) => void;
+  browserStarted: (sessionId: string, conversationId: string) => void;
   browserNavigating: (sessionId: string, url: string) => void;
   browserAction: (sessionId: string, action: string, humanized: string, selector?: string) => void;
   browserSnapshot: (sessionId: string, base64: string, url?: string) => void;
@@ -137,7 +139,7 @@ interface CanvasStore {
 
   // Selectors
   getCanvasForConversation: (convId: string) => CanvasState | undefined;
-  getActiveBrowserSession: () => BrowserSessionState | undefined;
+  getActiveBrowserSession: (conversationId?: string) => BrowserSessionState | undefined;
 }
 
 const emptyCanvas: CanvasState = {
@@ -210,6 +212,14 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   },
 
   setWorkspaceFile: (convId, file, options) => {
+    const id = workspaceFileId(convId, file);
+    const previous = useChatWorkspaceStore.getState().byConversation[convId]?.resources[id];
+    const version = previous?.kind === 'file' ? previous.version + 1 : 1;
+    const cleanFile = { ...file, contentUrl: workspaceContentPath(file.contentUrl, convId) ?? '' };
+    useChatWorkspaceStore.getState().upsert(convId, {
+      id, title: file.title, sourceConversationId: convId, kind: 'file', file: cleanFile,
+      content: options?.content ?? null, status: options?.status ?? 'ready', version,
+    }, options?.focus !== false);
     set((s) => {
       const updated = new Map(s.canvasStates);
       updated.set(convId, {
@@ -319,11 +329,15 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
     });
   },
 
-  browserStarted: (sessionId) => {
+  browserStarted: (sessionId, conversationId) => {
+    if (!conversationId) return;
     set((s) => {
       const updated = new Map(s.browserSessions);
+      for (const [id, session] of updated) if (session.conversationId === conversationId) updated.delete(id);
+      while (updated.size >= 16) updated.delete(updated.keys().next().value!);
       updated.set(sessionId, {
         sessionId,
+        conversationId,
         currentUrl: null,
         humanizedAction: null,
         snapshot: null,
@@ -359,7 +373,7 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
         updated.set(sessionId, {
           ...existing,
           humanizedAction: humanized,
-          actions: [...existing.actions, {
+          actions: [...existing.actions.slice(-99), {
             action,
             humanized,
             timestamp: new Date().toISOString(),
@@ -421,9 +435,9 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
 
   getCanvasForConversation: (convId) => get().canvasStates.get(convId),
 
-  getActiveBrowserSession: () => {
+  getActiveBrowserSession: (conversationId) => {
     for (const session of get().browserSessions.values()) {
-      if (session.status === 'active') return session;
+      if (conversationId && session.conversationId === conversationId && session.status === 'active') return session;
     }
     return undefined;
   },

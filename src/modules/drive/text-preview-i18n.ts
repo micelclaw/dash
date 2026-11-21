@@ -1,0 +1,28 @@
+export const driveTextPreviewMessages = {
+  en: {
+    'driveTextPreview.dialogTitle': 'Preview: {filename}',
+    'driveTextPreview.showRendered': 'Show rendered markdown',
+    'driveTextPreview.showRaw': 'Show raw source',
+    'driveTextPreview.rendered': 'Rendered',
+    'driveTextPreview.raw': 'Raw',
+    'driveTextPreview.downloadFile': 'Download file',
+    'driveTextPreview.download': 'Download',
+    'driveTextPreview.closeEsc': 'Close (Esc)',
+    'driveTextPreview.close': 'Close preview',
+    'driveTextPreview.truncated': 'Preview truncated — showing {shown} of {total} characters. Download the file for the full content.',
+    'driveTextPreview.loadError': 'Could not load the file content.',
+  },
+  es: {
+    'driveTextPreview.dialogTitle': 'Vista previa: {filename}',
+    'driveTextPreview.showRendered': 'Mostrar el Markdown renderizado',
+    'driveTextPreview.showRaw': 'Mostrar el código fuente',
+    'driveTextPreview.rendered': 'Renderizado',
+    'driveTextPreview.raw': 'Código fuente',
+    'driveTextPreview.downloadFile': 'Descargar archivo',
+    'driveTextPreview.download': 'Descargar',
+    'driveTextPreview.closeEsc': 'Cerrar (Esc)',
+    'driveTextPreview.close': 'Cerrar vista previa',
+    'driveTextPreview.truncated': 'Vista previa truncada: se muestran {shown} de {total} caracteres. Descarga el archivo para ver todo su contenido.',
+    'driveTextPreview.loadError': 'No se pudo cargar el contenido del archivo.',
+  },
+} as const;

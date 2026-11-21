@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 interface CronJobEditorProps {
   onClose: () => void;
@@ -22,6 +23,7 @@ interface AgentSummary {
 }
 
 export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
+  const { t } = useI18n();
   const channels = useGatewayStore(s => s.channels);
   const fetchChannels = useGatewayStore(s => s.fetchChannels);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -47,7 +49,7 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
 
   const handleSubmit = async () => {
     if (!name || !schedule || !payload) {
-      toast.error('Name, schedule, and payload are required');
+      toast.error(t('gateway.cron.required'));
       return;
     }
 
@@ -62,10 +64,10 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
         target: target || undefined,
         channel: channel || undefined,
       });
-      toast.success(`Cron job "${name}" created`);
+      toast.success(t('gateway.cron.jobCreated', { name }));
       onCreated();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create job');
+      toast.error(err instanceof Error ? err.message : t('gateway.cron.createFailed'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +122,7 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
             fontSize: '1rem', fontWeight: 600, color: 'var(--text)',
             margin: 0, fontFamily: 'var(--font-sans)',
           }}>
-            Add Cron Job
+            {t('gateway.cron.addTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -136,26 +138,26 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
         {/* Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={labelStyle}>Name</span>
+            <span style={labelStyle}>{t('gateway.cron.name')}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-daily-job" style={inputStyle} />
           </label>
 
           <div style={{ display: 'flex', gap: 10 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 120px' }}>
-              <span style={labelStyle}>Schedule Type</span>
+              <span style={labelStyle}>{t('gateway.cron.scheduleType')}</span>
               <select
                 value={scheduleType}
                 onChange={(e) => setScheduleType(e.target.value as 'at' | 'every' | 'cron')}
                 style={{ ...inputStyle, fontFamily: 'var(--font-sans)' }}
               >
-                <option value="every">Every</option>
-                <option value="at">At</option>
-                <option value="cron">Cron</option>
+                <option value="every">{t('gateway.cron.every')}</option>
+                <option value="at">{t('gateway.cron.at')}</option>
+                <option value="cron">{t('gateway.cron.cron')}</option>
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
               <span style={labelStyle}>
-                {scheduleType === 'every' ? 'Interval (e.g. 1h, 30m)' : scheduleType === 'at' ? 'Time (e.g. 09:00)' : 'Cron Expression'}
+                {scheduleType === 'every' ? t('gateway.cron.interval') : scheduleType === 'at' ? t('gateway.cron.time') : t('gateway.cron.expression')}
               </span>
               <input
                 value={schedule}
@@ -167,20 +169,20 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
           </div>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={labelStyle}>Action Type</span>
+            <span style={labelStyle}>{t('gateway.cron.actionType')}</span>
             <select
               value={actionType}
               onChange={(e) => setActionType(e.target.value as 'system-event' | 'message')}
               style={{ ...inputStyle, fontFamily: 'var(--font-sans)' }}
             >
-              <option value="system-event">System Event</option>
-              <option value="message">Message</option>
+              <option value="system-event">{t('gateway.cron.systemEvent')}</option>
+              <option value="message">{t('gateway.cron.message')}</option>
             </select>
           </label>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={labelStyle}>
-              {actionType === 'system-event' ? 'Event Text' : 'Message'}
+              {actionType === 'system-event' ? t('gateway.cron.eventText') : t('gateway.cron.payload')}
             </span>
             <textarea
               value={payload}
@@ -194,7 +196,7 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
           {actionType === 'message' && (
             <div style={{ display: 'flex', gap: 10 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                <span style={labelStyle}>Target (optional)</span>
+                <span style={labelStyle}>{t('gateway.cron.target')}</span>
                 <input
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
@@ -209,12 +211,12 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
                 </datalist>
                 {target && !targetIsAgent && (
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                    Free-form ID — make sure it matches a real contact or group.
+                    {t('gateway.cron.freeFormHint')}
                   </span>
                 )}
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                <span style={labelStyle}>Channel (optional)</span>
+                <span style={labelStyle}>{t('gateway.cron.channelOptional')}</span>
                 <select
                   value={channelKnown ? channel : '__custom__'}
                   onChange={(e) => {
@@ -223,7 +225,7 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
                   }}
                   style={{ ...inputStyle, fontFamily: 'var(--font-sans)' }}
                 >
-                  <option value="">(none)</option>
+                  <option value="">{t('gateway.cron.none')}</option>
                   {channels.map(c => (
                     <option key={c.type} value={c.type}>
                       {c.type}{c.status !== 'connected' ? ` (${c.status})` : ''}
@@ -232,8 +234,8 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
                   {!channelKnown && <option value="__custom__">{channel} (not configured)</option>}
                 </select>
                 {!channelKnown && channel && (
-                  <span style={{ fontSize: '0.6875rem', color: '#f97316' }}>
-                    Channel "{channel}" is not configured.
+                    <span style={{ fontSize: '0.6875rem', color: '#f97316' }}>
+                    {t('gateway.cron.notConfigured', { channel })}
                   </span>
                 )}
               </label>
@@ -259,7 +261,7 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('gateway.cron.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -277,7 +279,7 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
               opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? 'Creating...' : 'Create Job'}
+            {loading ? t('gateway.cron.creating') : t('gateway.cron.create')}
           </button>
         </div>
       </div>

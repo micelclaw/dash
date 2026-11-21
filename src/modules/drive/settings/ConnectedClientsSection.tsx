@@ -14,9 +14,9 @@ import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, MonitorSmartphone, Users } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { AvatarInitials } from '@/components/shared/AvatarInitials';
-import { timeAgo } from '@/lib/time';
 import { api, ApiError } from '@/services/api';
 import type { ApiResponse } from '@/types/api';
+import { useI18n } from '@/i18n';
 
 interface ClientSession {
   id: string;
@@ -56,6 +56,7 @@ const ROLE_COLORS: Record<string, string> = {
  * management itself lives in Settings → Sessions.
  */
 export function ConnectedClientsSection() {
+  const { locale, t } = useI18n();
   const [clients, setClients] = useState<ConnectedClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
@@ -91,23 +92,23 @@ export function ConnectedClientsSection() {
   return (
     <div style={{ maxWidth: 720 }}>
       <SectionHeader
-        title="Connected clients"
-        description="Users with an active web session. Read-only — revoke sessions in Settings → Sessions."
+        title={t('drive.connectedClients.title')}
+        description={t('drive.connectedClients.description')}
       />
 
       {loading ? (
-        <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '16px 0' }}>Loading…</div>
+        <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '16px 0' }}>{t('drive.connectedClients.loading')}</div>
       ) : forbidden ? (
         <EmptyState
           icon={Users}
-          title="Not available"
-          description="Connected clients can only be viewed by administrators. Manage your own sessions in Settings → Sessions."
+          title={t('drive.connectedClients.unavailable.title')}
+          description={t('drive.connectedClients.unavailable.description')}
         />
       ) : clients.length === 0 ? (
         <EmptyState
           icon={MonitorSmartphone}
-          title="No connected clients"
-          description="No users currently have an active session."
+          title={t('drive.connectedClients.empty.title')}
+          description={t('drive.connectedClients.empty.description')}
         />
       ) : (
         <div style={{
@@ -122,6 +123,8 @@ export function ConnectedClientsSection() {
               <div key={c.user.id} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
                 <button
                   onClick={() => toggle(c.user.id)}
+                  aria-expanded={isOpen}
+                  aria-label={t(isOpen ? 'drive.connectedClients.collapseSessions' : 'drive.connectedClients.expandSessions', { name })}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, width: '100%',
                     padding: '10px 14px', background: 'transparent', border: 'none',
@@ -145,7 +148,13 @@ export function ConnectedClientsSection() {
                         border: `1px solid ${ROLE_COLORS[c.user.role] ?? 'var(--border)'}`,
                         borderRadius: 'var(--radius-full)', padding: '1px 7px',
                       }}>
-                        {c.user.role}
+                        {c.user.role === 'owner'
+                          ? t('drive.connectedClients.role.owner')
+                          : c.user.role === 'admin'
+                            ? t('drive.connectedClients.role.admin')
+                            : c.user.role === 'user'
+                              ? t('drive.connectedClients.role.user')
+                              : c.user.role}
                       </span>
                     </div>
                     <div style={{
@@ -163,12 +172,14 @@ export function ConnectedClientsSection() {
                       background: c.online ? 'var(--success)' : 'var(--text-muted)',
                       display: 'inline-block',
                     }} />
-                    {c.online ? `${c.connections} connection${c.connections === 1 ? '' : 's'}` : 'Offline'}
+                    {c.online
+                      ? t(c.connections === 1 ? 'drive.connectedClients.connections.one' : 'drive.connectedClients.connections.many', { count: c.connections })
+                      : t('drive.connectedClients.offline')}
                   </span>
 
                   {/* Last connection */}
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', minWidth: 88, textAlign: 'right' }}>
-                    {last ? timeAgo(last) : '—'}
+                    {last ? formatClientTimeAgo(last, locale, t) : '—'}
                   </span>
                 </button>
 
@@ -176,16 +187,16 @@ export function ConnectedClientsSection() {
                   <div style={{ padding: '0 14px 12px 50px' }}>
                     {c.sessions.length === 0 ? (
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0' }}>
-                        No active sessions.
+                        {t('drive.connectedClients.noSessions')}
                       </div>
                     ) : (
                       <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                            <SubTh>Device</SubTh>
-                            <SubTh>IP address</SubTh>
-                            <SubTh align="right">Last seen</SubTh>
+                            <SubTh>{t('drive.connectedClients.column.device')}</SubTh>
+                            <SubTh>{t('drive.connectedClients.column.ipAddress')}</SubTh>
+                            <SubTh align="right">{t('drive.connectedClients.column.lastSeen')}</SubTh>
                           </tr>
                         </thead>
                         <tbody>
@@ -204,7 +215,7 @@ export function ConnectedClientsSection() {
                               </SubTd>
                               <SubTd align="right">
                                 <span style={{ color: 'var(--text-dim)' }}>
-                                  {s.last_seen_at ? timeAgo(s.last_seen_at) : '—'}
+                                  {s.last_seen_at ? formatClientTimeAgo(s.last_seen_at, locale, t) : '—'}
                                 </span>
                               </SubTd>
                             </tr>
@@ -222,6 +233,21 @@ export function ConnectedClientsSection() {
       )}
     </div>
   );
+}
+
+function formatClientTimeAgo(date: string, locale: 'en' | 'es', t: (key: string, values?: Record<string, string | number>) => string): string {
+  const now = Date.now();
+  const then = new Date(date).getTime();
+  const diff = now - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return t('drive.connectedClients.relative.now');
+  if (mins < 60) return t('drive.connectedClients.relative.minutes', { count: mins });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return t('drive.connectedClients.relative.hours', { count: hours });
+  const days = Math.floor(hours / 24);
+  if (days === 1) return t('drive.connectedClients.relative.yesterday');
+  if (days < 7) return t('drive.connectedClients.relative.days', { count: days });
+  return new Date(date).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' });
 }
 
 function SectionHeader({ title, description }: { title: string; description: string }) {

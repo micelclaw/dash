@@ -11,7 +11,6 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 /** Tabs of the Drive module shell (DrivePage). Synced with ?tab= in the URL — the URL wins on mount. */
 // Nota: las settings del Drive NO son una tab — viven en Settings → System →
@@ -61,9 +60,7 @@ interface DriveStore {
   setInspectorTab: (tab: DriveInspectorTab) => void;
 }
 
-export const useDriveStore = create<DriveStore>()(
-  persist(
-    (set) => ({
+export const useDriveStore = create<DriveStore>((set) => ({
       activeTab: 'my-drive',
       density: 'comfortable',
       inspectorOpen: true,
@@ -73,27 +70,4 @@ export const useDriveStore = create<DriveStore>()(
       setDensity: (density) => set({ density }),
       setInspectorOpen: (open) => set({ inspectorOpen: open }),
       setInspectorTab: (tab) => set({ inspectorTab: tab }),
-    }),
-    {
-      name: 'claw-drive',
-      version: 1,
-      partialize: (state) => ({
-        activeTab: state.activeTab,
-        density: state.density,
-        inspectorOpen: state.inspectorOpen,
-        inspectorTab: state.inspectorTab,
-      }),
-      // v0 → v1: the legacy `devices` tab is gone (replaced by `settings`).
-      // Any persisted `activeTab` that is no longer a valid Drive tab — most
-      // notably `'devices'` — is reset to My Drive so the shell never lands on
-      // a tab that has no view to render.
-      migrate: (persisted, _version) => {
-        const state = (persisted ?? {}) as Partial<{ activeTab: string }>;
-        if (!isDriveTab(state.activeTab)) {
-          return { ...state, activeTab: 'my-drive' as DriveTab };
-        }
-        return state;
-      },
-    },
-  ),
-);
+    }));

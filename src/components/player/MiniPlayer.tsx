@@ -17,8 +17,10 @@ import { ProgressBar } from './ProgressBar';
 import { VolumeControl } from './VolumeControl';
 import { TrackInfo } from './TrackInfo';
 import { QueuePanel } from './QueuePanel';
+import { useI18n } from '@/i18n';
 
 export function MiniPlayer() {
+  const { t } = useI18n();
   const stop = usePlayerStore((s) => s.stop);
   const queuePanelOpen = usePlayerStore((s) => s.queuePanelOpen);
   const toggleQueuePanel = usePlayerStore((s) => s.toggleQueuePanel);
@@ -53,7 +55,8 @@ export function MiniPlayer() {
               display: 'flex',
               color: queuePanelOpen ? 'var(--accent)' : 'var(--text-muted)',
             }}
-            title="Queue"
+            title={t('player.queue')}
+            aria-label={t('player.queue')}
           >
             <ListMusic size={15} />
           </button>
@@ -69,7 +72,8 @@ export function MiniPlayer() {
             display: 'flex',
             color: 'var(--text-muted)',
           }}
-          title="Close player"
+          title={t('player.close')}
+          aria-label={t('player.close')}
         >
           <X size={14} />
         </button>

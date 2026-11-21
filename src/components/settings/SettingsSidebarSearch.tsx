@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface SettingsSidebarSearchProps {
   query: string;
@@ -24,6 +25,7 @@ interface SettingsSidebarSearchProps {
  * the parent component switches the sidebar to a flat results view.
  */
 export function SettingsSidebarSearch({ query, onQueryChange }: SettingsSidebarSearchProps) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export function SettingsSidebarSearch({ query, onQueryChange }: SettingsSidebarS
         ref={inputRef}
         type="text"
         value={query}
-        placeholder="Search (press /)"
+        placeholder={t('settings.search.placeholder')}
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -110,7 +112,7 @@ export function SettingsSidebarSearch({ query, onQueryChange }: SettingsSidebarS
             cursor: 'pointer',
             borderRadius: '50%',
           }}
-          aria-label="clear search"
+          aria-label={t('settings.search.clear')}
         >
           <X size={12} />
         </button>

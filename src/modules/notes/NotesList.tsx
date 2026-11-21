@@ -17,6 +17,7 @@ import { NotesFilters } from './NotesFilters';
 import { NoteCreateButton } from './NoteCreateButton';
 import { NotesListItem } from './NotesListItem';
 import type { Note, NoteFilters } from '@/types/notes';
+import { useI18n } from '@/i18n';
 
 interface NotesListProps {
   notes: Note[];
@@ -48,6 +49,7 @@ export function NotesList({
   notes, loading, error, filters, onFiltersChange,
   selectedId, onSelect, onCreateNote,onConnectedNoteCreated, onPinNote, onArchiveNote, onDeleteNote, onRetry,
 }: NotesListProps) {
+  const { t } = useI18n();
   const availableTags = useMemo(
     () => [...new Set(notes.flatMap(n => n.tags))].sort(),
     [notes],
@@ -90,7 +92,7 @@ export function NotesList({
                 cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
               }}
             >
-              Retry
+              {t('notes.retry')}
             </button>
           </div>
         )}
@@ -99,9 +101,9 @@ export function NotesList({
         {!loading && !error && notes.length === 0 && (
           <EmptyState
             icon={StickyNote}
-            title="No notes yet"
-            description="Create your first note or connect a sync provider to import existing notes."
-            actions={[{ label: '+ New Note', onClick: onCreateNote, variant: 'primary' }]}
+            title={t('notes.none.title')}
+            description={t('notes.none.description')}
+            actions={[{ label: t('notes.newAction'), onClick: onCreateNote, variant: 'primary' }]}
           />
         )}
 
@@ -112,7 +114,7 @@ export function NotesList({
               padding: '8px 12px 4px', fontSize: '0.6875rem', fontWeight: 600,
               color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
             }}>
-              📌 Pinned
+              📌 {t('notes.pinned')}
             </div>
             {pinned.map(note => (
               <NotesListItem
@@ -134,7 +136,7 @@ export function NotesList({
             padding: '8px 12px 4px', fontSize: '0.6875rem', fontWeight: 600,
             color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            All Notes
+            {t('notes.all')}
           </div>
         )}
         {regular.map(note => (

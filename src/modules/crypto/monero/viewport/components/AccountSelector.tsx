@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { ChevronDown, Plus, KeyRound, Wallet } from 'lucide-react';
 import { api } from '@/services/api';
 
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function AccountSelector({ onWalletChange, onCreateNew, onRestoreFromSeed }: Props) {
+  const { t } = useI18n();
   const [wallets, setWallets] = useState<string[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -47,14 +49,14 @@ export function AccountSelector({ onWalletChange, onCreateNew, onRestoreFromSeed
     <div className="mw-selector">
       <button className="mw-selector-btn" onClick={() => setOpen(!open)}>
         <Wallet size={12} />
-        <span className="mw-selector-label">{active ?? 'No wallet'}</span>
+        <span className="mw-selector-label">{active ?? t('crypto.wallet.noWallet')}</span>
         <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} />
       </button>
 
       {open && (
         <div className="mw-selector-dropdown">
           {wallets.length === 0 && (
-            <div className="mw-selector-empty">No wallets found</div>
+            <div className="mw-selector-empty">{t('crypto.wallet.noWallets')}</div>
           )}
           {wallets.map((w) => (
             <button
@@ -71,10 +73,10 @@ export function AccountSelector({ onWalletChange, onCreateNew, onRestoreFromSeed
           ))}
           <div className="mw-selector-divider" />
           <button className="mw-selector-action" onClick={() => { setOpen(false); onCreateNew?.(); }}>
-            <Plus size={12} /> Create New Wallet
+            <Plus size={12} /> {t('crypto.wallet.createWallet')}
           </button>
           <button className="mw-selector-action" onClick={() => { setOpen(false); onRestoreFromSeed?.(); }}>
-            <KeyRound size={12} /> Restore from Seed
+            <KeyRound size={12} /> {t('crypto.wallet.restoreSeed')}
           </button>
         </div>
       )}

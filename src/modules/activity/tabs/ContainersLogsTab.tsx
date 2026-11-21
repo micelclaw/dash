@@ -25,6 +25,7 @@ import {
 import type { TimeRange } from '../adapters/types';
 import { getActiveTails } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
+import { useI18n } from '@/i18n';
 
 const POLL_MS = 5_000;
 
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export function ContainersLogsTab(props: Props) {
+  const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const [services, setServices] = useState<string[]>([]);
 
@@ -117,9 +119,7 @@ export function ContainersLogsTab(props: Props) {
         adapter={adapter}
         rows={filteredRows}
         loading={loading}
-        emptyMessage={services.length === 0
-          ? 'No hay containers en seguimiento. Activa Docker o levanta un servicio.'
-          : 'Sin entradas para los filtros actuales.'}
+        emptyMessage={services.length === 0 ? t('activity.containersNoServices') : undefined}
       />
     </div>
   );

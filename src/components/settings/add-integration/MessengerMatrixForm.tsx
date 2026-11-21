@@ -29,29 +29,28 @@ import { useState } from 'react';
 import { Cookie, ExternalLink } from 'lucide-react';
 import { Field, FormActions } from './shared';
 import { MatrixBridgeForm, CALLOUT, type LoginPaneContext } from './MatrixBridgeForm';
+import { useI18n } from '@/i18n';
 
 function MessengerLoginPane({ ctx }: { ctx: LoginPaneContext }) {
   const { submitting, send, bridgeMessage, onCancel } = ctx;
+  const { t } = useI18n();
   const [cookies, setCookies] = useState('');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Messenger has no pairing code and no QR: the bridge reuses the session your browser
-        already has. You&apos;ll copy that session&apos;s cookies once and paste them here.
+        {t('settings.matrix.unofficialMeta')}
       </p>
       <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
         <ExternalLink size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          Open <strong>messenger.com</strong> in your browser while logged in, open the developer
-          tools (<strong>F12</strong>) → <strong>Application → Cookies → https://www.messenger.com</strong>,
-          and copy them. A cookie-export extension works too — paste whatever it gives you.
+          {t('settings.matrix.cookieExport')}
         </span>
       </div>
       {bridgeMessage}
       <Field
-        label="Messenger cookies"
-        hint="Paste the whole thing — JSON from an exporter or the raw document.cookie string. It must include c_user and xs."
+        label={t('settings.matrix.messengerCookies')}
+        hint={t('settings.matrix.messengerCookieHint')}
       >
         {/* `<textarea>` crudo con los tokens del tema, igual que el wizard de
             Session: no hay primitivo Textarea en components/ui/ y crear uno para
@@ -71,8 +70,7 @@ function MessengerLoginPane({ ctx }: { ctx: LoginPaneContext }) {
       <div style={{ ...CALLOUT, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
         <Cookie size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          These cookies stay on your server. Logging out of messenger.com in that browser also
-          disconnects this bridge — use a browser profile you don&apos;t log out of.
+          {t('settings.matrix.cookiesStayServer')}
         </span>
       </div>
       <FormActions
@@ -86,13 +84,14 @@ function MessengerLoginPane({ ctx }: { ctx: LoginPaneContext }) {
             await send('cookies', cookies.trim());
           }
         }}
-        submitLabel={submitting ? 'Linking…' : 'Link Messenger'}
+        submitLabel={submitting ? t('settings.matrix.linking') : t('settings.matrix.linkMessenger')}
       />
     </div>
   );
 }
 
 export function MessengerMatrixForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return (
     <MatrixBridgeForm
       onComplete={onComplete}
@@ -103,23 +102,18 @@ export function MessengerMatrixForm({ onComplete, onCancel }: { onComplete: () =
         connectorDisplayName: 'Messenger',
         hubSetupBlurb: (
           <>
-            Personal Messenger accounts connect through a private Matrix bridge that runs on your own
-            server. Set it up once — everyone on this instance can then link their own account. Your
-            messages never leave your server.
+            {t('settings.messenger.setup')}
           </>
         ),
         disclaimer: {
           body: (
             <>
-              This links your personal Facebook Messenger account by reusing your web session, through
-              an unofficial bridge that runs on your server.
+              {t('settings.messenger.disclaimer')}
             </>
           ),
           warning: (
             <>
-              <strong>Meta may flag or lock accounts that connect from unofficial clients.</strong>{' '}
-              To keep the risk low: don&apos;t send bulk messages from Micelclaw, and expect to paste
-              fresh cookies if you change your password or log out of that browser.
+              {t('settings.messenger.warning')}
             </>
           ),
         },
@@ -128,8 +122,7 @@ export function MessengerMatrixForm({ onComplete, onCancel }: { onComplete: () =
         renderLogin: (ctx) => <MessengerLoginPane ctx={ctx} />,
         readyBlurb: (
           <>
-            Your Messenger account is linked and the bridge is importing your conversations. Next,
-            choose which chats Micelclaw should observe — you don&apos;t have to sync everything.
+            {t('settings.messenger.ready')}
           </>
         ),
       }}

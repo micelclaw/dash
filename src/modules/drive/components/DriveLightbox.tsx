@@ -17,6 +17,7 @@ import {
 import { formatFileSize, getPreviewUrl } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
@@ -43,6 +44,7 @@ interface DriveLightboxProps {
 export function DriveLightbox({
   images, currentIndex, onClose, onNavigate, onToggleStar, onDetails,
 }: DriveLightboxProps) {
+  const { t } = useI18n();
   const file = images[currentIndex];
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
@@ -161,7 +163,7 @@ export function DriveLightbox({
       ref={containerRef}
       role="dialog"
       aria-modal="true"
-      aria-label={`Image preview: ${file.filename}`}
+      aria-label={t('drive.lightbox.dialog', { name: file.filename })}
       tabIndex={-1}
       onKeyDown={handleTabTrap}
       onPointerDown={handlePointerDown}
@@ -195,8 +197,8 @@ export function DriveLightbox({
           onMouseEnter={() => setHoveredBtn('zoom-out')}
           onMouseLeave={() => setHoveredBtn(null)}
           disabled={zoom <= MIN_ZOOM}
-          title="Zoom out"
-          aria-label="Zoom out"
+          title={t('drive.lightbox.zoomOut')}
+          aria-label={t('drive.lightbox.zoomOut')}
           style={navBtnStyle('zoom-out', zoom <= MIN_ZOOM)}
         >
           <ZoomOut size={17} />
@@ -212,8 +214,8 @@ export function DriveLightbox({
           onMouseEnter={() => setHoveredBtn('zoom-in')}
           onMouseLeave={() => setHoveredBtn(null)}
           disabled={zoom >= MAX_ZOOM}
-          title="Zoom in"
-          aria-label="Zoom in"
+          title={t('drive.lightbox.zoomIn')}
+          aria-label={t('drive.lightbox.zoomIn')}
           style={navBtnStyle('zoom-in', zoom >= MAX_ZOOM)}
         >
           <ZoomIn size={17} />
@@ -223,8 +225,8 @@ export function DriveLightbox({
           onClick={onClose}
           onMouseEnter={() => setHoveredBtn('close')}
           onMouseLeave={() => setHoveredBtn(null)}
-          title="Close (Esc)"
-          aria-label="Close image preview"
+          title={t('drive.lightbox.closeTitle')}
+          aria-label={t('drive.lightbox.closeLabel')}
           style={navBtnStyle('close', false)}
         >
           <X size={18} />
@@ -241,8 +243,8 @@ export function DriveLightbox({
           onMouseEnter={() => setHoveredBtn('prev')}
           onMouseLeave={() => setHoveredBtn(null)}
           disabled={currentIndex === 0}
-          title="Previous (←)"
-          aria-label="Previous image"
+          title={t('drive.lightbox.previousTitle')}
+          aria-label={t('drive.lightbox.previousLabel')}
           style={navBtnStyle('prev', currentIndex === 0)}
         >
           <ChevronLeft size={20} />
@@ -306,8 +308,8 @@ export function DriveLightbox({
           onMouseEnter={() => setHoveredBtn('next')}
           onMouseLeave={() => setHoveredBtn(null)}
           disabled={currentIndex === images.length - 1}
-          title="Next (→)"
-          aria-label="Next image"
+          title={t('drive.lightbox.nextTitle')}
+          aria-label={t('drive.lightbox.nextLabel')}
           style={navBtnStyle('next', currentIndex === images.length - 1)}
         >
           <ChevronRight size={20} />
@@ -341,7 +343,7 @@ export function DriveLightbox({
           onMouseLeave={() => setHoveredBtn(null)}
           style={actionBtnStyle('download')}
         >
-          <Download size={13} /> Download
+          <Download size={13} /> {t('drive.lightbox.download')}
         </button>
 
         {onToggleStar && (
@@ -355,7 +357,7 @@ export function DriveLightbox({
             }}
           >
             <Star size={13} fill={file.starred ? 'currentColor' : 'none'} />
-            {file.starred ? 'Starred' : 'Star'}
+            {t(file.starred ? 'drive.lightbox.starred' : 'drive.lightbox.star')}
           </button>
         )}
 
@@ -366,7 +368,7 @@ export function DriveLightbox({
             onMouseLeave={() => setHoveredBtn(null)}
             style={actionBtnStyle('details')}
           >
-            <Info size={13} /> Details
+            <Info size={13} /> {t('drive.lightbox.details')}
           </button>
         )}
       </div>

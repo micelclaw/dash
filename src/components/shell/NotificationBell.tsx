@@ -14,8 +14,10 @@ import { useState, useEffect, useRef } from 'react';
 import { Bell } from 'lucide-react';
 import { useNotificationStore } from '@/stores/notification.store';
 import { NotificationDropdown } from './NotificationDropdown';
+import { useI18n } from '@/i18n';
 
 export function NotificationBell() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const [bounce, setBounce] = useState(false);
@@ -35,6 +37,8 @@ export function NotificationBell() {
   return (
     <div style={{ position: 'relative' }}>
       <button
+        aria-label={t('shell.notifications.title')}
+        aria-expanded={open}
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
         style={{
           background: 'none',

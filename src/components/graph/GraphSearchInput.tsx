@@ -11,6 +11,7 @@
  */
 
 import { Search, X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface GraphSearchInputProps {
   value: string;
@@ -18,6 +19,7 @@ interface GraphSearchInputProps {
 }
 
 export function GraphSearchInput({ value, onChange }: GraphSearchInputProps) {
+  const { t } = useI18n();
   return (
     <div style={{
       display: 'flex',
@@ -33,7 +35,8 @@ export function GraphSearchInput({ value, onChange }: GraphSearchInputProps) {
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder="Search entities..."
+        placeholder={t('graph.search.placeholder')}
+        aria-label={t('graph.search.placeholder')}
         style={{
           flex: 1,
           background: 'transparent',
@@ -48,6 +51,8 @@ export function GraphSearchInput({ value, onChange }: GraphSearchInputProps) {
       {value && (
         <button
           onClick={() => onChange('')}
+          title={t('graph.search.clear')}
+          aria-label={t('graph.search.clear')}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', padding: 0, display: 'flex',

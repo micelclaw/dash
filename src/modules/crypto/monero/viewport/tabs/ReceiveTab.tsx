@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Copy, Check, Plus, Loader2 } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 import { QrCodeDisplay } from '../components/QrCodeDisplay';
@@ -24,6 +25,7 @@ interface SubAddress {
 }
 
 export function ReceiveTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [addresses, setAddresses] = useState<SubAddress[]>([]);
@@ -85,14 +87,14 @@ export function ReceiveTab() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
-        <Loader2 size={16} className="spin" /> Loading addresses...
+        <Loader2 size={16} className="spin" /> {t('crypto.wallet.loadingAddresses')}
       </div>
     );
   }
 
   return (
     <div className="rt-root">
-      <h3 className="rt-title">Receive XMR</h3>
+      <h3 className="rt-title">{t('crypto.wallet.receiveXmr')}</h3>
 
       <div className="rt-layout">
         {/* QR + selected address */}
@@ -103,7 +105,7 @@ export function ReceiveTab() {
             <button
               className="rt-copy-btn"
               onClick={() => copyAddress(selectedAddr, -1)}
-              title="Copy address"
+              title={t('crypto.wallet.copyAddress')}
             >
               {copied === -1 ? <Check size={13} style={{ color: '#22c55e' }} /> : <Copy size={13} />}
             </button>
@@ -111,7 +113,7 @@ export function ReceiveTab() {
 
           {/* Payment request amount */}
           <div className="rt-request">
-            <label className="rt-label">Request Amount (optional)</label>
+            <label className="rt-label">{t('crypto.wallet.requestAmount')}</label>
             <div className="rt-request-row">
               <input
                 className="rt-input"
@@ -130,9 +132,9 @@ export function ReceiveTab() {
         {/* Subaddress list */}
         <div className="rt-addr-panel">
           <div className="rt-addr-header">
-            <span className="rt-label">Subaddresses</span>
+            <span className="rt-label">{t('crypto.wallet.subaddresses')}</span>
             <button className="rt-add-btn" onClick={() => setShowCreate(!showCreate)}>
-              <Plus size={12} /> New
+              <Plus size={12} /> {t('crypto.wallet.new')}
             </button>
           </div>
 
@@ -140,13 +142,13 @@ export function ReceiveTab() {
             <div className="rt-create-row">
               <input
                 className="rt-input rt-input-sm"
-                placeholder="Label (optional)"
+                placeholder={t('crypto.account.labelOptional')}
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && createSubaddress()}
               />
               <button className="rt-create-btn" onClick={createSubaddress} disabled={creating}>
-                {creating ? <Loader2 size={12} className="spin" /> : 'Create'}
+                {creating ? <Loader2 size={12} className="spin" /> : t('crypto.wallet.create')}
               </button>
             </div>
           )}
@@ -160,8 +162,8 @@ export function ReceiveTab() {
               >
                 <div className="rt-addr-item-top">
                   <span className="rt-addr-idx">#{a.address_index}</span>
-                  <span className="rt-addr-item-label">{a.label || 'Unlabeled'}</span>
-                  {a.used && <span className="rt-addr-used">used</span>}
+                  <span className="rt-addr-item-label">{a.label || t('crypto.wallet.unlabeled')}</span>
+                  {a.used && <span className="rt-addr-used">{t('crypto.wallet.used')}</span>}
                   <div style={{ flex: 1 }} />
                   <button
                     className="rt-copy-sm"
@@ -226,10 +228,10 @@ export function ReceiveTab() {
         open={confirmNoLabel}
         onClose={() => setConfirmNoLabel(false)}
         onConfirm={() => { setConfirmNoLabel(false); void doCreateSubaddress(); }}
-        title="Create without a label?"
-        description="This subaddress will have no label, so it will be harder to tell apart later. Create it anyway?"
-        confirmLabel="Create"
-        cancelLabel="Cancel"
+        title={t('crypto.wallet.createWithoutLabel')}
+        description={t('crypto.wallet.noLabelWarning')}
+        confirmLabel={t('crypto.wallet.create')}
+        cancelLabel={t('crypto.wallet.cancel')}
         variant="warning"
       />
     </div>

@@ -14,10 +14,12 @@ import { memo, useState } from 'react';
 import { Handle, Position, NodeResizer, useNodeId } from '@xyflow/react';
 import { ImageIcon } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import type { NodeProps } from '@xyflow/react';
 import type { DiagramNodeData } from '../types';
 
 function EmbedShapeInner({ data: _d, selected }: NodeProps) {
+  const { t } = useI18n();
   const data = _d as unknown as DiagramNodeData;
   const color = data.color || '#ec4899';
   const embedType = data.embedType || 'image';
@@ -105,7 +107,7 @@ function EmbedShapeInner({ data: _d, selected }: NodeProps) {
       }}>
         <ImageIcon size={24} />
         <span style={{ fontSize: 10, fontFamily: 'var(--font-sans)' }}>
-          {imgError ? 'Failed to load' : 'No image URL'}
+          {imgError ? t('sketches.embed.imageLoadFailed') : t('sketches.embed.noImageUrl')}
         </span>
       </div>
     );

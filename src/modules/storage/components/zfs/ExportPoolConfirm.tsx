@@ -16,27 +16,27 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Download } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, ZFS_COPY } from '../ZfsHelp';
+import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, WarnBox } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function ExportPoolConfirm({ pool, onClose }: { pool: string; onClose: () => void }) {
+  const { t } = useI18n();
   const demo = useStorageStore((s) => s.zfs_demo);
   const exportPool = useStorageStore((s) => s.zfsExportPool);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { await exportPool(pool); toast.success(`Almacén "${pool}" exportado${demo ? ' (demo)' : ''}`); onClose(); }
-    catch (e) { toast.error(`No se pudo exportar: ${e instanceof Error ? e.message : String(e)}`); }
+    try { await exportPool(pool); toast.success(t('storage.pool.exported', { name: pool, demo: demo ? t('storage.common.demoSuffix') : '' })); onClose(); }
+    catch (e) { toast.error(t('storage.pool.exportError', { error: e instanceof Error ? e.message : String(e) })); }
     finally { setBusy(false); }
   };
   return (
-    <ZfsModal title={`Exportar "${pool}"`} icon={<Download size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton danger disabled={busy} onClick={submit}>{busy ? 'Exportando…' : 'Exportar almacén'}</ZfsButton></>}>
-      <SectionIntro>{ZFS_COPY.export}</SectionIntro>
+    <ZfsModal title={t('storage.pool.exportTitle', { name: pool })} icon={<Download size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton danger disabled={busy} onClick={submit}>{busy ? t('storage.pool.exportBusy') : t('storage.pool.export')}</ZfsButton></>}>
+      <SectionIntro>{t('storage.help.exportPool')}</SectionIntro>
       <WarnBox>
-        El almacén <strong>{pool}</strong> dejará de estar disponible en este sistema (sus carpetas se desmontarán). No se
-        borra ningún dato: podrás volver a conectarlo con «Importar pool». Asegúrate de que nadie esté usando sus datos.
-        {!demo && ' Esta operación requiere token + aprobación en el servidor.'}
+        {t('storage.pool.exportWarning')} {!demo && t('storage.pool.approvalWarning')}
       </WarnBox>
     </ZfsModal>
   );

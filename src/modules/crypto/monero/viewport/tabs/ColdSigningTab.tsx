@@ -11,12 +11,14 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
+import { useI18n } from '@/i18n';
 import { Upload, Download, Loader2, CheckCircle, AlertCircle, HardDrive, Wifi, WifiOff, ArrowRight } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
 type Step = 'export-unsigned' | 'import-signed' | 'export-key-images' | 'import-key-images';
 
 export function ColdSigningTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [loading, setLoading] = useState(false);
@@ -44,16 +46,16 @@ export function ColdSigningTab() {
         a.download = `unsigned-tx-${new Date().toISOString().slice(0, 10)}.txt`;
         a.click();
         URL.revokeObjectURL(url);
-        setSuccess('Unsigned transaction exported. Transfer this file to your cold (offline) wallet for signing.');
+        setSuccess(t('crypto.wallet.unsignedExported'));
       } else {
-        setError('No unsigned transaction data available. Create a transaction first using the Send tab.');
+        setError(t('crypto.wallet.noUnsignedData'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to export unsigned transaction');
+      setError(err?.message || t('crypto.wallet.exportUnsignedFailed'));
     } finally {
       setLoading(false);
     }
-  }, [call]);
+  }, [call, t]);
 
   // Import signed tx (view-only wallet submits)
   const importSignedTx = useCallback(async (file: File) => {
@@ -67,16 +69,16 @@ export function ColdSigningTab() {
       // submit_transfer requires confirmation — the dialog will handle it
       if (rpc.pendingConfirmation) return;
       if (result?.tx_hash_list?.length) {
-        setSuccess(`Transaction(s) submitted! TX hash(es): ${result.tx_hash_list.join(', ')}`);
+        setSuccess(t('crypto.wallet.transactionSubmitted', { hashes: result.tx_hash_list.join(', ') }));
       } else {
-        setError(rpc.error || 'Failed to submit signed transaction');
+        setError(rpc.error || t('crypto.wallet.submitSignedFailed'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to import signed transaction');
+      setError(err?.message || t('crypto.wallet.importSignedFailed'));
     } finally {
       setLoading(false);
     }
-  }, [call]);
+  }, [call, t]);
 
   // Export key images (for view-only wallet balance sync)
   const exportKeyImages = useCallback(async () => {
@@ -92,16 +94,16 @@ export function ColdSigningTab() {
         a.download = `key-images-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        setSuccess(`Exported ${result.signed_key_images.length} key images. Import these into your view-only wallet to sync spent status.`);
+        setSuccess(t('crypto.wallet.exportedKeyImages', { count: result.signed_key_images.length }));
       } else {
-        setError('No key images available');
+        setError(t('crypto.wallet.noKeyImages'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to export key images');
+      setError(err?.message || t('crypto.wallet.exportKeyImagesFailed'));
     } finally {
       setLoading(false);
     }
-  }, [call]);
+  }, [call, t]);
 
   // Import key images (view-only wallet imports to track spent outputs)
   const importKeyImages = useCallback(async (file: File) => {
@@ -116,16 +118,16 @@ export function ColdSigningTab() {
       // import_key_images requires confirmation — the dialog will handle it
       if (rpc.pendingConfirmation) return;
       if (result) {
-        setSuccess(`Key images imported. Height: ${result.height}, Spent: ${(result.spent / 1e12).toFixed(6)} XMR, Unspent: ${(result.unspent / 1e12).toFixed(6)} XMR`);
+        setSuccess(t('crypto.wallet.importedKeyImages', { height: result.height, spent: (result.spent / 1e12).toFixed(6), unspent: (result.unspent / 1e12).toFixed(6) }));
       } else {
-        setError(rpc.error || 'Failed to import key images');
+        setError(rpc.error || t('crypto.wallet.importKeyImagesFailed'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to import key images');
+      setError(err?.message || t('crypto.wallet.importKeyImagesFailed'));
     } finally {
       setLoading(false);
     }
-  }, [call]);
+  }, [call, t]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,61 +144,61 @@ export function ColdSigningTab() {
 
   return (
     <div className="cs-root">
-      <h3 className="cs-title">Cold Signing</h3>
+      <h3 className="cs-title">{t('crypto.wallet.coldSigning')}</h3>
 
       {/* Workflow guide */}
       <div className="cs-guide">
-        <div className="cs-guide-title">How Cold Signing Works</div>
+        <div className="cs-guide-title">{t('crypto.wallet.coldGuide')}</div>
         <div className="cs-workflow">
           <div className="cs-wf-step">
             <div className="cs-wf-icon"><Wifi size={14} /></div>
-            <div className="cs-wf-label">View-Only Wallet</div>
-            <div className="cs-wf-desc">Creates unsigned tx</div>
+            <div className="cs-wf-label">{t('crypto.wallet.viewOnlyWallet')}</div>
+            <div className="cs-wf-desc">{t('crypto.wallet.createsUnsignedTx')}</div>
           </div>
           <ArrowRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           <div className="cs-wf-step">
             <div className="cs-wf-icon"><WifiOff size={14} /></div>
-            <div className="cs-wf-label">Cold Wallet</div>
-            <div className="cs-wf-desc">Signs tx offline</div>
+            <div className="cs-wf-label">{t('crypto.wallet.coldWallet')}</div>
+            <div className="cs-wf-desc">{t('crypto.wallet.signsOffline')}</div>
           </div>
           <ArrowRight size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           <div className="cs-wf-step">
             <div className="cs-wf-icon"><Wifi size={14} /></div>
-            <div className="cs-wf-label">View-Only Wallet</div>
-            <div className="cs-wf-desc">Broadcasts signed tx</div>
+            <div className="cs-wf-label">{t('crypto.wallet.viewOnlyWallet')}</div>
+            <div className="cs-wf-desc">{t('crypto.wallet.broadcastsSignedTx')}</div>
           </div>
         </div>
       </div>
 
       {/* Transaction signing */}
       <div className="cs-section">
-        <div className="cs-section-title">Transaction Signing</div>
+        <div className="cs-section-title">{t('crypto.wallet.transactionSigning')}</div>
         <div className="cs-cards">
           <div className="cs-card">
             <div className="cs-card-header">
               <Download size={14} />
-              <span>Export Unsigned TX</span>
+              <span>{t('crypto.wallet.exportUnsignedTx')}</span>
             </div>
             <div className="cs-card-desc">
-              After creating a transaction on the view-only wallet, export the unsigned data to transfer to your cold wallet.
+              {t('crypto.wallet.unsignedTxHelp')}
             </div>
             <button className="cs-btn cs-btn-primary" onClick={exportUnsignedTx} disabled={loading}>
               {loading ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
-              Export Unsigned TX
+              {t('crypto.wallet.exportUnsignedTx')}
             </button>
           </div>
 
           <div className="cs-card">
             <div className="cs-card-header">
               <Upload size={14} />
-              <span>Import Signed TX</span>
+              <span>{t('crypto.wallet.importSignedTx')}</span>
             </div>
             <div className="cs-card-desc">
-              After signing on the cold wallet, import the signed transaction here to broadcast it to the network.
+              {t('crypto.wallet.signedTxHelp')}
             </div>
             <button className="cs-btn cs-btn-primary" onClick={() => triggerFileInput('import-signed')} disabled={loading}>
               {loading ? <Loader2 size={12} className="spin" /> : <Upload size={12} />}
-              Import Signed TX
+              {t('crypto.wallet.importSignedTx')}
             </button>
           </div>
         </div>
@@ -204,36 +206,36 @@ export function ColdSigningTab() {
 
       {/* Key images */}
       <div className="cs-section">
-        <div className="cs-section-title">Key Images</div>
+        <div className="cs-section-title">{t('crypto.wallet.keyImages')}</div>
         <div className="cs-section-desc">
-          Key images allow a view-only wallet to track which outputs have been spent, showing accurate balance.
+          {t('crypto.wallet.keyImagesHelp')}
         </div>
         <div className="cs-cards">
           <div className="cs-card">
             <div className="cs-card-header">
               <HardDrive size={14} />
-              <span>Export Key Images</span>
+              <span>{t('crypto.wallet.exportKeyImages')}</span>
             </div>
             <div className="cs-card-desc">
-              Export from the full (cold) wallet. Transfer the file to your view-only wallet.
+              {t('crypto.wallet.exportFromCold')}
             </div>
             <button className="cs-btn cs-btn-secondary" onClick={exportKeyImages} disabled={loading}>
               {loading ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
-              Export
+              {t('crypto.wallet.export')}
             </button>
           </div>
 
           <div className="cs-card">
             <div className="cs-card-header">
               <HardDrive size={14} />
-              <span>Import Key Images</span>
+              <span>{t('crypto.wallet.importKeyImages')}</span>
             </div>
             <div className="cs-card-desc">
-              Import into the view-only wallet to sync spent output status and show correct balance.
+              {t('crypto.wallet.importToViewOnly')}
             </div>
             <button className="cs-btn cs-btn-secondary" onClick={() => triggerFileInput('import-key-images')} disabled={loading}>
               {loading ? <Loader2 size={12} className="spin" /> : <Upload size={12} />}
-              Import
+              {t('crypto.wallet.import')}
             </button>
           </div>
         </div>

@@ -11,6 +11,7 @@
  */
 
 import { History } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { SnapshotSettingsForm } from './SnapshotSettingsForm';
 
 /**
@@ -19,11 +20,12 @@ import { SnapshotSettingsForm } from './SnapshotSettingsForm';
  * settings card.
  */
 export function VersioningSection() {
+  const { t } = useI18n();
   return (
     <div style={{ maxWidth: 560 }}>
       <SectionHeader
-        title="Versioning"
-        description="File snapshots let you restore previous versions of any file. New versions are captured automatically when a file changes."
+        title={t('drive.versioning.title')}
+        description={t('drive.versioning.description')}
       />
       <div
         style={{
@@ -38,7 +40,7 @@ export function VersioningSection() {
           fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)',
         }}>
           <History size={15} style={{ color: 'var(--mod-drive)' }} />
-          Snapshot policy
+          {t('drive.versioning.policy')}
         </div>
         <SnapshotSettingsForm />
       </div>

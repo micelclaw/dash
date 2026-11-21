@@ -13,8 +13,10 @@
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { useFeedsStore, type RssArticle } from '@/stores/feeds.store';
 import { Star, Loader2 } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export function ArticleList() {
+  const { t } = useI18n();
   const articles = useFeedsStore(s => s.articles);
   const totalArticles = useFeedsStore(s => s.totalArticles);
   const loadingArticles = useFeedsStore(s => s.loadingArticles);
@@ -42,7 +44,7 @@ export function ArticleList() {
   if (articles.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-[var(--text-dim)] text-sm p-4 text-center">
-        No articles found
+        {t('feeds.noArticles')}
       </div>
     );
   }
@@ -66,7 +68,7 @@ export function ArticleList() {
           disabled={loadingArticles}
           className="px-4 py-3 text-xs text-center text-[var(--amber)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
         >
-          {loadingArticles ? 'Loading...' : `Load more (${articles.length}/${totalArticles})`}
+          {loadingArticles ? t('feeds.loading') : t('feeds.loadMore', { loaded: articles.length, total: totalArticles })}
         </button>
       )}
     </div>
@@ -79,7 +81,8 @@ function ArticleRow({ article, feedTitle, active, onClick }: {
   active: boolean;
   onClick: () => void;
 }) {
-  const timeAgo = formatRelativeTime(article.published_at || article.fetched_at);
+  const { locale, t } = useI18n();
+  const timeAgo = formatRelativeTime(article.published_at || article.fetched_at, locale);
 
   return (
     <button
@@ -116,7 +119,7 @@ function ArticleRow({ article, feedTitle, active, onClick }: {
               <span className="px-1 rounded bg-red-900/30 text-red-400">YT</span>
             )}
             {article.media_type?.includes('audio') && (
-              <span className="px-1 rounded bg-purple-900/30 text-purple-400">Pod</span>
+              <span className="px-1 rounded bg-purple-900/30 text-purple-400">{t('feeds.podcast')}</span>
             )}
           </div>
 
@@ -132,7 +135,7 @@ function ArticleRow({ article, feedTitle, active, onClick }: {
   );
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, locale: string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -140,9 +143,9 @@ function formatRelativeTime(dateStr: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'now';
+  if (diffMins < 1) return locale === 'es' ? 'ahora' : 'now';
   if (diffMins < 60) return `${diffMins}m`;
   if (diffHours < 24) return `${diffHours}h`;
   if (diffDays < 7) return `${diffDays}d`;
-  return date.toLocaleDateString('es', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }

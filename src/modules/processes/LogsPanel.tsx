@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { X, Search, RefreshCw, ArrowDown } from 'lucide-react';
 import { useProcessesStore } from '@/stores/processes.store';
+import { useI18n } from '@/i18n';
 
 // ─── Log line color coding ──────────────────────────────
 
@@ -30,6 +31,7 @@ function getLogColor(line: string): string {
 // ─── Component ──────────────────────────────────────────
 
 export function LogsPanel() {
+  const { t } = useI18n();
   const selectedId = useProcessesStore((s) => s.selectedId);
   const processes = useProcessesStore((s) => s.processes);
   const logs = useProcessesStore((s) => s.logs);
@@ -90,15 +92,16 @@ export function LogsPanel() {
             onClick={() => fetchLogs(selectedId)}
             disabled={logsLoading}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}
-            title="Refresh logs"
+            title={t('processes.logsRefresh')}
           >
             <RefreshCw size={14} style={{ animation: logsLoading ? 'spin 1s linear infinite' : 'none' }} />
           </button>
           <button
             onClick={() => selectProcess(null)}
+            aria-label={t('processes.logsClose')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}
           >
-            <X size={16} />
+            <X size={16} aria-label={t('processes.logsClose')} />
           </button>
         </div>
       </div>
@@ -108,7 +111,7 @@ export function LogsPanel() {
         <div style={{ position: 'relative' }}>
           <Search size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
-            placeholder="Filter logs..."
+            placeholder={t('processes.logsFilter')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{
@@ -137,11 +140,11 @@ export function LogsPanel() {
       >
         {logsLoading && filteredLogs.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center', fontFamily: 'var(--font-sans)', fontSize: '0.8125rem' }}>
-            Loading logs...
+            {t('processes.logsLoading')}
           </div>
         ) : filteredLogs.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center', fontFamily: 'var(--font-sans)', fontSize: '0.8125rem' }}>
-            {filter ? 'No matching log lines' : 'No logs available'}
+            {filter ? t('processes.logsNoMatch') : t('processes.logsEmpty')}
           </div>
         ) : (
           filteredLogs.map((line, i) => (
@@ -155,6 +158,8 @@ export function LogsPanel() {
       {/* Scroll-to-bottom button */}
       {!autoScroll && (
         <button
+          title={t('processes.logsScrollBottom')}
+          aria-label={t('processes.logsScrollBottom')}
           onClick={() => {
             if (scrollRef.current) {
               scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

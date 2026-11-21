@@ -20,6 +20,7 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { fmtMoney, type InventoryMove } from '@/modules/inventory/types';
 import { moveEvidenceDownloadPath } from '@/modules/inventory/components/count-evidence';
+import { useI18n } from '@/i18n';
 
 const MOVE_TYPES = [
   'purchase_in',
@@ -121,12 +122,12 @@ const tdStyle: CSSProperties = {
 };
 
 /** Fecha + hora compacta para una fila del ledger (DD MMM · HH:MM). */
-function fmtMoveDateTime(iso: string): { date: string; time: string } {
+function fmtMoveDateTime(iso: string, locale: string): { date: string; time: string } {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return { date: iso, time: '' };
   return {
-    date: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }),
-    time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+    date: d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: '2-digit' }),
+    time: d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
   };
 }
 
@@ -214,6 +215,7 @@ function ModalShell({ title, width = 420, onClose, children }: { title: string; 
 }
 
 function TypeChip({ type }: { type: string }) {
+  const { t: tr } = useI18n();
   const reversal = type === 'reversal';
   return (
     <span
@@ -227,7 +229,7 @@ function TypeChip({ type }: { type: string }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {type}
+      {tr(`inventory.stock.type.${type}`)}
     </span>
   );
 }
@@ -251,7 +253,8 @@ function DeltaCell({ move }: { move: InventoryMove }) {
 }
 
 function ByChip({ createdBy }: { createdBy: string }) {
-  const by = /agent/i.test(createdBy) ? 'agent' : 'user';
+  const { t: tr } = useI18n();
+  const by = tr(/agent/i.test(createdBy) ? 'inventory.stock.agent' : 'inventory.stock.user');
   return (
     <span
       style={{
@@ -270,13 +273,14 @@ function ByChip({ createdBy }: { createdBy: string }) {
 
 type MoveMode = 'in' | 'out' | 'transfer';
 
-const MODE_CONFIG: Record<MoveMode, { title: string; moveType: string; toastMsg: string }> = {
-  in: { title: 'Stock in', moveType: 'purchase_in', toastMsg: 'Stock in recorded' },
-  out: { title: 'Stock out', moveType: 'consume', toastMsg: 'Stock out recorded' },
-  transfer: { title: 'Transfer', moveType: 'transfer', toastMsg: 'Transfer recorded' },
+const MODE_CONFIG: Record<MoveMode, { title: string; moveType: string; toastMsg: string; failedAction: string }> = {
+  in: { title: 'inventory.stock.in', moveType: 'purchase_in', toastMsg: 'inventory.stock.inRecorded', failedAction: 'inventory.stock.in' },
+  out: { title: 'inventory.stock.out', moveType: 'consume', toastMsg: 'inventory.stock.outRecorded', failedAction: 'inventory.stock.out' },
+  transfer: { title: 'inventory.stock.transfer', moveType: 'transfer', toastMsg: 'inventory.stock.transferRecorded', failedAction: 'inventory.stock.transfer' },
 };
 
 function MoveModal({ mode, defaultItemId, onClose, onDone }: { mode: MoveMode; defaultItemId: string; onClose: () => void; onDone: () => void }) {
+  const { t: tr } = useI18n();
   const { items, locations, recordMove } = useInventoryStore();
   const [itemId, setItemId] = useState(defaultItemId);
   const [qty, setQty] = useState('');
@@ -295,16 +299,16 @@ function MoveModal({ mode, defaultItemId, onClose, onDone }: { mode: MoveMode; d
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!itemId) {
-      toast.error('Item is required');
+      toast.error(tr('inventory.stock.itemRequired'));
       return;
     }
     const qtyNum = parseFloat(qty);
     if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-      toast.error('Quantity must be greater than 0');
+      toast.error(tr('inventory.stock.positiveQuantity'));
       return;
     }
     if (mode === 'transfer' && !toLocationId) {
-      toast.error('Destination location is required');
+      toast.error(tr('inventory.stock.destinationRequired'));
       return;
     }
     const body: Record<string, unknown> = {
@@ -322,21 +326,21 @@ function MoveModal({ mode, defaultItemId, onClose, onDone }: { mode: MoveMode; d
     setSubmitting(true);
     try {
       await recordMove(body);
-      toast.success(cfg.toastMsg);
+      toast.success(tr(cfg.toastMsg));
       onDone();
     } catch {
-      toast.error(`Failed to record ${cfg.title.toLowerCase()}`);
+      toast.error(tr('inventory.stock.recordFailed', { action: tr(cfg.failedAction).toLocaleLowerCase() }));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ModalShell title={cfg.title} onClose={onClose}>
+    <ModalShell title={tr(cfg.title)} onClose={onClose}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Field label="Item *">
+        <Field label={`${tr('inventory.stock.item')} *`}>
           <select style={{ ...selectStyle, width: '100%', padding: '6px 8px' }} value={itemId} onChange={e => setItemId(e.target.value)} autoFocus required>
-            <option value="">Select item…</option>
+            <option value="">{tr('inventory.stock.selectItem')}</option>
             {sortedItems.map(i => (
               <option key={i.id} value={i.id}>{i.name}</option>
             ))}
@@ -344,18 +348,18 @@ function MoveModal({ mode, defaultItemId, onClose, onDone }: { mode: MoveMode; d
         </Field>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Field label="Quantity *">
+          <Field label={`${tr('inventory.stock.quantity')} *`}>
             <input style={inputStyle} type="number" min="0" step="any" value={qty} onChange={e => setQty(e.target.value)} required />
           </Field>
           {mode !== 'transfer' && (
-            <Field label="Unit cost">
+            <Field label={tr('inventory.stock.unitCost')}>
               <input style={inputStyle} type="number" min="0" step="0.01" value={unitCost} onChange={e => setUnitCost(e.target.value)} />
             </Field>
           )}
           {mode === 'transfer' && (
-            <Field label="To location *">
+            <Field label={`${tr('inventory.stock.toLocation')} *`}>
               <select style={{ ...selectStyle, width: '100%', padding: '6px 8px' }} value={toLocationId} onChange={e => setToLocationId(e.target.value)} required>
-                <option value="">Select location…</option>
+                <option value="">{tr('inventory.stock.selectLocation')}</option>
                 {locations.map(l => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}
@@ -364,14 +368,14 @@ function MoveModal({ mode, defaultItemId, onClose, onDone }: { mode: MoveMode; d
           )}
         </div>
 
-        <Field label="Notes">
+        <Field label={tr('inventory.stock.notes')}>
           <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
         </Field>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-          <button type="button" style={secondaryBtnStyle} onClick={onClose}>Cancel</button>
+          <button type="button" style={secondaryBtnStyle} onClick={onClose}>{tr('inventory.cancel')}</button>
           <button type="submit" style={{ ...primaryBtnStyle, opacity: submitting ? 0.6 : 1 }} disabled={submitting}>
-            {submitting ? 'Recording…' : cfg.title}
+            {submitting ? tr('inventory.stock.recording') : tr(cfg.title)}
           </button>
         </div>
       </form>
@@ -387,6 +391,7 @@ interface ReceiptResult {
 }
 
 function ReceiveDocumentModal({ onClose, onProcessed }: { onClose: () => void; onProcessed: () => void }) {
+  const { t: tr } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ReceiptResult | null>(null);
@@ -406,21 +411,21 @@ function ReceiveDocumentModal({ onClose, onProcessed }: { onClose: () => void; o
         { timeout: 120000 },
       );
       setResult(res.data);
-      toast.success(`Receipt processed — ${res.data.moves_created.length} moves created`);
+      toast.success(tr('inventory.stock.receiptProcessed', { count: res.data.moves_created.length }));
       onProcessed();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Receipt processing failed');
+      toast.error(err instanceof Error ? err.message : tr('inventory.stock.receiptFailed'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ModalShell title="Receive document" onClose={onClose}>
+    <ModalShell title={tr('inventory.stock.receiveDocument')} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!result && (
           <>
-            <Field label="Delivery note / receipt (PDF or image)">
+            <Field label={tr('inventory.stock.deliveryNote')}>
               <input
                 style={{ ...inputStyle, padding: '5px 8px', cursor: 'pointer' }}
                 type="file"
@@ -432,19 +437,19 @@ function ReceiveDocumentModal({ onClose, onProcessed }: { onClose: () => void; o
 
             {loading && (
               <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-                Running OCR + extraction locally… this can take 30–60s.
+                {tr('inventory.stock.ocrWorking')}
               </div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-              <button type="button" style={secondaryBtnStyle} onClick={onClose} disabled={loading}>Cancel</button>
+              <button type="button" style={secondaryBtnStyle} onClick={onClose} disabled={loading}>{tr('inventory.cancel')}</button>
               <button
                 type="button"
                 style={{ ...primaryBtnStyle, opacity: !file || loading ? 0.6 : 1 }}
                 disabled={!file || loading}
                 onClick={() => void handleProcess()}
               >
-                {loading ? 'Processing…' : 'Process receipt'}
+                {loading ? tr('inventory.stock.processing') : tr('inventory.stock.processReceipt')}
               </button>
             </div>
           </>
@@ -465,9 +470,9 @@ function ReceiveDocumentModal({ onClose, onProcessed }: { onClose: () => void; o
                 gap: 4,
               }}
             >
-              <div><span style={{ color: 'var(--text-dim)' }}>Vendor:</span> {result.vendor ?? '—'}</div>
-              <div><span style={{ color: 'var(--text-dim)' }}>Order ref:</span> {result.order_ref ?? '—'}</div>
-              <div style={{ fontWeight: 600, marginTop: 4 }}>{result.moves_created.length} moves created</div>
+              <div><span style={{ color: 'var(--text-dim)' }}>{tr('inventory.stock.vendor')}:</span> {result.vendor ?? '—'}</div>
+              <div><span style={{ color: 'var(--text-dim)' }}>{tr('inventory.stock.orderRef')}:</span> {result.order_ref ?? '—'}</div>
+              <div style={{ fontWeight: 600, marginTop: 4 }}>{tr('inventory.stock.movesCreated', { count: result.moves_created.length })}</div>
               {result.moves_created.length > 0 && (
                 <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {result.moves_created.map((m, i) => (
@@ -476,12 +481,12 @@ function ReceiveDocumentModal({ onClose, onProcessed }: { onClose: () => void; o
                 </ul>
               )}
               <div style={{ marginTop: 4, color: result.proposals_queued > 0 ? 'var(--mod-inventory)' : 'var(--text-dim)' }}>
-                {result.proposals_queued} proposals queued → Review in Overview
+                {tr('inventory.stock.proposalsQueued', { count: result.proposals_queued })}
               </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
-              <button type="button" style={primaryBtnStyle} onClick={onClose}>Close</button>
+              <button type="button" style={primaryBtnStyle} onClick={onClose}>{tr('inventory.stock.close')}</button>
             </div>
           </>
         )}
@@ -491,6 +496,7 @@ function ReceiveDocumentModal({ onClose, onProcessed }: { onClose: () => void; o
 }
 
 export function StockTab() {
+  const { t: tr, locale } = useI18n();
   const { items, moves, fetchMoves, fetchItems, fetchProposals, reverseMove } = useInventoryStore();
   const [itemFilter, setItemFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -590,9 +596,9 @@ export function StockTab() {
     }
     await refreshAfterBulk();
     setBulkBusy(false);
-    const parts = [`${ok} moves reclassified`];
-    if (skipped > 0) parts.push(`${skipped} reversals skipped`);
-    if (failed > 0) parts.push(`${failed} failed`);
+    const parts = [tr('inventory.stock.bulkReclassified', { count: ok })];
+    if (skipped > 0) parts.push(tr('inventory.stock.reversalsSkipped', { count: skipped }));
+    if (failed > 0) parts.push(tr('inventory.stock.bulkFailed', { count: failed }));
     if (failed > 0) toast.warning(parts.join(' — '));
     else toast.success(parts.join(' — '));
     clearSelection();
@@ -619,9 +625,9 @@ export function StockTab() {
     const failed = results.length - ok;
     await refreshAfterBulk();
     setBulkBusy(false);
-    const parts = [`${ok} reversed`];
-    if (skipped > 0) parts.push(`${skipped} skipped (already reversal)`);
-    if (failed > 0) parts.push(`${failed} failed`);
+    const parts = [tr('inventory.stock.reversed', { count: ok })];
+    if (skipped > 0) parts.push(tr('inventory.stock.alreadyReversalSkipped', { count: skipped }));
+    if (failed > 0) parts.push(tr('inventory.stock.bulkFailed', { count: failed }));
     if (failed > 0) toast.warning(parts.join(' — '));
     else toast.success(parts.join(' — '));
     clearSelection();
@@ -633,10 +639,10 @@ export function StockTab() {
     if (!reversingMove) return;
     try {
       await reverseMove(reversingMove.id);
-      toast.success('Reversal recorded — the ledger never deletes');
+      toast.success(tr('inventory.stock.reversalRecorded'));
       void load(itemFilter, typeFilter);
     } catch {
-      toast.error('Failed to reverse move');
+      toast.error(tr('inventory.stock.reverseFailed'));
     }
     setReversingMove(null);
   };
@@ -659,16 +665,16 @@ export function StockTab() {
         }}
       >
         <select style={selectStyle} value={itemFilter} onChange={e => handleItemFilter(e.target.value)}>
-          <option value="">All items</option>
+          <option value="">{tr('inventory.stock.allItems')}</option>
           {sortedItems.map(i => (
             <option key={i.id} value={i.id}>{i.name}</option>
           ))}
         </select>
 
         <select style={selectStyle} value={typeFilter} onChange={e => handleTypeFilter(e.target.value)}>
-          <option value="">All types</option>
+          <option value="">{tr('inventory.stock.allTypes')}</option>
           {MOVE_TYPES.map(t => (
-            <option key={t} value={t}>{t}</option>
+            <option key={t} value={t}>{tr(`inventory.stock.type.${t}`)}</option>
           ))}
         </select>
 
@@ -677,14 +683,14 @@ export function StockTab() {
             style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', gap: 5, opacity: moves.length === 0 ? 0.5 : 1 }}
             disabled={moves.length === 0}
             onClick={() => exportMovesCsv(moves, id => itemNames.get(id) ?? id)}
-            title="Export the filtered ledger to CSV"
+            title={tr('inventory.stock.exportLedger')}
           >
-            <Download size={13} /> Export CSV
+            <Download size={13} /> {tr('inventory.stock.exportCsv')}
           </button>
-          <button style={secondaryBtnStyle} onClick={() => setModal('in')}>Stock in</button>
-          <button style={secondaryBtnStyle} onClick={() => setModal('out')}>Stock out</button>
-          <button style={secondaryBtnStyle} onClick={() => setModal('transfer')}>Transfer</button>
-          <button style={primaryBtnStyle} onClick={() => setModal('receipt')}>Receive document</button>
+          <button style={secondaryBtnStyle} onClick={() => setModal('in')}>{tr('inventory.stock.in')}</button>
+          <button style={secondaryBtnStyle} onClick={() => setModal('out')}>{tr('inventory.stock.out')}</button>
+          <button style={secondaryBtnStyle} onClick={() => setModal('transfer')}>{tr('inventory.stock.transfer')}</button>
+          <button style={primaryBtnStyle} onClick={() => setModal('receipt')}>{tr('inventory.stock.receiveDocument')}</button>
         </div>
       </div>
 
@@ -702,16 +708,16 @@ export function StockTab() {
             flexWrap: 'wrap',
           }}
         >
-          <span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{summary.count}</span> movements{itemFilter || typeFilter ? ' (filtered)' : ''}</span>
+          <span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{tr('inventory.stock.movements', { count: summary.count })}</span>{itemFilter || typeFilter ? ` ${tr('inventory.stock.filtered')}` : ''}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <ArrowDownToLine size={12} style={{ color: 'var(--success)' }} />
-            in <span style={{ color: 'var(--success)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>+{summary.fmt(summary.inSum)}</span>
+            {tr('inventory.stock.inLabel')} <span style={{ color: 'var(--success)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>+{summary.fmt(summary.inSum)}</span>
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <ArrowUpToLine size={12} style={{ color: 'var(--error)' }} />
-            out <span style={{ color: 'var(--error)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>-{summary.fmt(summary.outSum)}</span>
+            {tr('inventory.stock.outLabel')} <span style={{ color: 'var(--error)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>-{summary.fmt(summary.outSum)}</span>
           </span>
-          <span>net <span style={{ color: summary.net >= 0 ? 'var(--success)' : 'var(--error)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{summary.net >= 0 ? '+' : ''}{summary.fmt(summary.net)}</span></span>
+          <span>{tr('inventory.stock.net')} <span style={{ color: summary.net >= 0 ? 'var(--success)' : 'var(--error)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{summary.net >= 0 ? '+' : ''}{summary.fmt(summary.net)}</span></span>
         </div>
       )}
 
@@ -734,13 +740,13 @@ export function StockTab() {
           }}
         >
           <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-            {selected.size} selected
+            {tr('inventory.stock.selected', { count: selected.size })}
           </span>
 
           <select style={selectStyle} value={bulkType} onChange={e => setBulkType(e.target.value)} disabled={bulkBusy}>
-            <option value="">Change type to…</option>
+            <option value="">{tr('inventory.stock.changeType')}</option>
             {BULK_TYPES.map(t => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>{tr(`inventory.stock.type.${t}`)}</option>
             ))}
           </select>
 
@@ -749,11 +755,11 @@ export function StockTab() {
             disabled={!bulkType || bulkBusy}
             onClick={() => void handleBulkApply()}
           >
-            {bulkBusy ? 'Working…' : 'Apply'}
+            {bulkBusy ? tr('inventory.stock.working') : tr('inventory.stock.apply')}
           </button>
 
           <button
-            title="Record a counter-entry for each selected move — the ledger is never deleted"
+            title={tr('inventory.stock.reverseTitle')}
             style={{
               ...secondaryBtnStyle,
               display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -765,7 +771,7 @@ export function StockTab() {
             disabled={bulkBusy}
             onClick={() => void handleBulkReverse()}
           >
-            <Undo2 size={13} /> {confirmingReverse ? `Confirm reverse ${selected.size}` : 'Reverse'}
+            <Undo2 size={13} /> {confirmingReverse ? tr('inventory.stock.confirmReverse', { count: selected.size }) : tr('inventory.stock.reverse')}
           </button>
 
           <button
@@ -781,7 +787,7 @@ export function StockTab() {
             disabled={bulkBusy}
             onClick={clearSelection}
           >
-            Clear
+            {tr('inventory.stock.clear')}
           </button>
         </div>
       )}
@@ -791,11 +797,11 @@ export function StockTab() {
         {moves.length === 0 ? (
           <EmptyState
             icon={ArrowRightLeft}
-            title="No stock movements"
-            description="Record a stock in, or scan a delivery note to populate the ledger."
+            title={tr('inventory.stock.noMoves')}
+            description={tr('inventory.stock.noMovesDescription')}
             actions={[
-              { label: 'Stock in', onClick: () => setModal('in'), variant: 'primary' },
-              { label: 'Receive document', onClick: () => setModal('receipt'), variant: 'secondary' },
+              { label: tr('inventory.stock.in'), onClick: () => setModal('in'), variant: 'primary' },
+              { label: tr('inventory.stock.receiveDocument'), onClick: () => setModal('receipt'), variant: 'secondary' },
             ]}
           />
         ) : (
@@ -805,20 +811,20 @@ export function StockTab() {
                 <th style={{ ...thStyle, width: 28 }}>
                   <input
                     type="checkbox"
-                    aria-label="Select all"
+                    aria-label={tr('inventory.stock.selectAll')}
                     checked={allSelected}
                     onChange={toggleAll}
                     style={{ accentColor: 'var(--amber)', cursor: 'pointer' }}
                   />
                 </th>
-                <th style={thStyle}>Date</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Item</th>
+                <th style={thStyle}>{tr('inventory.stock.date')}</th>
+                <th style={thStyle}>{tr('inventory.stock.type')}</th>
+                <th style={thStyle}>{tr('inventory.stock.item')}</th>
                 <th style={thStyle}>Δ</th>
-                <th style={thStyle}>Balance</th>
-                <th style={thStyle}>Cost</th>
-                <th style={thStyle}>By</th>
-                <th style={thStyle}>Evidence</th>
+                <th style={thStyle}>{tr('inventory.stock.balance')}</th>
+                <th style={thStyle}>{tr('inventory.stock.cost')}</th>
+                <th style={thStyle}>{tr('inventory.stock.by')}</th>
+                <th style={thStyle}>{tr('inventory.stock.evidence')}</th>
                 <th style={thStyle} />
               </tr>
             </thead>
@@ -833,7 +839,7 @@ export function StockTab() {
                   <td style={tdStyle}>
                     <input
                       type="checkbox"
-                      aria-label="Select move"
+                      aria-label={tr('inventory.stock.selectMove')}
                       checked={selected.has(move.id)}
                       onChange={() => toggleRow(move.id)}
                       style={{ accentColor: 'var(--amber)', cursor: 'pointer' }}
@@ -841,7 +847,7 @@ export function StockTab() {
                   </td>
                   <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                     {(() => {
-                      const dt = fmtMoveDateTime(move.occurred_at);
+                      const dt = fmtMoveDateTime(move.occurred_at, locale);
                       return (
                         <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.25 }}>
                           <span>{dt.date}</span>
@@ -874,7 +880,7 @@ export function StockTab() {
                         rel="noreferrer"
                         style={{ color: 'var(--amber)', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
-                        <Download size={12} /> Photo
+                        <Download size={12} /> {tr('inventory.stock.photo')}
                       </a>
                     ) : <span style={{ color: 'var(--text-dim)' }}>—</span>}
                   </td>
@@ -898,7 +904,7 @@ export function StockTab() {
                           borderRadius: 'var(--radius-sm)',
                         }}
                       >
-                        <Undo2 size={12} /> Undo
+                        <Undo2 size={12} /> {tr('inventory.stock.undo')}
                       </button>
                     )}
                   </td>
@@ -918,7 +924,7 @@ export function StockTab() {
           color: 'var(--text-dim)',
         }}
       >
-        Corrections are counter-entries — the ledger never deletes. Editing an item's quantity by hand records a silent adjustment.
+        {tr('inventory.stock.footer')}
       </div>
 
       {(modal === 'in' || modal === 'out' || modal === 'transfer') && (
@@ -947,10 +953,10 @@ export function StockTab() {
         open={!!reversingMove}
         onClose={() => setReversingMove(null)}
         onConfirm={confirmUndo}
-        title="Reverse stock move"
-        description="A counter-entry will be recorded. The ledger never deletes — this adds a reversing move that cancels it out."
-        confirmLabel="Reverse"
-        cancelLabel="Cancel"
+        title={tr('inventory.stock.reverseMove')}
+        description={tr('inventory.stock.reverseDescription')}
+        confirmLabel={tr('inventory.stock.reverse')}
+        cancelLabel={tr('inventory.cancel')}
         variant="warning"
       />
     </div>

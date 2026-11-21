@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface StarRatingProps {
   value: number;
@@ -30,6 +31,7 @@ export function StarRating({
   isOverride,
   onReset,
 }: StarRatingProps) {
+  const { t, locale } = useI18n();
   const [hoverStar, setHoverStar] = useState<number | null>(null);
   const interactive = !!onChange;
   const displayValue = hoverStar ?? Math.round(value);
@@ -45,9 +47,12 @@ export function StarRating({
       }}
       onMouseLeave={() => interactive && setHoverStar(null)}
     >
-      {[1, 2, 3, 4, 5].map((star) => (
-        <span
+      {[1, 2, 3, 4, 5].map((star) => interactive ? (
+        <button
           key={star}
+          type="button"
+          aria-label={t(star === 1 ? 'photos.starOne' : 'photos.starMany', { count: star })}
+          aria-pressed={star === Math.round(value)}
           onClick={(e) => {
             if (!interactive) return;
             e.stopPropagation();
@@ -59,11 +64,17 @@ export function StarRating({
             lineHeight: 1,
             color: star <= displayValue ? 'var(--amber)' : 'var(--text-muted)',
             transition: 'color 0.1s',
+            background: 'none', border: 0, padding: 0, cursor: 'pointer',
           }}
         >
           {star <= displayValue ? '★' : '☆'}
+        </button>
+      ) : (
+        <span key={star} aria-hidden="true" style={{ fontSize: size, lineHeight: 1, color: star <= displayValue ? 'var(--amber)' : 'var(--text-muted)' }}>
+          {star <= displayValue ? '★' : '☆'}
         </span>
       ))}
+      {!interactive && <span className="sr-only">{t(value === 1 ? 'photos.starOne' : 'photos.starMany', { count: value })}</span>}
       {showValue && value > 0 && (
         <span
           style={{
@@ -73,7 +84,7 @@ export function StarRating({
             marginLeft: 2,
           }}
         >
-          ({value.toFixed(1)})
+          ({new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)})
         </span>
       )}
       {isOverride && (
@@ -85,13 +96,14 @@ export function StarRating({
             marginLeft: 2,
           }}
         >
-          manual
+          {t('photos.manualRating')}
         </span>
       )}
       {onReset && (
         <button
           onClick={(e) => { e.stopPropagation(); onReset(); }}
-          title="Reset to AI score"
+          title={t('photos.resetRating')}
+          aria-label={t('photos.resetRating')}
           style={{
             background: 'none',
             border: 'none',

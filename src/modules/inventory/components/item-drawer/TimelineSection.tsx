@@ -17,6 +17,7 @@ import {
   type InventoryEvent,
   type InventoryItem,
 } from '@/modules/inventory/types';
+import { useI18n } from '@/i18n';
 import { fmtDate, sectionLabel } from './drawer-ui';
 
 /** Timeline = real inventory_events + synthetic entries derived from the item. */
@@ -43,6 +44,7 @@ interface TimelineSectionProps {
 }
 
 export function TimelineSection({ item, events }: TimelineSectionProps) {
+  const { t } = useI18n();
   const warrantyDays = daysUntil(item.warranty_until);
 
   // Merge real events with synthetic purchase/warranty entries, sorted desc.
@@ -63,9 +65,9 @@ export function TimelineSection({ item, events }: TimelineSectionProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <span style={sectionLabel}>Timeline</span>
+      <span style={sectionLabel}>{t('inventory.drawer.timeline')}</span>
       {timeline.length === 0 ? (
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>No events yet.</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('inventory.drawer.noEvents')}</span>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {timeline.map(entry => {
@@ -136,7 +138,7 @@ export function TimelineSection({ item, events }: TimelineSectionProps) {
                       </span>
                     )}
                     {upcoming && (
-                      <span style={{ fontSize: '0.625rem', color: 'var(--text-dim)' }}>upcoming</span>
+                      <span style={{ fontSize: '0.625rem', color: 'var(--text-dim)' }}>{t('inventory.drawer.upcoming')}</span>
                     )}
                   </span>
                 </div>

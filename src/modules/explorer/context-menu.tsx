@@ -26,6 +26,9 @@ import {
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { FileClipboardSpace } from '@/stores/file-clipboard.store';
+import type { MessageValues } from '@/i18n';
+
+type Translate = (key: string, values?: MessageValues) => string;
 
 // ─── Context types ───────────────────────────────────────
 
@@ -76,7 +79,7 @@ function isDownloadable(file: FileRecord, ctx: ExplorerMenuContext): boolean {
 
 // ─── Builders ────────────────────────────────────────────
 
-function buildSingleMenu(file: FileRecord, ctx: ExplorerMenuContext): ContextMenuItem[] {
+function buildSingleMenu(file: FileRecord, ctx: ExplorerMenuContext, t: Translate): ContextMenuItem[] {
   const cb = ctx.callbacks;
   const isDir = file.is_directory;
   const items: ContextMenuItem[] = [];
@@ -84,58 +87,58 @@ function buildSingleMenu(file: FileRecord, ctx: ExplorerMenuContext): ContextMen
   // Open: folder → navigate; file → preview panel.
   if (cb.onOpen) {
     items.push({
-      label: 'Open', icon: isDir ? FolderOpen : Eye, shortcut: 'Enter',
+      label: t('explorer.menu.open'), icon: isDir ? FolderOpen : Eye, shortcut: 'Enter',
       onClick: () => cb.onOpen!(file),
     });
     items.push(sep());
   }
 
   if (cb.onDownload && isDownloadable(file, ctx)) {
-    items.push({ label: 'Download', icon: Download, onClick: () => cb.onDownload!([file]) });
+    items.push({ label: t('explorer.menu.download'), icon: Download, onClick: () => cb.onDownload!([file]) });
     items.push(sep());
   }
 
   if (ctx.writable && cb.onCut) {
-    items.push({ label: 'Cut', icon: Scissors, shortcut: 'Ctrl+X', onClick: () => cb.onCut!([file]) });
+    items.push({ label: t('explorer.menu.cut'), icon: Scissors, shortcut: 'Ctrl+X', onClick: () => cb.onCut!([file]) });
   }
   if (cb.onCopy) {
-    items.push({ label: 'Copy', icon: Copy, shortcut: 'Ctrl+C', onClick: () => cb.onCopy!([file]) });
+    items.push({ label: t('explorer.menu.copy'), icon: Copy, shortcut: 'Ctrl+C', onClick: () => cb.onCopy!([file]) });
   }
   // Paste only over folders (paste INTO the folder) — background paste lives in the background menu.
   if (isDir && ctx.writable && cb.onPaste) {
     items.push({
-      label: 'Paste into folder', icon: ClipboardPaste, shortcut: 'Ctrl+V',
+      label: t('explorer.menu.pasteInto'), icon: ClipboardPaste, shortcut: 'Ctrl+V',
       disabled: !clipboardUsable(ctx),
       onClick: () => cb.onPaste!(file),
     });
   }
   if (ctx.writable && cb.onMoveTo) {
-    items.push({ label: 'Move to…', icon: FolderInput, onClick: () => cb.onMoveTo!([file]) });
+    items.push({ label: t('explorer.menu.moveTo'), icon: FolderInput, onClick: () => cb.onMoveTo!([file]) });
   }
   if (cb.onCopyTo) {
-    items.push({ label: 'Copy to…', icon: CopyPlus, onClick: () => cb.onCopyTo!([file]) });
+    items.push({ label: t('explorer.menu.copyTo'), icon: CopyPlus, onClick: () => cb.onCopyTo!([file]) });
   }
 
   if (ctx.writable && cb.onRename) {
     items.push(sep());
-    items.push({ label: 'Rename', icon: Pencil, shortcut: 'F2', onClick: () => cb.onRename!(file) });
+    items.push({ label: t('explorer.menu.rename'), icon: Pencil, shortcut: 'F2', onClick: () => cb.onRename!(file) });
   }
 
   if (ctx.writable && cb.onDelete) {
     items.push(sep());
-    items.push({ label: 'Delete', icon: Trash2, shortcut: 'Del', variant: 'danger', onClick: () => cb.onDelete!([file]) });
+    items.push({ label: t('explorer.menu.delete'), icon: Trash2, shortcut: 'Del', variant: 'danger', onClick: () => cb.onDelete!([file]) });
   }
 
   items.push(sep());
-  items.push({ label: 'Copy path', icon: Link2, onClick: () => { void navigator.clipboard.writeText(file.filepath); } });
+  items.push({ label: t('explorer.menu.copyPath'), icon: Link2, onClick: () => { void navigator.clipboard.writeText(file.filepath); } });
   if (cb.onProperties) {
-    items.push({ label: 'Properties', icon: Info, onClick: () => cb.onProperties!(file) });
+    items.push({ label: t('explorer.menu.properties'), icon: Info, onClick: () => cb.onProperties!(file) });
   }
 
   return items;
 }
 
-function buildMultiMenu(files: FileRecord[], ctx: ExplorerMenuContext): ContextMenuItem[] {
+function buildMultiMenu(files: FileRecord[], ctx: ExplorerMenuContext, t: Translate): ContextMenuItem[] {
   const cb = ctx.callbacks;
   const n = files.length;
   const items: ContextMenuItem[] = [];
@@ -143,29 +146,29 @@ function buildMultiMenu(files: FileRecord[], ctx: ExplorerMenuContext): ContextM
   const downloadable = files.filter(f => isDownloadable(f, ctx));
   if (cb.onDownload && downloadable.length > 0) {
     items.push({
-      label: `Download (${downloadable.length})`, icon: Download,
+      label: t('explorer.menu.downloadMany', { count: downloadable.length }), icon: Download,
       onClick: () => cb.onDownload!(downloadable),
     });
     items.push(sep());
   }
 
   if (ctx.writable && cb.onCut) {
-    items.push({ label: `Cut (${n})`, icon: Scissors, shortcut: 'Ctrl+X', onClick: () => cb.onCut!(files) });
+    items.push({ label: t('explorer.menu.cutMany', { count: n }), icon: Scissors, shortcut: 'Ctrl+X', onClick: () => cb.onCut!(files) });
   }
   if (cb.onCopy) {
-    items.push({ label: `Copy (${n})`, icon: Copy, shortcut: 'Ctrl+C', onClick: () => cb.onCopy!(files) });
+    items.push({ label: t('explorer.menu.copyMany', { count: n }), icon: Copy, shortcut: 'Ctrl+C', onClick: () => cb.onCopy!(files) });
   }
   if (ctx.writable && cb.onMoveTo) {
-    items.push({ label: 'Move to…', icon: FolderInput, onClick: () => cb.onMoveTo!(files) });
+    items.push({ label: t('explorer.menu.moveTo'), icon: FolderInput, onClick: () => cb.onMoveTo!(files) });
   }
   if (cb.onCopyTo) {
-    items.push({ label: 'Copy to…', icon: CopyPlus, onClick: () => cb.onCopyTo!(files) });
+    items.push({ label: t('explorer.menu.copyTo'), icon: CopyPlus, onClick: () => cb.onCopyTo!(files) });
   }
 
   if (ctx.writable && cb.onDelete) {
     items.push(sep());
     items.push({
-      label: `Delete (${n})`, icon: Trash2, shortcut: 'Del', variant: 'danger',
+      label: t('explorer.menu.deleteMany', { count: n }), icon: Trash2, shortcut: 'Del', variant: 'danger',
       onClick: () => cb.onDelete!(files),
     });
   }
@@ -179,23 +182,23 @@ function buildMultiMenu(files: FileRecord[], ctx: ExplorerMenuContext): ContextM
  * - >1 entries → batch menu
  * - 0 entries → background menu
  */
-export function buildExplorerContextMenu(entries: FileRecord[], ctx: ExplorerMenuContext): ContextMenuItem[] {
-  if (entries.length === 0) return buildExplorerBackgroundMenu(ctx);
-  if (entries.length > 1) return buildMultiMenu(entries, ctx);
-  return buildSingleMenu(entries[0]!, ctx);
+export function buildExplorerContextMenu(entries: FileRecord[], ctx: ExplorerMenuContext, t: Translate): ContextMenuItem[] {
+  if (entries.length === 0) return buildExplorerBackgroundMenu(ctx, t);
+  if (entries.length > 1) return buildMultiMenu(entries, ctx, t);
+  return buildSingleMenu(entries[0]!, ctx, t);
 }
 
 /** Background (empty area) menu: New folder / Upload files / Paste. */
-export function buildExplorerBackgroundMenu(ctx: ExplorerMenuContext): ContextMenuItem[] {
+export function buildExplorerBackgroundMenu(ctx: ExplorerMenuContext, t: Translate): ContextMenuItem[] {
   const cb = ctx.callbacks;
   const items: ContextMenuItem[] = [];
   if (!ctx.writable) return items;
-  if (cb.onNewFolder) items.push({ label: 'New folder', icon: FolderPlus, onClick: () => cb.onNewFolder!() });
-  if (cb.onUpload) items.push({ label: 'Upload files', icon: Upload, onClick: () => cb.onUpload!() });
+  if (cb.onNewFolder) items.push({ label: t('explorer.menu.newFolder'), icon: FolderPlus, onClick: () => cb.onNewFolder!() });
+  if (cb.onUpload) items.push({ label: t('explorer.menu.upload'), icon: Upload, onClick: () => cb.onUpload!() });
   if (cb.onPaste) {
     if (items.length > 0) items.push(sep());
     items.push({
-      label: 'Paste', icon: ClipboardPaste, shortcut: 'Ctrl+V',
+      label: t('explorer.menu.paste'), icon: ClipboardPaste, shortcut: 'Ctrl+V',
       disabled: !clipboardUsable(ctx),
       onClick: () => cb.onPaste!(),
     });

@@ -17,17 +17,19 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useMusicStore } from '@/stores/music.store';
 import type { AlbumListType } from '@/services/music.service';
 import { AlbumCard } from '../components/AlbumCard';
+import { useI18n } from '@/i18n';
 
-const TYPE_CHIPS: { id: AlbumListType; label: string }[] = [
-  { id: 'newest', label: 'Newest' },
-  { id: 'recent', label: 'Recent' },
-  { id: 'frequent', label: 'Frequent' },
-  { id: 'random', label: 'Random' },
-  { id: 'starred', label: 'Starred' },
-  { id: 'alphabeticalByName', label: 'A–Z' },
+const TYPE_CHIPS: { id: AlbumListType; labelKey: string }[] = [
+  { id: 'newest', labelKey: 'music.newest' },
+  { id: 'recent', labelKey: 'music.recent' },
+  { id: 'frequent', labelKey: 'music.frequent' },
+  { id: 'random', labelKey: 'music.random' },
+  { id: 'starred', labelKey: 'music.starred' },
+  { id: 'alphabeticalByName', labelKey: 'music.alphabetical' },
 ];
 
 export function AlbumsView() {
+  const { t } = useI18n();
   const albums = useMusicStore((s) => s.albums);
   const albumsType = useMusicStore((s) => s.albumsType);
   const hasMore = useMusicStore((s) => s.albumsHasMore);
@@ -63,14 +65,14 @@ export function AlbumsView() {
                 transition: 'background var(--transition-fast)',
               }}
             >
-              {chip.label}
+              {t(chip.labelKey)}
             </button>
           );
         })}
       </div>
 
       {albums.length === 0 && !loading ? (
-        <EmptyState icon={Disc3} title="No albums" description="No albums found for this filter." />
+        <EmptyState icon={Disc3} title={t('music.noAlbums')} description={t('music.noAlbumsFilter')} />
       ) : (
         <MediaGrid>
           {albums.map((album) => (
@@ -96,7 +98,7 @@ export function AlbumsView() {
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {loading ? 'Loading…' : 'Load more'}
+            {loading ? t('music.loading') : t('music.loadMore')}
           </button>
         </div>
       )}

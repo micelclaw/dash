@@ -298,12 +298,12 @@ export function DashSection() {
       </SettingSection>
 
       <SaveBar visible={!!dirty.dash} saving={saving} onSave={handleSave} onDiscard={() => {
-        const original = useSettingsStore.getState().original;
         resetSection('dash');
-        if (original?.dash) {
-          applyTheme(original.dash.theme);
-          applyAccentColor(original.dash.accent_color);
-          applyBackground(original.dash.background, original.dash.theme);
+        const restored = useSettingsStore.getState().settings;
+        if (restored?.dash) {
+          applyTheme(restored.dash.theme);
+          applyAccentColor(restored.dash.accent_color);
+          applyBackground(restored.dash.background, restored.dash.theme);
         }
       }} />
 

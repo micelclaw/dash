@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import { useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard, Globe, Inbox, ArrowRightLeft, Route,
@@ -15,38 +16,39 @@ interface NavDef {
 }
 
 const NAV_MAIN: NavDef[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '' },
-  { icon: Globe, label: 'Dominios', path: '/domains' },
-  { icon: Inbox, label: 'Buzones', path: '/mailboxes' },
-  { icon: ArrowRightLeft, label: 'Aliases', path: '/aliases' },
-  { icon: Route, label: 'Relay', path: '/relays' },
+  { icon: LayoutDashboard, label: 'mailServer.dashboard', path: '' },
+  { icon: Globe, label: 'mailServer.domain', path: '/domains' },
+  { icon: Inbox, label: 'mailServer.mailboxes', path: '/mailboxes' },
+  { icon: ArrowRightLeft, label: 'mailServer.aliases', path: '/aliases' },
+  { icon: Route, label: 'mailServer.relay', path: '/relays' },
 ];
 
 const NAV_SECURITY: NavDef[] = [
-  { icon: Search, label: 'DNS Health', path: '/dns' },
-  { icon: Shield, label: 'Antispam', path: '/security/antispam' },
-  { icon: Shield, label: 'Antivirus', path: '/security/antivirus' },
-  { icon: Shield, label: 'Amenazas', path: '/security/threats' },
+  { icon: Search, label: 'mailServer.dnsHealth', path: '/dns' },
+  { icon: Shield, label: 'mailServer.antispam', path: '/security/antispam' },
+  { icon: Shield, label: 'mailServer.antivirus', path: '/security/antivirus' },
+  { icon: Shield, label: 'mailServer.threats', path: '/security/threats' },
 ];
 
 const NAV_MONITORING: NavDef[] = [
-  { icon: Activity, label: 'General', path: '/monitoring/overview' },
-  { icon: Activity, label: 'Cola de correo', path: '/monitoring/queue' },
-  { icon: Activity, label: 'Auditoría', path: '/monitoring/audit' },
+  { icon: Activity, label: 'mailServer.general', path: '/monitoring/overview' },
+  { icon: Activity, label: 'mailServer.mailQueue', path: '/monitoring/queue' },
+  { icon: Activity, label: 'mailServer.audit', path: '/monitoring/audit' },
 ];
 
 const NAV_DELIVERY: NavDef[] = [
-  { icon: Send, label: 'SMTP Relay', path: '/delivery/relay' },
-  { icon: Send, label: 'Configuración', path: '/delivery/settings' },
+  { icon: Send, label: 'mailServer.smtpRelay', path: '/delivery/relay' },
+  { icon: Send, label: 'mailServer.configuration', path: '/delivery/settings' },
 ];
 
 const NAV_MANAGE: NavDef[] = [
-  { icon: Crown, label: 'Administradores', path: '/administrators' },
-  { icon: Megaphone, label: 'Comunicados', path: '/broadcasts' },
-  { icon: Monitor, label: 'Config. cliente', path: '/client-setup' },
+  { icon: Crown, label: 'mailServer.administrators', path: '/administrators' },
+  { icon: Megaphone, label: 'mailServer.broadcasts', path: '/broadcasts' },
+  { icon: Monitor, label: 'mailServer.clientSetup', path: '/client-setup' },
 ];
 
 export function MailServerSidebar() {
+  const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -72,33 +74,33 @@ export function MailServerSidebar() {
         display: 'flex', alignItems: 'center', gap: 8,
       }}>
         <Server size={16} style={{ color: 'var(--amber)' }} />
-        Mail Server
+        {t('mailServer.title')}
       </div>
 
       {NAV_MAIN.map((n) => (
-        <NavItem key={n.path} icon={n.icon} label={n.label} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
+        <NavItem key={n.path} icon={n.icon} label={t(n.label)} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
       ))}
 
-      <SectionHeader label="Seguridad" />
+      <SectionHeader label={t('mailServer.security')} />
       {NAV_SECURITY.map((n) => (
-        <NavItem key={n.path} icon={n.icon} label={n.label} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
+        <NavItem key={n.path} icon={n.icon} label={t(n.label)} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
       ))}
 
-      <SectionHeader label="Monitorización" />
+      <SectionHeader label={t('mailServer.monitoring')} />
       {NAV_MONITORING.map((n) => (
-        <NavItem key={n.path} icon={n.icon} label={n.label} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
+        <NavItem key={n.path} icon={n.icon} label={t(n.label)} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
       ))}
 
-      <SectionHeader label="Entrega" />
+      <SectionHeader label={t('mailServer.delivery')} />
       {NAV_DELIVERY.map((n) => (
-        <NavItem key={n.path} icon={n.icon} label={n.label} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
+        <NavItem key={n.path} icon={n.icon} label={t(n.label)} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
       ))}
 
       <Divider />
 
-      <SectionHeader label="Gestión" />
+      <SectionHeader label={t('mailServer.management')} />
       {NAV_MANAGE.map((n) => (
-        <NavItem key={n.path} icon={n.icon} label={n.label} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
+        <NavItem key={n.path} icon={n.icon} label={t(n.label)} active={isActive(n.path)} onClick={() => navigate(BASE + n.path)} />
       ))}
 
       <div style={{ flex: 1 }} />

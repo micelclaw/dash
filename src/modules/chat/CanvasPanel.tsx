@@ -1,351 +1,103 @@
-/**
- * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
- * All rights reserved.
- *
- * This file is part of Micelclaw OS and is proprietary software.
- * Unauthorized copying, modification, distribution, or use of this
- * file, via any medium, is strictly prohibited.
- *
- * See LICENSE in the root of this repository for full terms.
- * https://micelclaw.com
- */
-
-import { useMemo, useEffect, useRef, useState } from 'react';
+import '@/lib/chat-workspace-session';
+import { useAuthStore } from '@/stores/auth.store';
 import { useNavigate } from 'react-router';
-import { X, Layout, Globe, FileText, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowLeft, FileText, Globe, LayoutDashboard, Maximize2, Minimize2, PanelsTopLeft, Plus, Shapes, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { useChatStore } from '@/stores/chat.store';
-import { useCanvasStore } from '@/stores/canvas.store';
-import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
-import { BrowserSessionView } from './components/BrowserSessionView';
-import { SaveResultsMenu } from './components/SaveResultsMenu';
-import { usePersistedScreenshots } from '@/hooks/use-persisted-screenshots';
-import { useNativeCanvasBoardStore } from '@/stores/native-canvas-board.store';
-import { NativeCanvasBoardPanel, NativeCanvasHub } from './NativeCanvasBoardPanel';
-import { nativeCanvasService } from '@/services/native-canvas.service';
+import { MAX_WORKSPACE_TABS, useChatWorkspaceStore, workspaceContentPath, type WorkspaceResource } from '@/stores/chat-workspace.store';
+import { mcpAppsService, type McpAppView } from '@/services/mcp-apps.service';
+import { WorkspaceResourceView, openWorkspaceAppFile } from './WorkspaceResourceView';
+import { MCPAppPanel } from './mcp-apps/MCPAppPanel';
 
-interface CanvasPanelProps {
-  onClose: () => void;
+interface CanvasPanelProps { onClose: () => void; expanded?: boolean; onExpand?: () => void }
+const Icon = ({ resource }: { resource: WorkspaceResource }) => {
+  const Component = resource.kind === 'browser' ? Globe : resource.kind === 'board' ? LayoutDashboard : resource.kind === 'app' || resource.kind === 'productivity' ? Shapes : FileText;
+  return <Component size={14} className="shrink-0" />;
+};
+export function CanvasPanel({ onClose, expanded = false, onExpand }: CanvasPanelProps) {
+  const chat = useChatStore(s => s.activeConversationId);
+  const generation = useAuthStore(s => s.sessionGeneration);
+  // One keyed host per chat: leases are retired on leaving it, and never remounted with stale authority.
+  return chat ? <ConversationWorkspace key={`${chat}:${generation}`} chat={chat} onClose={onClose} expanded={expanded} onExpand={onExpand} /> : <div data-testid="canvas-panel" className="flex h-full flex-1 flex-col bg-[var(--card)] p-4 text-sm text-[var(--text-muted)]"><Button variant="ghost" onClick={onClose}><ArrowLeft size={16} /> Conversación</Button><p>Abre una conversación para ver sus resultados.</p></div>;
 }
-
-export function CanvasPanel({ onClose }: CanvasPanelProps) {
+function ConversationWorkspace({ chat, onClose, expanded, onExpand }: CanvasPanelProps & { chat: string }) {
   const navigate = useNavigate();
-  const activeConvId = useChatStore((s) => s.activeConversationId);
-  const canvasStates = useCanvasStore((s) => s.canvasStates);
-  const activeMode = useCanvasStore((s) => s.activeMode);
-  const browserSessions = useCanvasStore((s) => s.browserSessions);
-  const nativePreviews = useNativeCanvasBoardStore((s) => activeConvId ? s.previews.get(activeConvId) : undefined);
-  const nativeBoard = useNativeCanvasBoardStore((s) => activeConvId ? s.byConversation.get(activeConvId) : undefined);
-  const [nativeCanvasStatus, setNativeCanvasStatus] = useState<'loading' | 'enabled' | 'disabled' | 'error'>('loading');
-  const [nativeCanvasConversationId, setNativeCanvasConversationId] = useState<string | null>(activeConvId);
-
-  // A gallery selection changes only this pane. A shared Canvas must never
-  // select its source chat: Canvas collaboration does not disclose a transcript.
-  useEffect(() => { setNativeCanvasConversationId(activeConvId); }, [activeConvId]);
-
-  // A board belongs to a durable OpenClaw session and may predate this browser
-  // tab. Do not depend on a live canvas.preview event to discover it.
-  useEffect(() => {
-    let active = true;
-    void nativeCanvasService.status()
-      .then((status) => { if (active) setNativeCanvasStatus(status.native_canvas_enabled ? 'enabled' : 'disabled'); })
-      .catch(() => { if (active) setNativeCanvasStatus('error'); });
-    return () => { active = false; };
-  }, []);
-
-  // Canvas content is scoped per conversation. Never fall back to
-  // __standalone__ for a real chat — that leaked the last global push
-  // (incl. the previous chat's content) into "New chat".
-  const canvas = activeConvId ? canvasStates.get(activeConvId) : undefined;
-
-  // Active browser session (any session with status 'active', or most recent)
-  const browserSession = useMemo(() => {
-    for (const s of browserSessions.values()) {
-      if (s.status === 'active') return s;
+  const workspace = useChatWorkspaceStore(s => s.byConversation[chat]);
+  const [picker, setPicker] = useState(false); const [appsVisited, setAppsVisited] = useState(false);
+  const [visited, setVisited] = useState<string[]>([]);
+  const tabs = useRef<HTMLDivElement>(null); const prefix = useId();
+  useEffect(() => { useChatWorkspaceStore.getState().ensure(chat); return () => useChatWorkspaceStore.getState().suspendApps(chat); }, [chat]);
+  const activeId = workspace?.activeId && workspace.resources[workspace.activeId] ? workspace.activeId : null;
+  useEffect(() => { if (activeId) setVisited(ids => ids.includes(activeId) ? ids : [...ids, activeId]); }, [activeId]);
+  if (!workspace) return null;
+  const open = workspace.openIds.map(id => workspace.resources[id]).filter((r): r is WorkspaceResource => Boolean(r));
+  const resource = activeId ? workspace.resources[activeId] : null;
+  const selecting = picker || !resource;
+  const focusTab = (id: string) => {
+    useChatWorkspaceStore.getState().select(chat, id); setPicker(false);
+    requestAnimationFrame(() => tabs.current?.querySelector<HTMLButtonElement>(`[data-resource-id="${CSS.escape(id)}"]`)?.focus());
+  };
+  const openResult = (id: string) => {
+    if (!useChatWorkspaceStore.getState().open(chat, id)) { toast.info(`Puedes mantener ${MAX_WORKSPACE_TABS} pestañas abiertas. Cierra una para abrir otra.`); return; }
+    setPicker(false);
+  };
+  const close = (id: string) => {
+    useChatWorkspaceStore.getState().close(chat, id); setVisited(ids => ids.filter(value => value !== id));
+    const next = useChatWorkspaceStore.getState().byConversation[chat]?.activeId;
+    if (next) focusTab(next);
+  };
+  const openApp = (view: McpAppView) => {
+    const accepted = useChatWorkspaceStore.getState().upsert(chat, { id: `app:${view.view_id}`, kind: 'app', title: view.title, view, sourceConversationId: chat }, true);
+    if (!accepted) { void mcpAppsService.close(chat, view).catch(() => {}); toast.info('Cierra una pestaña antes de abrir otra App.'); return; }
+    setPicker(false);
+  };
+  let fileTarget: { sourceId: string; filename: string } | undefined;
+  if (resource?.kind === 'file') {
+    const path = workspaceContentPath(resource.file.contentUrl, chat);
+    if (path) {
+      const url = new URL(path, location.origin);
+      const agent = url.searchParams.get('agent_id'); const relative = url.searchParams.get('path');
+      const preview = `/conversations/${encodeURIComponent(chat)}/mcp-app-file-preview/`;
+      const fileId = /^\/files\/([a-f0-9-]{36})\/content$/i.exec(url.pathname)?.[1];
+      const sourceId = agent && relative ? `workspace:${agent}:${relative}` : url.pathname.startsWith(preview) ? `micelclaw-file://${url.pathname.slice(preview.length)}` : fileId ? `file:${fileId}` : null;
+      if (sourceId) fileTarget = { sourceId, filename: resource.file.title };
     }
-    // Fallback: most recent session
-    const all = [...browserSessions.values()];
-    return all.length > 0 ? all[all.length - 1] : undefined;
-  }, [browserSessions]);
-
-  // Persisted screenshots for this conversation
-  const {
-    screenshots: persistedScreenshots,
-    currentIndex,
-    navigate: navigateScreenshot,
-    deleteScreenshot,
-    downloadScreenshot,
-    refresh: refreshScreenshots,
-  } = usePersistedScreenshots(activeConvId);
-
-  // Refresh persisted list when a new snapshot arrives from the live session
-  const prevSnapshotRef = useRef(browserSession?.snapshot);
-  useEffect(() => {
-    if (browserSession?.snapshot && browserSession.snapshot !== prevSnapshotRef.current) {
-      prevSnapshotRef.current = browserSession.snapshot;
-      // Small delay to let Core persist to DB before fetching
-      const t = setTimeout(() => refreshScreenshots(), 1500);
-      return () => clearTimeout(t);
-    }
-  }, [browserSession?.snapshot, refreshScreenshots]);
-
-  const hasPersisted = persistedScreenshots.length > 0;
-  const isBrowserMode = (activeMode === 'browser' && browserSession) || hasPersisted;
-  const workspaceFile = canvas?.type === 'workspace_file' ? canvas.workspaceFile : undefined;
-  const isWorkspaceFile = Boolean(workspaceFile);
-  const displayedNativeConversationId = nativeCanvasConversationId ?? activeConvId;
-  const isNativeCanvasMode = nativeCanvasStatus === 'enabled' || Boolean(nativePreviews?.length || nativeBoard);
-  // Canvas visual de agentes: sólo el Dashboard nativo de OpenClaw 9.4.
-  // Browser y previsualizaciones explícitas de Workspaces no son Canvas.
-  const showNativeCanvas = isNativeCanvasMode && !isBrowserMode && !isWorkspaceFile;
-
-  // Header label. La URL efectiva sigue la MISMA precedencia que el cuerpo
-  // (`BrowserSessionView`: `currentScreenshot?.url ?? session.currentUrl`): manda
-  // la captura que se está viendo y la sesión viva es el respaldo. Sin esto, al
-  // abrir capturas persistidas sin sesión viva la cabecera se quedaba en un
-  // "Browsing" pelado y no cambiaba al navegar entre capturas.
-  const headerUrl = persistedScreenshots[currentIndex]?.url ?? browserSession?.currentUrl ?? null;
-  const headerLabel = showNativeCanvas ? 'Dashboard' : isBrowserMode
-    ? `Browsing${headerUrl ? ': ' + extractDomain(headerUrl) : ''}`
-    : isWorkspaceFile ? workspaceFile!.title : 'Canvas';
-
-  const HeaderIcon = showNativeCanvas ? Layout : isBrowserMode ? Globe : isWorkspaceFile ? FileText : Layout;
-
-  return (
-    <div
-      data-testid="canvas-panel"
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--card)',
-        borderLeft: '1px solid var(--border)',
-        minWidth: 0,
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 12px',
-          borderBottom: '1px solid var(--border)',
-          flexShrink: 0,
-        }}
-      >
-        <HeaderIcon size={14} style={{ color: isBrowserMode ? '#7c3aed' : 'var(--text-muted)' }} />
-        <span style={{
-          fontSize: '0.8125rem',
-          fontWeight: 500,
-          color: 'var(--text-dim)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          flex: 1,
-        }}>
-          {headerLabel}
-        </span>
-        {!isWorkspaceFile && (
-          <SaveResultsMenu
-            activeMode={activeMode}
-            canvas={canvas}
-            browserSession={browserSession}
-            conversationId={activeConvId}
-          />
-        )}
-        {isWorkspaceFile && workspaceFile!.deepLink && (
-          <button
-            onClick={() => navigate(workspaceFile!.deepLink)}
-            title="Abrir en Workspaces"
-            aria-label="Abrir archivo en Workspaces"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', padding: 4, display: 'flex',
-              borderRadius: 'var(--radius-sm)', flexShrink: 0,
-            }}
-          >
-            <ExternalLink size={14} />
-          </button>
-        )}
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--text-muted)',
-            padding: 4,
-            display: 'flex',
-            borderRadius: 'var(--radius-sm)',
-            flexShrink: 0,
-          }}
-        >
-          <X size={14} />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-        {nativeCanvasStatus === 'error' && !nativePreviews?.length && !nativeBoard ? (
-          <div style={{ minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
-            <AlertTriangle size={20} style={{ color: 'var(--amber)' }} />
-            <strong style={{ color: 'var(--text)' }}>No se pudo comprobar Canvas nativo</strong>
-            <span>El resto del chat sigue disponible. Cierra y vuelve a abrir Canvas para reintentar.</span>
-          </div>
-        ) : showNativeCanvas ? (displayedNativeConversationId ? <NativeCanvasBoardPanel conversationId={displayedNativeConversationId} onSelectConversation={setNativeCanvasConversationId} /> : <NativeCanvasHub onSelectConversation={setNativeCanvasConversationId} />) : isBrowserMode ? (
-          <BrowserSessionView
-            session={browserSession ?? {
-              sessionId: 'persisted',
-              currentUrl: persistedScreenshots[currentIndex]?.url ?? null,
-              humanizedAction: null,
-              snapshot: null,
-              actions: [],
-              status: 'complete',
-              pagesVisited: 0,
-            }}
-            persistedScreenshots={persistedScreenshots}
-            currentIndex={currentIndex}
-            onNavigate={navigateScreenshot}
-            onDelete={deleteScreenshot}
-            onDownload={downloadScreenshot}
-          />
-        ) : isWorkspaceFile ? (
-          <WorkspaceFilePreview canvas={canvas!} convId={activeConvId} />
-        ) : (
-          <EmptyState />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Canvas Iframe ──────────────────────────────────────────────────
-//
-// Ola 7 (oc7-5.1g): dual-mode renderer.
-//   - type='html'  → srcDoc inline (existing behavior)
-//   - type='a2ui'  → placeholder pre tag (existing behavior)
-//   - type='url'   → src points at our /canvas-host/* proxy. Cache-bust
-//                    via reloadKey when canvas.reload event fires.
-
-import type { CanvasState } from '@/stores/canvas.store';
-
-function WorkspaceFilePreview({ canvas, convId }: { canvas: CanvasState; convId: string | null }) {
-  const setCanvasError = useCanvasStore((s) => s.setCanvasError);
-  const file = canvas.workspaceFile!;
-
-  if (canvas.status === 'loading') {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)' }}>
-        <Loader2 size={18} className="animate-spin" />
-        <span style={{ fontSize: '0.8125rem' }}>Cargando {file.title}…</span>
-      </div>
-    );
   }
-
-  if (file.previewKind === 'markdown') {
-    return (
-      <div className="app-detail-md" style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 20, color: 'var(--text)', fontSize: '0.875rem', lineHeight: 1.65 }}>
-        <MarkdownRenderer content={canvas.content ?? ''} />
+  return <section data-testid="canvas-panel" aria-label="Resultados de la conversación" className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l border-[var(--border)] bg-[var(--card)]" onKeyDown={event => { if (event.key === 'Escape' && event.target === event.currentTarget) onClose(); }}>
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--border)] px-3">
+      <Button size="icon" variant="ghost" aria-label="Volver a la conversación" className="md:hidden" onClick={onClose}><ArrowLeft size={16} /></Button>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]">{selecting ? 'Resultados' : resource?.title}</span>
+      <Button size="icon" variant="ghost" aria-label="Abrir resultados y Apps" aria-expanded={selecting} onClick={() => { setPicker(v => !v); setAppsVisited(true); }}><PanelsTopLeft size={16} /></Button>
+      {onExpand && <Button size="icon" variant="ghost" aria-label={expanded ? 'Restaurar tamaño' : 'Ampliar resultado'} onClick={onExpand}>{expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</Button>}
+      <Button size="icon" variant="ghost" aria-label="Ocultar resultados" className="hidden md:inline-flex" onClick={onClose}><X size={16} /></Button>
+    </header>
+    {workspace.revoked ? <div role="alert" className="grid flex-1 place-content-center gap-3 p-6 text-center text-sm text-[var(--text-muted)]">Ya no tienes acceso a los resultados de esta conversación.</div> : <>
+      <div ref={tabs} role="tablist" aria-label="Resultados abiertos" className="flex shrink-0 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface)]" onKeyDown={event => {
+        const index = open.findIndex(r => r.id === activeId); let next: number;
+        if (event.key === 'ArrowRight') next = (index + 1) % open.length;
+        else if (event.key === 'ArrowLeft') next = (index + open.length - 1) % open.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = open.length - 1;
+        else if (event.key === 'Delete' && activeId) { event.preventDefault(); close(activeId); return; }
+        else return;
+        if (open[next]) { event.preventDefault(); focusTab(open[next]!.id); }
+      }}>
+        {open.map((r, index) => <div key={r.id} role="presentation" className={`group flex shrink-0 items-center border-r border-[var(--border)] ${r.id === activeId && !selecting ? 'border-t-2 border-t-[var(--amber)] bg-[var(--card)] text-[var(--text)]' : 'border-t-2 border-t-transparent text-[var(--text-muted)]'}`}>
+          <button role="tab" id={`${prefix}-tab-${index}`} aria-controls={`${prefix}-panel-${index}`} aria-selected={r.id === activeId && !selecting} tabIndex={r.id === activeId ? 0 : -1} data-resource-id={r.id} className="flex h-10 max-w-44 items-center gap-2 px-3 text-xs outline-offset-[-3px]" onClick={() => { useChatWorkspaceStore.getState().select(chat, r.id); setPicker(false); }}><Icon resource={r} /><span className="truncate">{r.title}</span>{r.kind === 'file' && r.status === 'loading' && <span className="size-1.5 rounded-full bg-[var(--amber)]" aria-label="Creando" />}</button>
+          <button type="button" aria-label={`Cerrar ${r.title}`} className="mr-1 rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]" onClick={() => close(r.id)}><X size={12} /></button>
+        </div>)}
+        <button aria-label="Abrir otro resultado" className="px-3 text-[var(--text-muted)] hover:bg-[var(--surface-hover)]" onClick={() => { setPicker(true); setAppsVisited(true); }}><Plus size={15} /></button>
       </div>
-    );
-  }
-
-  if (file.previewKind === 'code') {
-    return (
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
-        <MarkdownRenderer content={asFencedCode(canvas.content ?? '', file.relativePath)} />
+      <div hidden={!selecting} className="min-h-0 flex-1 overflow-auto" aria-label="Todos los resultados">
+        <div className="space-y-4 p-5"><div><h3 className="m-0 text-sm font-semibold text-[var(--text)]">Tu espacio de trabajo</h3><p className="mb-0 mt-2 text-xs leading-5 text-[var(--text-muted)]">Abre un resultado para verlo junto a la conversación. Cerrar una pestaña conserva el archivo.</p></div>
+          {Object.values(workspace.resources).length > 0 && <div className="grid gap-1">{Object.values(workspace.resources).map(r => <button key={r.id} onClick={() => openResult(r.id)} className="flex items-center gap-3 rounded-lg border border-[var(--border)] px-3 py-3 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-hover)]"><Icon resource={r} /><span className="min-w-0 flex-1 truncate">{r.title}</span><span className="text-xs text-[var(--text-muted)]">{workspace.openIds.includes(r.id) ? 'Abierto' : 'Reabrir'}</span></button>)}</div>}
+          <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => { const id = `board:${chat}`; useChatWorkspaceStore.getState().upsert(chat, { id, kind: 'board', title: 'Tablero', sourceConversationId: chat }, true); setPicker(false); }}><LayoutDashboard size={14} /> Abrir tablero</Button><Button variant="outline" size="sm" onClick={() => setAppsVisited(true)}><Shapes size={14} /> Abrir Apps</Button><Button variant="outline" size="sm" onClick={() => { const id = `browser:${chat}`; useChatWorkspaceStore.getState().upsert(chat, { id, kind: 'browser', title: 'Navegación', sourceConversationId: chat }, true); setPicker(false); }}>Abrir navegador</Button></div>
+        </div>
+        {appsVisited && <MCPAppPanel key={`${chat}:${workspace.epoch}`} conversationId={chat} onOpenFile={result => openWorkspaceAppFile(chat, result, navigate)} fileTarget={fileTarget} onOpenView={openApp} />}
       </div>
-    );
-  }
-
-  if (file.previewKind === 'text') {
-    return (
-      <pre style={{ flex: 1, minHeight: 0, overflow: 'auto', margin: 0, padding: 20, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', lineHeight: 1.6, color: 'var(--text)' }}>
-        {canvas.content ?? ''}
-      </pre>
-    );
-  }
-
-  if (file.previewKind === 'image') {
-    return (
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg)' }}>
-        <img
-          src={file.contentUrl}
-          alt={file.title}
-          onError={() => convId && setCanvasError(convId, 'No se pudo cargar la imagen del workspace.', 'WORKSPACE_IMAGE_FAILED')}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-        />
-      </div>
-    );
-  }
-
-  if (file.previewKind === 'pdf') {
-    return <iframe src={file.contentUrl} title={file.title} style={{ flex: 1, border: 0, background: '#fff' }} />;
-  }
-
-  return (
-    <iframe
-      src={file.contentUrl}
-      title={file.title}
-      sandbox="allow-scripts"
-      onError={() => convId && setCanvasError(convId, 'No se pudo cargar el HTML del workspace.', 'WORKSPACE_HTML_FAILED')}
-      style={{ flex: 1, border: 0, background: '#fff' }}
-    />
-  );
-}
-
-function asFencedCode(content: string, path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase() ?? '';
-  const language = ({
-    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
-    py: 'python', rb: 'ruby', sh: 'bash', bash: 'bash', zsh: 'bash', ps1: 'powershell',
-    yml: 'yaml', yaml: 'yaml', json: 'json', jsonl: 'json', css: 'css', scss: 'scss',
-    html: 'html', xml: 'xml', sql: 'sql', go: 'go', rs: 'rust', java: 'java',
-    kt: 'kotlin', cs: 'csharp', cpp: 'cpp', c: 'c', php: 'php', swift: 'swift',
-  } as Record<string, string>)[ext] ?? '';
-  const longestRun = Math.max(0, ...(content.match(/`+/g) ?? []).map((run) => run.length));
-  const fence = '`'.repeat(Math.max(3, longestRun + 1));
-  return `${fence}${language}\n${content}\n${fence}`;
-}
-
-// ─── Empty State ────────────────────────────────────────────────────
-
-function EmptyState() {
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        padding: 24,
-      }}
-    >
-      <Layout size={40} style={{ color: 'var(--text-muted)' }} />
-      <p
-        style={{
-          color: 'var(--text-muted)',
-          fontSize: '0.875rem',
-          textAlign: 'center',
-          maxWidth: 240,
-          lineHeight: 1.5,
-        }}
-      >
-        Canvas aparecerá aquí cuando el agente envíe contenido visual
-      </p>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('micelclaw:chat-draft', { detail: 'Crea un dashboard Canvas con un resumen visual de esta conversación.' }))}>Crear un dashboard</button>
-        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('micelclaw:chat-draft', { detail: 'Genera un diagrama Mermaid que explique esta conversación.' }))}>Generar un diagrama</button>
-      </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textAlign: 'center', margin: 0 }}>La propuesta se prepara en el cuadro de mensaje; tú decides si la envías.</p>
-    </div>
-  );
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────
-
-function extractDomain(url: string): string {
-  try { return new URL(url).hostname; } catch { return url; }
+      {open.map((r, index) => visited.includes(r.id) && <div key={`${r.id}:${workspace.epoch}`} id={`${prefix}-panel-${index}`} role="tabpanel" aria-labelledby={`${prefix}-tab-${index}`} hidden={selecting || r.id !== activeId} className="min-h-0 flex-1 overflow-hidden" tabIndex={0}><WorkspaceResourceView chat={chat} resource={r} onApps={() => { setAppsVisited(true); setPicker(true); }} /></div>)}
+    </>}
+  </section>;
 }

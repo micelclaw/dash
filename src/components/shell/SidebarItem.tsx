@@ -15,6 +15,8 @@ import type { ModuleConfig } from '@/types/modules';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
 import { isPlainLeftClick } from '@/lib/nav';
+import { useI18n } from '@/i18n';
+import { moduleLabel } from '@/i18n/module-labels';
 
 interface SidebarItemProps {
   module: ModuleConfig;
@@ -24,6 +26,8 @@ interface SidebarItemProps {
 }
 
 export function SidebarItem({ module, collapsed, onAction, onNavigate }: SidebarItemProps) {
+  const { locale } = useI18n();
+  const label = moduleLabel(module, locale);
   const location = useLocation();
   const isActive = module.path ? location.pathname.startsWith(module.path) : false;
   const Icon = module.icon;
@@ -64,7 +68,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
         size={20}
         style={{ color: module.color, flexShrink: 0, opacity: isActive ? 1 : 'var(--icon-idle-opacity)', filter: 'var(--icon-filter)' }}
       />
-      {!collapsed && <span>{module.label}</span>}
+      {!collapsed && <span>{label}</span>}
       {!collapsed && pendingCount > 0 && (
         <span style={{ marginLeft: 'auto', fontSize: '0.625rem', minWidth: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--amber)', color: '#06060a', fontWeight: 700, fontFamily: 'var(--font-sans)', padding: '0 4px' }}>
           {pendingCount > 99 ? '99+' : pendingCount}
@@ -79,6 +83,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
   const button = module.path ? (
     <Link
       to={module.path}
+      aria-label={label}
       onClick={(e) => { if (isPlainLeftClick(e)) onNavigate?.(); }}
       style={itemStyle}
       onMouseEnter={onMouseEnter}
@@ -88,6 +93,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
     </Link>
   ) : (
     <button
+      aria-label={label}
       onClick={() => onAction?.()}
       style={itemStyle}
       onMouseEnter={onMouseEnter}
@@ -101,7 +107,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
     return (
       <Tooltip delayDuration={0}>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right">{module.label}</TooltipContent>
+        <TooltipContent side="right">{label}</TooltipContent>
       </Tooltip>
     );
   }

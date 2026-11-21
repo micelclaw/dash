@@ -15,6 +15,7 @@ import {
   CheckCircle2, AlertTriangle, XCircle, RefreshCw, Loader2, Wrench, Stethoscope, ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useI18n } from '@/i18n';
 import { api } from '@/services/api';
 import { useAgentHealth } from './hooks/use-agent-health';
 import { StuckYieldRecovery } from './StuckYieldRecovery';
@@ -34,19 +35,20 @@ const STATUS_META = {
 } as const;
 
 export function AgentDoctor({ agentId, onAgentChanged, onNavigateTab }: AgentDoctorProps) {
+  const { t } = useI18n();
   const { health, loading, error, refetch } = useAgentHealth(agentId);
   const [fixing, setFixing] = useState<string | null>(null);
 
   const runRegenerateTools = async (check: string) => {
-    if (!window.confirm('Regenerar las tools sincroniza skills + token de runtime de TODOS tus agentes. Va por el Gateway (límite 3 escrituras/60s) y puede tardar unos segundos. ¿Continuar?')) return;
+    if (!window.confirm(t('agents.doctor.confirmRegenerate'))) return;
     setFixing(check);
     try {
       await api.post('/managed-agents/regenerate-tools', {});
-      toast.success('Tools regeneradas');
+      toast.success(t('agents.doctor.regenerated'));
       onAgentChanged?.();
       refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Falló la regeneración');
+      toast.error(err instanceof Error ? err.message : t('agents.doctor.regenerateFailed'));
     } finally {
       setFixing(null);
     }
@@ -57,7 +59,7 @@ export function AgentDoctor({ agentId, onAgentChanged, onNavigateTab }: AgentDoc
       {/* Header con semáforo-resumen */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Stethoscope size={15} style={{ color: 'var(--mod-agents, var(--amber))' }} /> Salud del agente
+          <Stethoscope size={15} style={{ color: 'var(--mod-agents, var(--amber))' }} /> {t('agents.doctor.health')}
         </h3>
         <button
           onClick={refetch}
@@ -69,15 +71,15 @@ export function AgentDoctor({ agentId, onAgentChanged, onNavigateTab }: AgentDoc
             fontSize: '0.6875rem', padding: '4px 9px', cursor: loading ? 'wait' : 'pointer', fontFamily: 'var(--font-sans)',
           }}
         >
-          <RefreshCw size={11} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} /> Re-escanear
+          <RefreshCw size={11} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} /> {t('agents.doctor.rescan')}
         </button>
       </div>
 
       {health && (
         <div style={{ display: 'flex', gap: 12, fontSize: '0.75rem' }}>
           <span style={{ color: 'var(--success)' }}>● {health.summary.ok} OK</span>
-          <span style={{ color: 'var(--warning)' }}>▲ {health.summary.warn} aviso{health.summary.warn !== 1 ? 's' : ''}</span>
-          <span style={{ color: 'var(--error)' }}>✕ {health.summary.error} error{health.summary.error !== 1 ? 'es' : ''}</span>
+          <span style={{ color: 'var(--warning)' }}>▲ {t(health.summary.warn === 1 ? 'agents.doctor.warningOne' : 'agents.doctor.warningMany', { count: health.summary.warn })}</span>
+          <span style={{ color: 'var(--error)' }}>✕ {t(health.summary.error === 1 ? 'agents.doctor.errorOne' : 'agents.doctor.errorMany', { count: health.summary.error })}</span>
         </div>
       )}
 
@@ -127,6 +129,7 @@ function CheckRow({ check, agentId, fixing, onRegenerateTools, onNavigateTab, on
   onNavigateTab?: (tab: AgentDetailTab) => void;
   onResolved: () => void;
 }) {
+  const { t } = useI18n();
   const meta = STATUS_META[check.status];
   const Icon = meta.icon;
 
@@ -140,7 +143,7 @@ function CheckRow({ check, agentId, fixing, onRegenerateTools, onNavigateTab, on
         <Icon size={15} style={{ color: meta.color, flexShrink: 0 }} />
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', flexGrow: 1 }}>{check.label}</span>
         <span style={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: meta.color }}>
-          {check.status === 'ok' ? 'OK' : check.status === 'warn' ? 'Aviso' : 'Error'}
+          {check.status === 'ok' ? 'OK' : check.status === 'warn' ? t('agents.doctor.warning') : t('agents.doctor.error')}
         </span>
       </div>
       <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.4, paddingLeft: 23 }}>
@@ -158,7 +161,7 @@ function CheckRow({ check, agentId, fixing, onRegenerateTools, onNavigateTab, on
           <button
             onClick={onRegenerateTools}
             disabled={fixing}
-            title="Afecta a todos los agentes; va por el Gateway (rate-limit)"
+            title={t('agents.doctor.regenerateTitle')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               background: 'var(--surface-hover)', border: '1px solid var(--border)',
@@ -167,7 +170,7 @@ function CheckRow({ check, agentId, fixing, onRegenerateTools, onNavigateTab, on
             }}
           >
             {fixing ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Wrench size={11} />}
-            Regenerar tools <span style={{ color: 'var(--warning)' }}>⚠ bulk</span>
+            {t('agents.doctor.regenerate')} <span style={{ color: 'var(--warning)' }}>⚠ {t('agents.doctor.bulk')}</span>
           </button>
         </div>
       )}
@@ -182,7 +185,7 @@ function CheckRow({ check, agentId, fixing, onRegenerateTools, onNavigateTab, on
               padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Cambiar modelo <ArrowRight size={11} />
+            {t('agents.doctor.changeModel')} <ArrowRight size={11} />
           </button>
         </div>
       )}

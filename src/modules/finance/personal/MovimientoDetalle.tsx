@@ -14,6 +14,7 @@
 // cuenta(s), categoría, fecha, recurrencia. Acción: revertir (crea el contra-asiento).
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import { toast } from 'sonner';
 import { X, ArrowRight, Undo2, Pencil } from 'lucide-react';
 import { useFinancePersonalStore, type FinanceTransaction } from '@/stores/finance-personal.store';
@@ -24,23 +25,20 @@ import { MovimientoRelatedPanel } from './MovimientoRelatedPanel';
 import { NuevoMovimientoDialog } from './NuevoMovimientoDialog';
 import { useEscapeClose } from '../use-escape-close';
 
-const KIND_LABEL = (isTransfer: boolean, signed: number) =>
-  isTransfer ? 'Transfer' : signed >= 0 ? 'Income' : 'Expense';
-
-// Origen del movimiento (de dónde salió el asiento) → badge en la cabecera, para que
-// el usuario sepa si lo creó a mano, viene de una factura, de una regla, o del sistema.
-const SOURCE_META: Record<string, { label: string; glyph: string }> = {
-  manual: { label: 'Manual', glyph: '📝' },
-  document: { label: 'De factura', glyph: '🧾' },
-  payment: { label: 'Cobro / pago', glyph: '💸' },
-  reversal: { label: 'Reverso', glyph: '↩️' },
-  closing: { label: 'Cierre', glyph: '🔒' },
-  opening: { label: 'Apertura', glyph: '📂' },
+const SOURCE_KEYS: Record<string, string> = {
+  manual: 'finance.movement.source.manual',
+  document: 'finance.movement.source.document',
+  payment: 'finance.movement.source.payment',
+  reversal: 'finance.movement.source.reversal',
+  closing: 'finance.movement.source.closing',
+  opening: 'finance.movement.source.opening',
 };
-const sourceMeta = (source: string, recurring: boolean) =>
-  recurring ? { label: 'Recurrente', glyph: '🔁' } : (SOURCE_META[source] ?? { label: 'Sistema', glyph: '⚙️' });
+const SOURCE_GLYPHS: Record<string, string> = {
+  manual: '📝', document: '🧾', payment: '💸', reversal: '↩️', closing: '🔒', opening: '📂',
+};
 
 export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | null; onClose: () => void }) {
+  const { t } = useI18n();
   const { accounts, categories, reverseTransaction } = useFinancePersonalStore();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -54,14 +52,14 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
   const recurring = !!tx.recurring_rule_id;
 
   const reverse = async () => {
-    if (!window.confirm('¿Revertir este movimiento? Se creará un asiento inverso que lo anula (el original se conserva).')) return;
+    if (!window.confirm(t('finance.movement.reverseConfirm'))) return;
     setBusy(true);
     try {
       await reverseTransaction(tx.id);
-      toast.success('Movement reversed');
+      toast.success(t('finance.movement.reversed'));
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t reverse');
+      toast.error(e instanceof Error ? e.message : t('finance.movement.reverseFailed'));
     } finally { setBusy(false); }
   };
 
@@ -78,21 +76,24 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 10 }}>
           <div style={{ minWidth: 0 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {tx.description || KIND_LABEL(f.isTransfer, f.signed)}
+              {tx.description || t(`finance.movement.kind.${f.isTransfer ? 'transfer' : f.signed >= 0 ? 'income' : 'expense'}`)}
             </h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tx.date}</span>
               {(() => {
-                const sm = sourceMeta(tx.source, recurring);
+                const sm = {
+                  label: t(recurring ? 'finance.movement.source.recurring' : SOURCE_KEYS[tx.source] ?? 'finance.movement.source.system'),
+                  glyph: recurring ? '🔁' : SOURCE_GLYPHS[tx.source] ?? '⚙️',
+                };
                 return (
-                  <span title="Where this movement came from" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-dim)' }}>
+                  <span title={t('finance.movement.sourceHelp')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-dim)' }}>
                     <span style={{ fontSize: 11, lineHeight: 1 }}>{sm.glyph}</span>{sm.label}
                   </span>
                 );
               })()}
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></button>
+          <button onClick={onClose} aria-label={t('finance.movement.detail.close')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></button>
         </div>
 
         {/* Importe destacado */}
@@ -103,25 +104,25 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
         </div>
 
         <div>
-          {row('Description', tx.description
+          {row(t('finance.movement.detail.description'), tx.description
             ? <span style={{ color: 'var(--text)' }}>{tx.description}</span>
             : <span style={{ color: 'var(--text-muted)' }}>(sin concepto)</span>)}
-          {row('Type', <span>{f.glyph} {KIND_LABEL(f.isTransfer, f.signed)}</span>)}
+          {row(t('finance.movement.detail.type'), <span>{f.glyph} {t(`finance.movement.kind.${f.isTransfer ? 'transfer' : f.signed >= 0 ? 'income' : 'expense'}`)}</span>)}
           {f.isTransfer && f.transferFrom && f.transferTo ? (
-            row('Accounts', (
+            row(t('finance.movement.detail.accounts'), (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 {f.transferFrom}<ArrowRight size={13} style={{ color: 'var(--text-muted)' }} />{f.transferTo}
               </span>
             ))
           ) : (
-            row('Account', f.accountName)
+            row(t('finance.movement.detail.account'), f.accountName)
           )}
-          {!f.isTransfer && row('Category', cv ? (
+          {!f.isTransfer && row(t('finance.movement.detail.category'), cv ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px 2px 7px', background: tintBackground(cv.color), borderRadius: 'var(--radius-full, 999px)', fontSize: 12 }}>
               <span style={{ fontSize: 13, lineHeight: 1 }}>{cv.emoji}</span>{cv.name}
             </span>
-          ) : <span style={{ color: 'var(--text-muted)' }}>Uncategorised</span>)}
-          {recurring && row('Recurrencia', <RecurrenceBadge />)}
+          ) : <span style={{ color: 'var(--text-muted)' }}>{t('finance.movement.detail.uncategorised')}</span>)}
+          {recurring && row(t('finance.movement.detail.recurrence'), <RecurrenceBadge />)}
         </div>
 
         {/* Relaciones DERIVADAS del ledger: cuenta(s) + factura + contacto (siempre ≥1). */}
@@ -137,13 +138,13 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 18 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={reverse} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--error)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-              <Undo2 size={14} /> Revertir
+              <Undo2 size={14} /> {t('finance.movement.detail.reverse')}
             </button>
             <button onClick={() => setEditing(true)} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-              <Pencil size={14} /> Edit
+              <Pencil size={14} /> {t('finance.movement.detail.edit')}
             </button>
           </div>
-          <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Close</button>
+          <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t('finance.movement.detail.close')}</button>
         </div>
       </div>
 

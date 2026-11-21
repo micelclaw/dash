@@ -34,7 +34,7 @@ export function OnboardingBanner({ variant, onDismiss }: OnboardingBannerProps) 
   return (
     <div role="status" style={bannerStyle('#16a34a', false)}>
       <CheckCircle size={16} aria-hidden="true" />
-      <span>Configuración completada. Ya puedes usar AI Chat y Agents.</span>
+      <span>Modelo configurado y agentes preparados. Falta comprobar una respuesta funcional.</span>
       {onDismiss && (
         <button
           type="button"

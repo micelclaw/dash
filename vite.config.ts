@@ -145,6 +145,8 @@ export default defineConfig({
         ? { cert: tsCert, key: tsKey }
         : undefined,
     proxy: {
+      // DAV shares the same authenticated Core origin; never fall through to SPA HTML.
+      '/webdav': { target: 'http://127.0.0.1:7200', secure: false, changeOrigin: true },
       '/api': {
         target: 'http://127.0.0.1:7200',
         secure: false,

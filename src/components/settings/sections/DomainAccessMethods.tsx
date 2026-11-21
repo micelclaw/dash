@@ -59,20 +59,24 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
   const clientOS = getClientOS();
 
   const refresh = useCallback(async () => {
-    try { setStatus(await getHostSyncStatus()); } catch { /* silent */ }
+    try { setStatus(await getHostSyncStatus()); } catch {
+      setStatus(previous => previous ? { ...previous, installed: false, state: 'unavailable' } : null);
+    }
   }, []);
   useEffect(() => { if (open) void refresh(); }, [open, refresh]);
 
   const handleInstall = async () => {
+    if (status?.configured !== true) {
+      toast.error('Completa o repara el acceso local desde el instalador del sistema.');
+      return;
+    }
     setInstalling(true);
-    toast.info('Acepta el permiso de administrador en la ventana de Windows que aparecerá.');
     try {
       const res = await installHostSyncLocal();
       setStatus(res);
-      if (res.installed) toast.success('Listo. Este equipo resolverá tus .claw automáticamente.');
-      else toast.error(res.message ?? 'No se pudo montar el agente.');
+      toast.info(res.message ?? 'Sincronización solicitada. Vuelve a comprobar el estado del agente.');
     } catch (e: any) {
-      toast.error(e?.message ?? 'No se pudo montar el agente en este equipo.');
+      toast.error(e?.message ?? 'No se pudo ejecutar la sincronización instalada.');
     } finally {
       setInstalling(false);
     }
@@ -88,7 +92,8 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
     if (block) { void navigator.clipboard?.writeText(block); toast.success('Bloque copiado'); }
   };
 
-  const installed = status?.installed === true;
+  const configured = status?.configured === true;
+  const installed = configured && status?.installed === true && status?.state === 'syncing';
   const supported = status?.supported === true;
 
   return (
@@ -119,21 +124,24 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>· última: {status.last_run}</span>
           )}
           <button style={hubGhostBtn} disabled={installing} onClick={() => void handleInstall()}>
-            {installing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Reinstalar
+            {installing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Sincronizar ahora
           </button>
         </div>
       ) : supported ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             style={{ ...hubPrimaryBtn, opacity: installing ? 0.5 : 1, cursor: installing ? 'wait' : 'pointer', alignSelf: 'flex-start' }}
-            disabled={installing} onClick={() => void handleInstall()}
+            disabled={installing || !configured} onClick={() => void handleInstall()}
           >
             {installing ? <Loader2 size={14} className="animate-spin" /> : <MonitorCheck size={14} />}
-            Configurar este equipo
+            Sincronizar ahora
           </button>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-            Pedirá permiso de administrador una vez (es necesario para tocar el archivo del sistema). Luego, automático.
+            {configured ? 'Los permisos se prepararon al instalar el sistema. Sincronizar no solicita elevación.' : 'Completa o repara el acceso local desde el instalador del sistema; aquí no se solicitan permisos de Windows.'}
           </span>
+          <button style={hubGhostBtn} onClick={() => void refresh()}>
+            <RefreshCw size={13} /> Volver a comprobar
+          </button>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.73rem', color: 'var(--text-dim)' }}>
@@ -147,8 +155,8 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
         </div>
       )}
 
-      {/* Fallback manual */}
-      <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+      {/* Other client platforms retain their manual option; the installed Windows host uses its task. */}
+      {status?.supported === false && <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
         {!block ? (
           <button onClick={() => void showManualBlock()} style={inlineLink}>
             Ver/copiar el bloque manual
@@ -164,7 +172,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
             <pre style={manualPre}>{block}</pre>
           </div>
         )}
-      </div>
+      </div>}
     </MethodCard>
   );
 }

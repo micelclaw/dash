@@ -13,8 +13,10 @@
 import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { View } from './types';
+import { useI18n } from '@/i18n';
 
 function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const { t } = useI18n();
   return (
     <div style={{
       display: 'flex',
@@ -39,7 +41,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
             color: view === v ? 'var(--text)' : 'var(--text-dim)',
           }}
         >
-          {v === 'configured' ? 'Conversación' : v === 'decision' ? 'Decisión' : v === 'catalog' ? 'Catálogo' : 'Avanzado'}
+          {t(v === 'configured' ? 'gateway.models.conversation' : v === 'decision' ? 'gateway.models.decision' : v === 'catalog' ? 'gateway.models.catalog' : 'gateway.models.advanced')}
         </button>
       ))}
     </div>
@@ -56,6 +58,7 @@ export function ModelsHeader({ isMobile, search, onSearchChange, searchPlacehold
   countLabel: string;
   onRefresh: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -98,7 +101,7 @@ export function ModelsHeader({ isMobile, search, onSearchChange, searchPlacehold
         }}>
           {countLabel}
         </span>
-        <Button variant="outline" size="icon" onClick={onRefresh} className="text-[var(--text-dim)]">
+        <Button variant="outline" size="icon" onClick={onRefresh} className="text-[var(--text-dim)]" aria-label={t('gateway.common.refresh')} title={t('gateway.common.refresh')}>
           <RefreshCw size={14} />
         </Button>
       </div>

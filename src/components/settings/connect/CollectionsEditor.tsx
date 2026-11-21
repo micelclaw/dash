@@ -21,7 +21,7 @@
 // pintaba unas etiquetas grises: informativas y no elegibles. Y solo existía
 // para el correo con contraseña.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import { ExternalLink, Loader2, RefreshCw, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -30,11 +30,19 @@ import * as syncSvc from '@/services/sync.service';
 interface CollectionsEditorProps {
   connectorId: string;
   connectorType?: string;
+  onSaved?:()=>void;
+  onSaving?:(saving:boolean)=>void;
+  onDirty?:()=>void;
+  autoLoad?:boolean;
+  continueLabel?:string;
 }
 
-export function CollectionsEditor({ connectorId, connectorType }: CollectionsEditorProps) {
+export function CollectionsEditor({ connectorId, connectorType,onSaved,onSaving,onDirty,autoLoad=false,continueLabel }: CollectionsEditorProps) {
+  const epoch=useRef(0),selectionRevision=useRef(0),savingFlight=useRef(false);
+  useEffect(()=>{epoch.current++;return()=>{epoch.current++;};},[connectorId]);
   const [data, setData] = useState<syncSvc.ConnectorCollections | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, updateSelected] = useState<string[]>([]);
+  const setSelected=(value:SetStateAction<string[]>)=>{selectionRevision.current++;updateSelected(value);onDirty?.();};
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -44,16 +52,17 @@ export function CollectionsEditor({ connectorId, connectorType }: CollectionsEdi
   const [manualItems, setManualItems] = useState<syncSvc.CollectionItem[]>([]);
 
   const cargar = useCallback(async () => {
-    setCargando(true);
+    const ownEpoch=epoch.current;setCargando(true);
     setError(null);
     try {
       const r = await syncSvc.getConnectorCollections(connectorId);
+      if(epoch.current!==ownEpoch)return;
       setData(r);
       setSelected(r.selected);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'El servidor no devolvió la lista');
+      if(epoch.current===ownEpoch)setError(e instanceof Error ? e.message : 'El servidor no devolvió la lista');
     } finally {
-      setCargando(false);
+      if(epoch.current===ownEpoch)setCargando(false);
     }
   }, [connectorId]);
 
@@ -64,6 +73,8 @@ export function CollectionsEditor({ connectorId, connectorType }: CollectionsEdi
     setManualItems([]);
     setManualError(null);
   }, [connectorId]);
+
+  useEffect(()=>{if(autoLoad)void cargar();},[autoLoad,cargar]);
 
   const resolverNotion = useCallback(async () => {
     const input = manualInput.trim();
@@ -86,20 +97,22 @@ export function CollectionsEditor({ connectorId, connectorType }: CollectionsEdi
   }, [connectorId, manualInput]);
 
   const guardar = useCallback(async () => {
-    if(connectorType?.endsWith('-notes')&&selected.length===0)return;
-    setGuardando(true);
+    if(!data||cargando||savingFlight.current||error)return;
+    if((connectorType?.endsWith('-notes')||connectorType?.endsWith('-tasks')||connectorType==='microsoft-todo')&&selected.length===0)return;
+    const ownEpoch=epoch.current,ownSelection=selectionRevision.current;
+    savingFlight.current=true;setGuardando(true);onSaving?.(true);
     try {
-      await syncSvc.saveConnectorCollections(connectorId, selected);
+      await syncSvc.saveConnectorCollections(connectorId, selected);if(epoch.current!==ownEpoch||selectionRevision.current!==ownSelection)return;onSaved?.();
       toast.success(selected.length > 0 ? 'Guardado' : 'Guardado · se traerá todo');
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
+      if(epoch.current===ownEpoch)toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
-      setGuardando(false);
+      savingFlight.current=false;if(epoch.current===ownEpoch){setGuardando(false);onSaving?.(false);}
     }
-  }, [connectorId, selected,connectorType]);
+  }, [connectorId, selected,connectorType,onSaved,onSaving,data,cargando,guardando,error]);
 
   const nombre = data?.noun ?? 'colecciones';
-  const isTaskConnector = connectorType?.endsWith('-tasks') === true;
+  const isTaskConnector = connectorType?.endsWith('-tasks') === true || connectorType==='microsoft-todo';
   const isNotesConnector=connectorType?.endsWith('-notes')===true;
   const explicitSelection=isTaskConnector||isNotesConnector;
   const isNotion = connectorType === 'notion-tasks';
@@ -116,14 +129,14 @@ export function CollectionsEditor({ connectorId, connectorType }: CollectionsEdi
 
       {!data && !error && (
         <Button variant="secondary" onClick={() => void cargar()} disabled={cargando}>
-          {cargando ? <><Loader2 size={13} className="animate-spin" /> Mirando qué hay dentro…</> : 'Ver qué hay dentro'}
+          {cargando ? <><Loader2 size={13} className="animate-spin" /> Cargando colecciones…</> : 'Ver qué hay dentro'}
         </Button>
       )}
 
       {error && (
         <div style={{ display: 'flex', gap: 7, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
           <TriangleAlert size={13} style={{ color: 'var(--warning, #f59e0b)', flexShrink: 0, marginTop: 2 }} />
-          <span>{error}</span>
+          <span>{error}</span><Button variant="outline" onClick={()=>void cargar()} disabled={cargando}>Reintentar carga</Button>
         </div>
       )}
 
@@ -149,6 +162,7 @@ export function CollectionsEditor({ connectorId, connectorType }: CollectionsEdi
                 <input
                   type="checkbox"
                   checked={selected.includes(c.id)}
+                  disabled={guardando}
                   onChange={() =>
                     setSelected((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : [...s, c.id]))
                   }
@@ -211,7 +225,7 @@ export function CollectionsEditor({ connectorId, connectorType }: CollectionsEdi
                 : `${selected.length} de ${visibleCollections.length}`}
             </span>
             <Button variant="secondary" onClick={() => void guardar()} disabled={guardando || (explicitSelection && selected.length === 0)}>
-              {guardando ? <><Loader2 size={13} className="animate-spin" /> Guardando…</> : 'Guardar selección'}
+              {guardando ? <><Loader2 size={13} className="animate-spin" /> Guardando…</> : continueLabel??'Guardar selección'}
             </Button>
           </div>
           {isNotesConnector&&<p className="text-xs text-[var(--text-dim)]">Para retirar páginas ya importadas, desconecta primero: sus notas se conservarán como copias locales.</p>}

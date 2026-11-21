@@ -83,7 +83,7 @@ export function BrowserSessionView({
   const currentScreenshot = hasPersisted
     ? persistedScreenshots[currentIndex]
     : undefined;
-  const snapshotBase64 = currentScreenshot?.base64 ?? session.snapshot;
+  const snapshotBase64 = currentScreenshot ? currentScreenshot.base64 ?? null : session.snapshot;
   const snapshotMime = currentScreenshot?.mime_type ?? 'image/png';
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -153,7 +153,7 @@ export function BrowserSessionView({
               <Globe size={28} />
             )}
             <span style={{ fontSize: 12 }}>
-              {isActive ? 'Waiting for screenshot...' : 'No screenshot available'}
+              {isActive ? 'Esperando captura…' : currentScreenshot ? 'Cargando esta captura…' : 'No hay capturas disponibles'}
             </span>
           </div>
         )}

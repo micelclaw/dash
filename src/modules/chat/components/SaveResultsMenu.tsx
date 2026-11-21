@@ -14,6 +14,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Save, FileText, Image, Bookmark } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { useI18n } from '@/i18n';
 import type { ActiveMode, CanvasState, BrowserSessionState } from '@/stores/canvas.store';
 
 interface SaveResultsMenuProps {
@@ -24,6 +25,7 @@ interface SaveResultsMenuProps {
 }
 
 export function SaveResultsMenu({ activeMode, canvas, browserSession, conversationId }: SaveResultsMenuProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -53,9 +55,9 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
         content: canvas.content,
         title: 'Canvas',
       });
-      toast.success('Canvas saved as file');
+      toast.success(t('chat.saveResults.toast.canvasSaved'));
     } catch {
-      toast.error('Failed to save canvas');
+      toast.error(t('chat.saveResults.toast.canvasFailed'));
     }
     setSaving(false);
     setOpen(false);
@@ -63,7 +65,7 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
 
   async function saveScreenshot() {
     if (!browserSession?.snapshot) {
-      toast.error('No screenshot available');
+      toast.error(t('chat.saveResults.toast.noScreenshot'));
       return;
     }
     setSaving(true);
@@ -74,9 +76,9 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
         base64: browserSession.snapshot,
         title: browserSession.currentUrl ? new URL(browserSession.currentUrl).hostname : 'browser',
       });
-      toast.success('Screenshot saved');
+      toast.success(t('chat.saveResults.toast.screenshotSaved'));
     } catch {
-      toast.error('Failed to save screenshot');
+      toast.error(t('chat.saveResults.toast.screenshotFailed'));
     }
     setSaving(false);
     setOpen(false);
@@ -84,7 +86,7 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
 
   async function saveAsBookmark() {
     if (!browserSession?.currentUrl) {
-      toast.error('No URL to bookmark');
+      toast.error(t('chat.saveResults.toast.noUrl'));
       return;
     }
     setSaving(true);
@@ -95,21 +97,21 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
         tags: ['browser', 'canvas'],
         source: 'canvas',
       });
-      toast.success('Bookmark saved');
+      toast.success(t('chat.saveResults.toast.bookmarkSaved'));
     } catch {
-      toast.error('Failed to save bookmark');
+      toast.error(t('chat.saveResults.toast.bookmarkFailed'));
     }
     setSaving(false);
     setOpen(false);
   }
 
   const canvasItems = [
-    { label: 'Save as File', icon: FileText, action: saveAsFile },
+    { id: 'save-file', labelKey: 'chat.saveResults.item.file', icon: FileText, action: saveAsFile },
   ];
 
   const browserItems = [
-    { label: 'Save Screenshot', icon: Image, action: saveScreenshot },
-    { label: 'Save as Bookmark', icon: Bookmark, action: saveAsBookmark },
+    { id: 'save-screenshot', labelKey: 'chat.saveResults.item.screenshot', icon: Image, action: saveScreenshot },
+    { id: 'save-bookmark', labelKey: 'chat.saveResults.item.bookmark', icon: Bookmark, action: saveAsBookmark },
   ];
 
   const items = activeMode === 'browser' ? browserItems : canvasItems;
@@ -129,7 +131,8 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
           borderRadius: 'var(--radius-sm)',
           opacity: saving ? 0.5 : 1,
         }}
-        title="Save"
+        title={t('chat.saveResults.save')}
+        aria-label={t('chat.saveResults.save')}
       >
         <Save size={14} />
       </button>
@@ -150,7 +153,7 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
         }}>
           {items.map((item) => (
             <button
-              key={item.label}
+              key={item.id}
               onClick={item.action}
               disabled={saving}
               style={{
@@ -171,7 +174,7 @@ export function SaveResultsMenu({ activeMode, canvas, browserSession, conversati
               onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
             >
               <item.icon size={14} />
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>

@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/i18n';
 import type { CSSProperties } from 'react';
 import { Link2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,14 +25,14 @@ interface AddLinkPopoverProps {
 }
 
 /** Target domains for manual links. `searchDomain` is what `/search` expects (singular). */
-const LINK_DOMAINS: { value: string; label: string; searchDomain: string }[] = [
-  { value: 'note', label: 'Note', searchDomain: 'note' },
-  { value: 'event', label: 'Event', searchDomain: 'event' },
-  { value: 'contact', label: 'Contact', searchDomain: 'contact' },
-  { value: 'email', label: 'Email', searchDomain: 'email' },
-  { value: 'kanban_card', label: 'Kanban card', searchDomain: 'kanban_card' },
-  { value: 'file', label: 'File', searchDomain: 'file' },
-  { value: 'inventory_item', label: 'Inventory item', searchDomain: 'inventory' },
+const LINK_DOMAINS: { value: string; searchDomain: string }[] = [
+  { value: 'note', searchDomain: 'note' },
+  { value: 'event', searchDomain: 'event' },
+  { value: 'contact', searchDomain: 'contact' },
+  { value: 'email', searchDomain: 'email' },
+  { value: 'kanban_card', searchDomain: 'kanban_card' },
+  { value: 'file', searchDomain: 'file' },
+  { value: 'inventory_item', searchDomain: 'inventory' },
 ];
 
 const inputStyle: CSSProperties = {
@@ -60,6 +61,7 @@ function resultTitle(r: SearchResult): string {
 }
 
 export function AddLinkPopover({ itemId, onLinked }: AddLinkPopoverProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [domain, setDomain] = useState('note');
   const [query, setQuery] = useState('');
@@ -125,13 +127,13 @@ export function AddLinkPopover({ itemId, onLinked }: AddLinkPopoverProps) {
         target_id: r.record_id,
         relationship: 'relates_to',
       });
-      toast.success('Link created');
+      toast.success(t('inventory.link.created'));
       onLinked();
       setOpen(false);
       setQuery('');
       setResults([]);
     } catch {
-      toast.error('Failed to create link');
+      toast.error(t('inventory.link.createFailed'));
     }
   };
 
@@ -152,7 +154,7 @@ export function AddLinkPopover({ itemId, onLinked }: AddLinkPopoverProps) {
           cursor: 'pointer',
         }}
       >
-        <Link2 size={12} /> + Link
+        <Link2 size={12} /> {t('inventory.link.create')}
       </button>
 
       {open && (
@@ -180,23 +182,23 @@ export function AddLinkPopover({ itemId, onLinked }: AddLinkPopoverProps) {
               setResults([]);
             }}
             style={inputStyle}
-            aria-label="Link target type"
+            aria-label={t('inventory.link.targetType')}
           >
             {LINK_DOMAINS.map(d => (
               <option key={d.value} value={d.value}>
-                {d.label}
+                {t(`inventory.link.domain.${d.value}`)}
               </option>
             ))}
           </select>
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search…"
+            placeholder={t('inventory.link.search')}
             autoFocus
             style={inputStyle}
           />
-          {searching && <span style={dimText}>Searching…</span>}
-          {!searching && query.trim() && results.length === 0 && <span style={dimText}>No results</span>}
+          {searching && <span style={dimText}>{t('inventory.link.searching')}</span>}
+          {!searching && query.trim() && results.length === 0 && <span style={dimText}>{t('inventory.link.noResults')}</span>}
           {results.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 220, overflowY: 'auto' }}>
               {results.map(r => (

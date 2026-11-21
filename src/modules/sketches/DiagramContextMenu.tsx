@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import { COLOR_PALETTE, VALID_NODE_TYPES } from './types';
 import type { NodeShapeType } from './types';
 
@@ -36,9 +37,61 @@ interface Props {
   onAddNode?: (type: NodeShapeType, position: { x: number; y: number }) => void;
 }
 
+const PANE_SHAPE_LABEL_KEYS: Record<string, string> = {
+  rectangle: 'sketches.contextMenu.pane.rectangle',
+  rounded: 'sketches.contextMenu.pane.rounded',
+  diamond: 'sketches.contextMenu.pane.diamond',
+  circle: 'sketches.contextMenu.pane.circle',
+  cylinder: 'sketches.contextMenu.pane.cylinder',
+  hexagon: 'sketches.contextMenu.pane.hexagon',
+  cloud: 'sketches.contextMenu.pane.cloud',
+  sticky: 'sketches.contextMenu.pane.sticky',
+  table: 'sketches.contextMenu.pane.table',
+  card: 'sketches.contextMenu.pane.card',
+};
+
+const NODE_SHAPE_LABEL_KEYS: Record<NodeShapeType, string> = {
+  rectangle: 'sketches.contextMenu.node.shape.rectangle',
+  rounded: 'sketches.contextMenu.node.shape.rounded',
+  diamond: 'sketches.contextMenu.node.shape.diamond',
+  circle: 'sketches.contextMenu.node.shape.circle',
+  cylinder: 'sketches.contextMenu.node.shape.cylinder',
+  parallelogram: 'sketches.contextMenu.node.shape.parallelogram',
+  hexagon: 'sketches.contextMenu.node.shape.hexagon',
+  cloud: 'sketches.contextMenu.node.shape.cloud',
+  document: 'sketches.contextMenu.node.shape.document',
+  group: 'sketches.contextMenu.node.shape.group',
+  sticky: 'sketches.contextMenu.node.shape.sticky',
+  image: 'sketches.contextMenu.node.shape.image',
+  table: 'sketches.contextMenu.node.shape.table',
+  card: 'sketches.contextMenu.node.shape.card',
+  badge: 'sketches.contextMenu.node.shape.badge',
+  banner: 'sketches.contextMenu.node.shape.banner',
+  triangle: 'sketches.contextMenu.node.shape.triangle',
+  trapezoid: 'sketches.contextMenu.node.shape.trapezoid',
+  pentagon: 'sketches.contextMenu.node.shape.pentagon',
+  queue: 'sketches.contextMenu.node.shape.queue',
+  stack: 'sketches.contextMenu.node.shape.stack',
+  database3d: 'sketches.contextMenu.node.shape.database3d',
+  actor: 'sketches.contextMenu.node.shape.actor',
+  note: 'sketches.contextMenu.node.shape.note',
+  separator: 'sketches.contextMenu.node.shape.separator',
+  server: 'sketches.contextMenu.node.shape.server',
+  desktop: 'sketches.contextMenu.node.shape.desktop',
+  mobile: 'sketches.contextMenu.node.shape.mobile',
+  router: 'sketches.contextMenu.node.shape.router',
+  firewall: 'sketches.contextMenu.node.shape.firewall',
+  markdown: 'sketches.contextMenu.node.shape.markdown',
+  codeblock: 'sketches.contextMenu.node.shape.codeblock',
+  link: 'sketches.contextMenu.node.shape.link',
+  list: 'sketches.contextMenu.node.shape.list',
+  embed: 'sketches.contextMenu.node.shape.embed',
+};
+
 // ─── Main Context Menu ──────────────────────────────────
 
 export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
+  const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement>(null);
 
   const nodes = useDiagramsStore((s) => s.nodes);
@@ -119,45 +172,45 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
           <>
             <MenuItem
               icon={Pencil}
-              label="Edit Label"
+              label={t('sketches.contextMenu.node.editLabel')}
               shortcut="Enter"
               onClick={action(() => setEditingNode(state.id!))}
             />
-            <MenuItem icon={Copy} label="Duplicate" shortcut="Ctrl+D" onClick={action(() => duplicateNodes([state.id!]))} />
-            <MenuItem icon={Trash2} label="Delete" shortcut="Del" onClick={action(() => removeNode(state.id!))} variant="danger" />
+            <MenuItem icon={Copy} label={t('sketches.contextMenu.node.duplicate')} shortcut="Ctrl+D" onClick={action(() => duplicateNodes([state.id!]))} />
+            <MenuItem icon={Trash2} label={t('sketches.contextMenu.node.delete')} shortcut="Del" onClick={action(() => removeNode(state.id!))} variant="danger" />
             <Separator />
 
             {hasMultiSelect && (
               <>
-                <SubMenu icon={AlignStartVertical} label="Align">
-                  <MenuItem icon={AlignStartVertical} label="Left" onClick={action(() => alignNodes(selectedIds, 'left'))} />
-                  <MenuItem icon={AlignCenterVertical} label="Center" onClick={action(() => alignNodes(selectedIds, 'center'))} />
-                  <MenuItem icon={AlignEndVertical} label="Right" onClick={action(() => alignNodes(selectedIds, 'right'))} />
+                <SubMenu icon={AlignStartVertical} label={t('sketches.contextMenu.node.align')}>
+                  <MenuItem icon={AlignStartVertical} label={t('sketches.contextMenu.node.left')} onClick={action(() => alignNodes(selectedIds, 'left'))} />
+                  <MenuItem icon={AlignCenterVertical} label={t('sketches.contextMenu.node.center')} onClick={action(() => alignNodes(selectedIds, 'center'))} />
+                  <MenuItem icon={AlignEndVertical} label={t('sketches.contextMenu.node.right')} onClick={action(() => alignNodes(selectedIds, 'right'))} />
                   <Separator />
-                  <MenuItem icon={AlignStartHorizontal} label="Top" onClick={action(() => alignNodes(selectedIds, 'top'))} />
-                  <MenuItem icon={AlignCenterHorizontal} label="Middle" onClick={action(() => alignNodes(selectedIds, 'middle'))} />
-                  <MenuItem icon={AlignEndHorizontal} label="Bottom" onClick={action(() => alignNodes(selectedIds, 'bottom'))} />
+                  <MenuItem icon={AlignStartHorizontal} label={t('sketches.contextMenu.node.top')} onClick={action(() => alignNodes(selectedIds, 'top'))} />
+                  <MenuItem icon={AlignCenterHorizontal} label={t('sketches.contextMenu.node.middle')} onClick={action(() => alignNodes(selectedIds, 'middle'))} />
+                  <MenuItem icon={AlignEndHorizontal} label={t('sketches.contextMenu.node.bottom')} onClick={action(() => alignNodes(selectedIds, 'bottom'))} />
                 </SubMenu>
 
-                <SubMenu icon={ArrowLeftRight} label="Distribute">
-                  <MenuItem icon={ArrowLeftRight} label="Horizontal" onClick={action(() => distributeNodes(selectedIds, 'horizontal'))} />
-                  <MenuItem icon={ArrowUpDown} label="Vertical" onClick={action(() => distributeNodes(selectedIds, 'vertical'))} />
+                <SubMenu icon={ArrowLeftRight} label={t('sketches.contextMenu.node.distribute')}>
+                  <MenuItem icon={ArrowLeftRight} label={t('sketches.contextMenu.node.horizontal')} onClick={action(() => distributeNodes(selectedIds, 'horizontal'))} />
+                  <MenuItem icon={ArrowUpDown} label={t('sketches.contextMenu.node.vertical')} onClick={action(() => distributeNodes(selectedIds, 'vertical'))} />
                 </SubMenu>
                 <Separator />
               </>
             )}
 
-            <SubMenu icon={Layers} label="Order">
-              <MenuItem icon={ArrowUpToLine} label="Bring to Front" shortcut="Ctrl+]" onClick={action(() => bringToFront(state.id!))} />
-              <MenuItem icon={ArrowDownToLine} label="Send to Back" shortcut="Ctrl+[" onClick={action(() => sendToBack(state.id!))} />
+            <SubMenu icon={Layers} label={t('sketches.contextMenu.node.order')}>
+              <MenuItem icon={ArrowUpToLine} label={t('sketches.contextMenu.node.bringToFront')} shortcut="Ctrl+]" onClick={action(() => bringToFront(state.id!))} />
+              <MenuItem icon={ArrowDownToLine} label={t('sketches.contextMenu.node.sendToBack')} shortcut="Ctrl+[" onClick={action(() => sendToBack(state.id!))} />
             </SubMenu>
 
-            <SubMenu icon={StickyNote} label="Change Shape">
+            <SubMenu icon={StickyNote} label={t('sketches.contextMenu.node.changeShape')}>
               <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                 {VALID_NODE_TYPES.map((shape) => (
                   <MenuItem
                     key={shape}
-                    label={shape}
+                    label={t(NODE_SHAPE_LABEL_KEYS[shape])}
                     onClick={action(() => changeShape(state.id!, shape))}
                     active={node?.type === shape}
                   />
@@ -166,11 +219,13 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
             </SubMenu>
 
             <div style={{ padding: '4px 8px' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-dim, #64748b)', marginBottom: 4 }}>Color</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim, #64748b)', marginBottom: 4 }}>{t('sketches.contextMenu.node.color')}</div>
               <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', maxWidth: 170 }}>
                 {COLOR_PALETTE.slice(0, 16).map((c) => (
                   <button
                     key={c}
+                    title={t('sketches.contextMenu.node.setColor', { color: c })}
+                    aria-label={t('sketches.contextMenu.node.setColor', { color: c })}
                     onClick={action(() => updateNodeData(state.id!, { color: c }))}
                     style={{
                       width: 16, height: 16, borderRadius: 3,
@@ -186,14 +241,14 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
 
             <MenuItem
               icon={isLocked ? Unlock : Lock}
-              label={isLocked ? 'Unlock Node' : 'Lock Node'}
+              label={t(isLocked ? 'sketches.contextMenu.node.unlock' : 'sketches.contextMenu.node.lock')}
               onClick={action(() => lockNode(state.id!, !isLocked))}
             />
 
             {node?.type === 'group' && (
               <MenuItem
                 icon={Ungroup}
-                label="Ungroup"
+                label={t('sketches.contextMenu.node.ungroup')}
                 shortcut="Ctrl+Shift+G"
                 onClick={action(() => ungroupNodes(state.id!))}
               />
@@ -206,25 +261,25 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
           <>
             <MenuItem
               icon={Pencil}
-              label="Edit Label"
+              label={t('sketches.contextMenu.connection.editLabel')}
               onClick={action(() => selectElement('edge', state.id!))}
             />
-            <MenuItem icon={Trash2} label="Delete" shortcut="Del" onClick={action(() => removeEdge(state.id!))} variant="danger" />
+            <MenuItem icon={Trash2} label={t('sketches.contextMenu.connection.delete')} shortcut="Del" onClick={action(() => removeEdge(state.id!))} variant="danger" />
             <Separator />
 
-            <SubMenu label="Type">
+            <SubMenu label={t('sketches.contextMenu.connection.type')}>
               {[
-                { value: 'smoothstep', label: 'Smooth Step' },
-                { value: 'step', label: 'Step' },
-                { value: 'straight', label: 'Straight' },
-                { value: 'default', label: 'Bezier' },
-                { value: 'smart', label: 'Smart' },
-                { value: 'elbow', label: 'Elbow' },
-                { value: 'curved', label: 'Curved' },
-              ].map(({ value, label }) => (
+                { value: 'smoothstep', key: 'sketches.contextMenu.connection.smoothStep' },
+                { value: 'step', key: 'sketches.contextMenu.connection.step' },
+                { value: 'straight', key: 'sketches.contextMenu.connection.straight' },
+                { value: 'default', key: 'sketches.contextMenu.connection.bezier' },
+                { value: 'smart', key: 'sketches.contextMenu.connection.smart' },
+                { value: 'elbow', key: 'sketches.contextMenu.connection.elbow' },
+                { value: 'curved', key: 'sketches.contextMenu.connection.curved' },
+              ].map(({ value, key }) => (
                 <MenuItem
                   key={value}
-                  label={label}
+                  label={t(key)}
                   onClick={action(() => updateEdgeType(state.id!, value))}
                   active={edge?.type === value}
                 />
@@ -233,19 +288,19 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
 
             <MenuItem
               icon={ArrowRightLeft}
-              label="Reverse Direction"
+              label={t('sketches.contextMenu.connection.reverseDirection')}
               onClick={action(() => reverseEdge(state.id!))}
             />
             <Separator />
 
             <MenuItem
               icon={Zap}
-              label={edge?.animated ? 'Disable Animation' : 'Enable Animation'}
+              label={t(edge?.animated ? 'sketches.contextMenu.connection.disableAnimation' : 'sketches.contextMenu.connection.enableAnimation')}
               onClick={action(() => updateEdgeAnimated(state.id!, !edge?.animated))}
             />
             <MenuItem
               icon={Minus}
-              label={(edge?.data as Record<string, unknown>)?.dashed ? 'Solid Line' : 'Dashed Line'}
+              label={t((edge?.data as Record<string, unknown>)?.dashed ? 'sketches.contextMenu.connection.solidLine' : 'sketches.contextMenu.connection.dashedLine')}
               onClick={action(() => updateEdgeData(state.id!, { dashed: !(edge?.data as Record<string, unknown>)?.dashed }))}
             />
           </>
@@ -254,11 +309,11 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
         {/* ─── Pane Context Menu ─────────────────── */}
         {state.type === 'pane' && (
           <>
-            <SubMenu icon={StickyNote} label="Add Shape">
+            <SubMenu icon={StickyNote} label={t('sketches.contextMenu.pane.addShape')}>
               {(['rectangle', 'rounded', 'diamond', 'circle', 'cylinder', 'hexagon', 'cloud', 'sticky', 'table', 'card'] as const).map((shape) => (
                 <MenuItem
                   key={shape}
-                  label={shape.charAt(0).toUpperCase() + shape.slice(1)}
+                  label={t(PANE_SHAPE_LABEL_KEYS[shape]!)}
                   onClick={action(() => onAddNode?.(shape, state.position))}
                 />
               ))}
@@ -266,16 +321,16 @@ export function DiagramContextMenu({ state, onClose, onAddNode }: Props) {
 
             <MenuItem
               icon={ClipboardPaste}
-              label="Paste"
+              label={t('sketches.contextMenu.pane.paste')}
               shortcut="Ctrl+V"
               disabled={clipboard.nodes.length === 0}
               onClick={action(pasteFromClipboard)}
             />
-            <MenuItem icon={CheckSquare} label="Select All" shortcut="Ctrl+A" onClick={action(selectAll)} />
+            <MenuItem icon={CheckSquare} label={t('sketches.contextMenu.pane.selectAll')} shortcut="Ctrl+A" onClick={action(selectAll)} />
             <Separator />
             <MenuItem
               icon={Grid3X3}
-              label={settings.showGrid ? 'Hide Grid' : 'Show Grid'}
+              label={t(settings.showGrid ? 'sketches.contextMenu.pane.hideGrid' : 'sketches.contextMenu.pane.showGrid')}
               onClick={action(() => updateSettings({ showGrid: !settings.showGrid }))}
             />
           </>

@@ -28,6 +28,7 @@ import { getActivityStats } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 import { handleSpaAnchorClick } from '@/lib/nav';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 type TabKey = Adapter<never>['tabKey'];
 
@@ -56,6 +57,7 @@ function formatMB(bytes: number): string {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const isMobile = useIsMobile();
@@ -125,7 +127,7 @@ export function Component() {
   if (!isAdmin) {
     return (
       <div className="p-8 text-sm text-[var(--text-muted)]">
-        Esta página requiere rol de administrador.
+        {t('activity.adminRequired')}
       </div>
     );
   }
@@ -159,12 +161,12 @@ export function Component() {
         }
       >
         <header className="px-3 py-3 border-b border-[var(--border)] flex items-center justify-between">
-          <span className="text-sm font-medium">Activity</span>
+          <span className="text-sm font-medium">{t('activity.title')}</span>
           <button
             onClick={() => setSettingsOpen(true)}
             className="p-1 rounded hover:bg-[var(--surface-hover)]"
-            aria-label="Settings"
-            title="Settings"
+            aria-label={t('activity.settings')}
+            title={t('activity.settings')}
           >
             <SettingsIcon size={14} />
           </button>
@@ -190,7 +192,12 @@ export function Component() {
               >
                 <span className="flex items-center gap-2">
                   <Icon size={14} />
-                  <span>{tab.label}</span>
+                  <span>{tab.key === 'gateway' ? t('activity.gateway')
+                    : tab.key === 'core' ? t('activity.core')
+                    : tab.key === 'live' ? t('activity.live')
+                    : tab.key === 'events' ? t('activity.events')
+                    : tab.key === 'notifications' ? t('activity.notifications')
+                    : t('activity.containers')}</span>
                 </span>
                 {usage !== null && (
                   <span
@@ -206,7 +213,7 @@ export function Component() {
         </nav>
         {stats && !isMobile && (
           <footer className="px-3 py-2 border-t border-[var(--border)] text-[10px] text-[var(--text-muted)]">
-            Budget total: {stats.budget.budget_mb} MB
+            {t('activity.budget')}: {stats.budget.budget_mb} MB
           </footer>
         )}
       </aside>

@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { ChevronRight, ChevronDown, Bitcoin, Zap, CreditCard, Server, BarChart3 } from 'lucide-react';
 import { getDotColor, getStatusLabel } from '../shared/CryptoServiceStatus';
+import { useI18n } from '@/i18n';
 
 interface ServiceInfo {
   name: string;
@@ -36,6 +37,7 @@ function NodeBtn({ label, icon, constraint, optional, svc, onClick }: {
   svc: ServiceInfo | undefined;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <button onClick={onClick} className="sg-node">
       {icon}
@@ -43,12 +45,13 @@ function NodeBtn({ label, icon, constraint, optional, svc, onClick }: {
       {constraint && <span className="sg-constraint">{constraint}</span>}
       {optional && <span className="sg-optional">{optional}</span>}
       <span className="sg-dot" style={{ background: getDotColor(svc) }} />
-      <span className="sg-status">{getStatusLabel(svc)}</span>
+      <span className="sg-status">{getStatusLabel(svc, t)}</span>
     </button>
   );
 }
 
 export function StackSetupGuide({ services, onNodeClick }: Props) {
+  const { t } = useI18n();
   const allInstalled = ALL_IDS.every(id => services.find(s => s.name === id)?.installed);
   const [expanded, setExpanded] = useState(!allInstalled);
 
@@ -62,7 +65,7 @@ export function StackSetupGuide({ services, onNodeClick }: Props) {
         style={{ borderRadius: expanded ? 'var(--radius-lg) var(--radius-lg) 0 0' : 'var(--radius-lg)' }}
       >
         <Server size={13} style={{ color: 'var(--text-muted)' }} />
-        Stack Setup Guide
+        {t('crypto.stackGuide')}
         <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
           {ALL_IDS.map(id => (
             <span key={id} style={{ width: 6, height: 6, borderRadius: '50%', background: getDotColor(getSvc(id)) }} />
@@ -78,7 +81,7 @@ export function StackSetupGuide({ services, onNodeClick }: Props) {
 
             {/* ─── Bitcoin Ecosystem (tree) ─── */}
             <div className="sg-tree">
-              <div className="sg-tree-title">Bitcoin Ecosystem</div>
+              <div className="sg-tree-title">{t('crypto.bitcoinEcosystem')}</div>
 
               <NodeBtn
                 label="Bitcoin Core"
@@ -102,7 +105,7 @@ export function StackSetupGuide({ services, onNodeClick }: Props) {
                   <NodeBtn
                     label="BTCPay Server"
                     icon={<CreditCard size={12} style={{ color: '#51b13e' }} />}
-                    optional="+ Lightning optional"
+                    optional={t('crypto.lightningOptional')}
                     svc={getSvc('btcpay')}
                     onClick={() => onNodeClick('btcpay')}
                   />
@@ -112,7 +115,7 @@ export function StackSetupGuide({ services, onNodeClick }: Props) {
 
             {/* ─── Independent ─── */}
             <div className="sg-tree">
-              <div className="sg-tree-title">Independent</div>
+              <div className="sg-tree-title">{t('crypto.independent')}</div>
 
               <NodeBtn
                 label="Monero Node"

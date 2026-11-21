@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import type { SourceRoot } from './types';
 
 interface SourceTreeItemProps {
@@ -22,6 +23,7 @@ interface SourceTreeItemProps {
 }
 
 export function SourceTreeItem({ source, depth, currentPath, onNavigate }: SourceTreeItemProps) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(() => {
     // Auto-expand if current path is within this source or its children
     if (currentPath.startsWith(source.basePath)) return true;
@@ -46,6 +48,8 @@ export function SourceTreeItem({ source, depth, currentPath, onNavigate }: Sourc
   return (
     <>
       <button
+        aria-current={isActive ? 'page' : undefined}
+        aria-expanded={hasChildren ? expanded : undefined}
         onClick={handleClick}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -92,7 +96,7 @@ export function SourceTreeItem({ source, depth, currentPath, onNavigate }: Sourc
           {source.label}
         </span>
         {!source.writable && (
-          <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }}>
+          <span aria-label={t('explorer.source.readOnly')} title={t('explorer.source.readOnly')} style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }}>
             RO
           </span>
         )}

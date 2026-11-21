@@ -20,6 +20,7 @@ import { StorageSummaryCard } from './components/StorageSummaryCard';
 import { DataUsageChart } from './components/DataUsageChart';
 import { DiskList } from './components/DiskList';
 import { DemoModeBanner } from './components/DemoModeBanner';
+import { useI18n } from '@/i18n';
 import { ZfsSection } from './components/ZfsSection';
 import { FileStatsCard } from './components/FileStatsCard';
 import { FileDuplicatesCard } from './components/FileDuplicatesCard';
@@ -71,6 +72,7 @@ function Zone({ children }: { children: React.ReactNode }) {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const loading = useStorageStore((s) => s.loading);
   const error = useStorageStore((s) => s.error);
   const status = useStorageStore((s) => s.status);
@@ -108,7 +110,7 @@ export function Component() {
             fontFamily: 'var(--font-sans)', cursor: 'pointer',
           }}
         >
-          Reintentar
+          {t('storage.common.retry')}
         </button>
       </div>
     );
@@ -126,12 +128,12 @@ export function Component() {
           fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0,
           fontFamily: 'var(--font-sans)', flex: 1,
         }}>
-          Storage
+          {t('storage.title')}
         </h1>
         {!isDemo && (
           <button
             onClick={() => setPreviewMode(true)}
-            title="Ver una demo simulada del NAS ZFS"
+            title={t('storage.page.previewTitle')}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
               background: 'transparent', border: '1px solid var(--border)',
@@ -139,13 +141,14 @@ export function Component() {
               fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            <FlaskConical size={14} /> Vista previa (demo)
+            <FlaskConical size={14} /> {t('storage.page.preview')}
           </button>
         )}
         <button
           onClick={fetchAll}
           disabled={loading}
-          title="Refresh"
+          title={t('storage.page.refresh')}
+          aria-label={t('storage.page.refresh')}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 30, height: 30, background: 'transparent', border: '1px solid var(--border)',
@@ -181,8 +184,8 @@ export function Component() {
             <SectionHeader
               id="zona-uso"
               icon={<PieChart size={18} />}
-              title="Uso de datos"
-              subtitle="En qué se está gastando tu espacio: por categoría, por almacén o por carpeta."
+              title={t('storage.page.dataUsage')}
+              subtitle={t('storage.page.dataUsageSubtitle')}
             />
             <DataUsageChart />
           </Zone>
@@ -193,8 +196,8 @@ export function Component() {
               id="zona-zfs"
               emphasis
               icon={<HardDrive size={20} />}
-              title="Almacenamiento ZFS"
-              subtitle="Tus almacenes (pools), carpetas e instantáneas, con protección ante fallos de disco."
+              title={t('storage.page.zfs')}
+              subtitle={t('storage.page.zfsSubtitle')}
               right={caps ? (
                 <>
                   <span style={{
@@ -218,11 +221,11 @@ export function Component() {
             <SectionHeader
               id="zona-discos"
               icon={<Disc3 size={18} />}
-              title="Discos físicos"
-              subtitle="Cada unidad detectada, con su estado de salud SMART, temperatura y particiones."
+              title={t('storage.page.disks')}
+              subtitle={t('storage.page.disksSubtitle')}
               right={
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-                  {disks.length} {disks.length === 1 ? 'disco' : 'discos'}
+                  {t(disks.length === 1 ? 'storage.page.diskOne' : 'storage.page.disksMany', { count: disks.length })}
                 </span>
               }
             />
@@ -239,8 +242,8 @@ export function Component() {
             <SectionHeader
               id="zona-detalles"
               icon={<FileText size={18} />}
-              title="Detalles de archivos"
-              subtitle="Estadísticas por tipo y archivos duplicados que puedes recuperar."
+              title={t('storage.page.fileDetails')}
+              subtitle={t('storage.page.fileDetailsSubtitle')}
               right={
                 <button
                   type="button"
@@ -254,7 +257,7 @@ export function Component() {
                   }}
                 >
                   {detailsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  {detailsOpen ? 'Ocultar' : 'Mostrar'}
+                  {detailsOpen ? t('storage.page.hide') : t('storage.page.show')}
                 </button>
               }
             />

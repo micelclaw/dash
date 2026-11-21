@@ -12,6 +12,7 @@
 
 import { useState, useEffect } from 'react';
 import { HardDrive, Copy } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { api } from '@/services/api';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
@@ -38,6 +39,7 @@ interface FileStats {
  * popover with a per-type breakdown (GET /files/stats).
  */
 export function QuotaChip() {
+  const { t } = useI18n();
   const [stats, setStats] = useState<FileStats | null>(null);
   const [hovered, setHovered] = useState(false);
 
@@ -60,7 +62,8 @@ export function QuotaChip() {
     <Popover>
       <PopoverTrigger asChild>
         <button
-          title="Storage usage"
+          title={t('drive.quota.title')}
+          aria-label={t('drive.quota.buttonLabel', { size: formatFileSize(Number(stats.total_size_bytes)) })}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           style={{
@@ -85,7 +88,7 @@ export function QuotaChip() {
           <span style={{ color: 'var(--text)', fontWeight: 500 }}>
             {formatFileSize(Number(stats.total_size_bytes))}
           </span>
-          used
+          {t('drive.quota.used')}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" style={{ width: '18rem' }}>
@@ -95,7 +98,7 @@ export function QuotaChip() {
               {formatFileSize(Number(stats.total_size_bytes))}
             </span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              {stats.total_files} files · {stats.total_directories} folders
+              {t('drive.quota.filesFolders', { files: stats.total_files, folders: stats.total_directories })}
             </span>
           </div>
 
@@ -105,10 +108,10 @@ export function QuotaChip() {
             fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase',
             letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6,
           }}>
-            By type
+            {t('drive.quota.byType')}
           </div>
           {topMimes.length === 0 && (
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>No files yet</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('drive.quota.noFiles')}</div>
           )}
           {topMimes.map(m => (
             <div key={m.mime_type} style={{ marginBottom: 6 }}>
@@ -134,7 +137,10 @@ export function QuotaChip() {
               <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
                 <Copy size={12} style={{ color: 'var(--warning)' }} />
-                {formatFileSize(Number(stats.duplicates.wasted_bytes))} wasted in {stats.duplicates.groups} duplicate group{stats.duplicates.groups === 1 ? '' : 's'}
+                {t(`drive.quota.duplicateWaste.${stats.duplicates.groups === 1 ? 'one' : 'other'}`, {
+                  size: formatFileSize(Number(stats.duplicates.wasted_bytes)),
+                  count: stats.duplicates.groups,
+                })}
               </div>
             </>
           )}

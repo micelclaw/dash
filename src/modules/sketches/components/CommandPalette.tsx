@@ -15,8 +15,78 @@ import { Command } from 'cmdk';
 import { useReactFlow } from '@xyflow/react';
 import { Search, Hash, ChevronRight } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
-import { ALL_COMMANDS, CATEGORY_LABELS, type CommandContext, type DiagramCommand } from '../commands';
+import { useI18n } from '@/i18n';
+import { ALL_COMMANDS, type CommandContext, type DiagramCommand } from '../commands';
 import type { NodeShapeType } from '../types';
+
+const COMMAND_LABEL_KEYS: Record<string, string> = {
+  undo: 'sketches.commandPalette.command.undo',
+  redo: 'sketches.commandPalette.command.redo',
+  delete: 'sketches.commandPalette.command.delete',
+  'select-all': 'sketches.commandPalette.command.selectAll',
+  save: 'sketches.commandPalette.command.save',
+  'fit-view': 'sketches.commandPalette.command.fitView',
+  'zoom-100': 'sketches.commandPalette.command.zoom100',
+  'zoom-50': 'sketches.commandPalette.command.zoom50',
+  'zoom-200': 'sketches.commandPalette.command.zoom200',
+  'layout-tb': 'sketches.commandPalette.command.layoutTopBottom',
+  'layout-lr': 'sketches.commandPalette.command.layoutLeftRight',
+  'layout-bt': 'sketches.commandPalette.command.layoutBottomTop',
+  'layout-rl': 'sketches.commandPalette.command.layoutRightLeft',
+  'export-png': 'sketches.commandPalette.command.exportPng',
+  'export-svg': 'sketches.commandPalette.command.exportSvg',
+  'export-json': 'sketches.commandPalette.command.exportJson',
+  'toggle-grid': 'sketches.commandPalette.command.toggleGrid',
+  'toggle-minimap': 'sketches.commandPalette.command.toggleMinimap',
+  'toggle-snap': 'sketches.commandPalette.command.toggleSnap',
+};
+
+const SHAPE_LABEL_KEYS: Partial<Record<NodeShapeType, string>> = {
+  rectangle: 'sketches.commandPalette.shape.rectangle',
+  rounded: 'sketches.commandPalette.shape.rounded',
+  diamond: 'sketches.commandPalette.shape.diamond',
+  circle: 'sketches.commandPalette.shape.circle',
+  cylinder: 'sketches.commandPalette.shape.cylinder',
+  parallelogram: 'sketches.commandPalette.shape.parallelogram',
+  hexagon: 'sketches.commandPalette.shape.hexagon',
+  cloud: 'sketches.commandPalette.shape.cloud',
+  document: 'sketches.commandPalette.shape.document',
+  group: 'sketches.commandPalette.shape.group',
+  sticky: 'sketches.commandPalette.shape.sticky',
+  image: 'sketches.commandPalette.shape.image',
+  table: 'sketches.commandPalette.shape.table',
+  card: 'sketches.commandPalette.shape.card',
+  badge: 'sketches.commandPalette.shape.badge',
+  banner: 'sketches.commandPalette.shape.banner',
+  triangle: 'sketches.commandPalette.shape.triangle',
+  trapezoid: 'sketches.commandPalette.shape.trapezoid',
+  pentagon: 'sketches.commandPalette.shape.pentagon',
+  queue: 'sketches.commandPalette.shape.queue',
+  stack: 'sketches.commandPalette.shape.stack',
+  database3d: 'sketches.commandPalette.shape.database3d',
+  actor: 'sketches.commandPalette.shape.actor',
+  note: 'sketches.commandPalette.shape.note',
+  separator: 'sketches.commandPalette.shape.separator',
+  server: 'sketches.commandPalette.shape.server',
+  desktop: 'sketches.commandPalette.shape.desktop',
+  mobile: 'sketches.commandPalette.shape.mobile',
+  router: 'sketches.commandPalette.shape.router',
+  firewall: 'sketches.commandPalette.shape.firewall',
+  markdown: 'sketches.commandPalette.shape.markdown',
+  codeblock: 'sketches.commandPalette.shape.codeblock',
+  link: 'sketches.commandPalette.shape.link',
+  list: 'sketches.commandPalette.shape.list',
+  embed: 'sketches.commandPalette.shape.embed',
+};
+
+const CATEGORY_LABEL_KEYS: Record<DiagramCommand['category'], string> = {
+  action: 'sketches.commandPalette.category.actions',
+  navigation: 'sketches.commandPalette.category.navigation',
+  layout: 'sketches.commandPalette.category.layout',
+  export: 'sketches.commandPalette.category.export',
+  settings: 'sketches.commandPalette.category.settings',
+  shape: 'sketches.commandPalette.category.shapes',
+};
 
 interface CommandPaletteProps {
   open: boolean;
@@ -37,6 +107,7 @@ export function CommandPalette({
   onExportSvg,
   onExportJson,
 }: CommandPaletteProps) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const reactFlow = useReactFlow();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -111,6 +182,26 @@ export function CommandPalette({
     categories.get(cat)!.push(cmd);
   }
 
+  const getCommandLabel = (cmd: DiagramCommand) => {
+    const commandKey = COMMAND_LABEL_KEYS[cmd.id];
+    if (commandKey) return t(commandKey);
+    if (cmd.id.startsWith('add-')) {
+      const shape = cmd.id.slice(4) as NodeShapeType;
+      const shapeKey = SHAPE_LABEL_KEYS[shape];
+      if (shapeKey) {
+        return t('sketches.commandPalette.command.addShape', { shape: t(shapeKey) });
+      }
+    }
+    return cmd.label;
+  };
+
+  const getShapeLabel = (shape: string | undefined) => {
+    const shapeKey = shape ? SHAPE_LABEL_KEYS[shape as NodeShapeType] : undefined;
+    return shapeKey ? t(shapeKey) : shape ?? '';
+  };
+
+  const getCategoryLabel = (category: DiagramCommand['category']) => t(CATEGORY_LABEL_KEYS[category]);
+
   if (!open) return null;
 
   return (
@@ -130,7 +221,7 @@ export function CommandPalette({
       }}
     >
       <Command
-        label="Diagram Command Palette"
+        label={t('sketches.commandPalette.title')}
         style={{
           width: 480,
           maxHeight: 400,
@@ -156,7 +247,7 @@ export function CommandPalette({
             ref={inputRef}
             value={search}
             onValueChange={setSearch}
-            placeholder="Type a command, or # to search nodes..."
+            placeholder={t('sketches.commandPalette.placeholder')}
             style={{
               flex: 1,
               background: 'transparent',
@@ -178,18 +269,18 @@ export function CommandPalette({
           }}
         >
           <Command.Empty style={{ padding: 16, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-            No results found
+            {t('sketches.commandPalette.noResults')}
           </Command.Empty>
 
           {/* Node search results */}
           {isNodeSearch && matchingNodes.length > 0 && (
             <Command.Group
-              heading="Nodes"
+              heading={t('sketches.commandPalette.nodes')}
               style={{ padding: 0 }}
             >
               <div style={groupHeadingStyle}>
                 <Hash size={12} />
-                Nodes ({matchingNodes.length})
+                {t('sketches.commandPalette.nodeCount', { count: matchingNodes.length })}
               </div>
               {matchingNodes.slice(0, 20).map((node) => (
                 <Command.Item
@@ -213,7 +304,7 @@ export function CommandPalette({
                   />
                   <span style={{ flex: 1, fontSize: 13 }}>{node.data.label || node.id}</span>
                   <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
-                    {node.type}
+                    {getShapeLabel(node.type)}
                   </span>
                 </Command.Item>
               ))}
@@ -223,19 +314,19 @@ export function CommandPalette({
           {/* Regular command categories */}
           {!isNodeSearch &&
             Array.from(categories.entries()).map(([cat, cmds]) => (
-              <Command.Group key={cat} heading={CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] || cat}>
+              <Command.Group key={cat} heading={getCategoryLabel(cat as DiagramCommand['category'])}>
                 <div style={groupHeadingStyle}>
                   <ChevronRight size={12} />
-                  {CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] || cat}
+                  {getCategoryLabel(cat as DiagramCommand['category'])}
                 </div>
                 {cmds.map((cmd) => (
                   <Command.Item
                     key={cmd.id}
-                    value={cmd.label}
+                    value={getCommandLabel(cmd)}
                     onSelect={() => handleSelect(cmd)}
                     style={itemStyle}
                   >
-                    <span style={{ flex: 1, fontSize: 13 }}>{cmd.label}</span>
+                    <span style={{ flex: 1, fontSize: 13 }}>{getCommandLabel(cmd)}</span>
                     {cmd.shortcut && <kbd style={kbdStyle}>{cmd.shortcut}</kbd>}
                   </Command.Item>
                 ))}

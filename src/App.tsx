@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { useEffect } from 'react';
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, useNavigate, useParams } from 'react-router';
 import { Compass } from 'lucide-react';
 import { Toaster } from 'sonner';
@@ -19,13 +20,34 @@ import { useIsPhone } from '@/hooks/use-media-query';
 import { LoginPage } from '@/pages/LoginPage';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useDocumentLocale, useI18n } from '@/i18n';
+
+import { initialDestination } from '@/components/onboarding/progress';
+function InitialHome() {
+ const user=useAuthStore(s=>s.user);
+ return <Navigate to={initialDestination(user)==='/onboarding'?'/onboarding':'/chat'} replace/>;
+}
 
 function AuthGate() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const userId = useAuthStore((s) => s.user?.id ?? '');
+  const generation = useAuthStore((s) => s.sessionGeneration);
+  const owner = `${userId}:${generation}`;
+  const settingsOwner = useSettingsStore((s) => s.ownerSession);
+  const settings = useSettingsStore((s) => s.settings);
+  const loading = useSettingsStore((s) => s.loading);
+  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const { t } = useI18n();
+
+  useEffect(() => {
+    if (isAuthenticated && (settingsOwner !== owner || (!settings && !loading))) void fetchSettings();
+  }, [isAuthenticated, owner, settingsOwner, settings, loading, fetchSettings]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
+
+  if (settingsOwner !== owner || !settings) return <p role="status">{t('common.loading')}</p>;
 
   return <Outlet />;
 }
@@ -53,12 +75,13 @@ function DiagramsRedirect() {
  */
 function NotFound() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   return (
     <EmptyState
       icon={Compass}
-      title="Página no encontrada"
-      description="Esta dirección no corresponde a ninguna página."
-      actions={[{ label: 'Ir al inicio', onClick: () => navigate('/chat'), variant: 'primary' }]}
+      title={t('notFound.title')}
+      description={t('notFound.description')}
+      actions={[{ label: t('notFound.home'), onClick: () => navigate('/chat'), variant: 'primary' }]}
     />
   );
 }
@@ -67,11 +90,12 @@ const router = createBrowserRouter([
   {
     element: <AuthGate />,
     children: [
+      {path: '/onboarding', lazy: () => import('@/components/onboarding/InitialSetupPage')},
       {
         lazy: ShellModule,
         errorElement: <RouteErrorBoundary />,
         children: [
-          { path: '/', element: <Navigate to="/chat" replace /> },
+          { path: '/', element: <InitialHome /> },
           { path: '/chat', lazy: () => import('@/modules/chat/ChatPage') },
           { path: '/search', lazy: () => import('@/modules/search/SearchPage') },
           { path: '/notes', lazy: () => import('@/modules/notes/NotesPage') },
@@ -188,6 +212,7 @@ const router = createBrowserRouter([
 ]);
 
 export function App() {
+  useDocumentLocale();
   const notifSettings = useSettingsStore(s => s.settings?.notifications);
   const isPhone = useIsPhone();
   // En móvil el borde inferior lo tapa la MobileBottomNav + el FAB "+", así que

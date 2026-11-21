@@ -13,6 +13,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { MOOD_CONFIG, type MoodLevel } from './types';
+import { useI18n } from '@/i18n';
 
 interface MoodSelectorProps {
   value: MoodLevel | null;
@@ -22,6 +23,7 @@ interface MoodSelectorProps {
 const MOODS = Object.entries(MOOD_CONFIG) as [MoodLevel, (typeof MOOD_CONFIG)[MoodLevel]][];
 
 export function MoodSelector({ value, onChange }: MoodSelectorProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -58,9 +60,9 @@ export function MoodSelector({ value, onChange }: MoodSelectorProps) {
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
       >
         {current ? (
-          <><span>{current.emoji}</span> <span>{current.label}</span></>
+          <><span>{current.emoji}</span> <span>{t(`diary.mood.${value}`)}</span></>
         ) : (
-          <span>Set mood</span>
+          <span>{t('diary.setMood')}</span>
         )}
         <ChevronDown size={12} />
       </button>
@@ -105,7 +107,7 @@ export function MoodSelector({ value, onChange }: MoodSelectorProps) {
               onMouseLeave={(e) => { e.currentTarget.style.background = value === key ? 'var(--surface-hover)' : 'transparent'; }}
             >
               <span>{config.emoji}</span>
-              <span>{config.label}</span>
+              <span>{t(`diary.mood.${key}`)}</span>
             </button>
           ))}
         </div>

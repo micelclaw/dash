@@ -1,0 +1,28 @@
+export const calculatorMessages = {
+  en: {
+    'calculator.history': 'History',
+    'calculator.noHistory': 'No history',
+    'calculator.angleDegrees': 'Degrees',
+    'calculator.angleRadians': 'Radians',
+    'calculator.clear': 'Clear',
+    'calculator.backspace': 'Backspace',
+    'calculator.memoryAdd': 'Add displayed value to memory',
+    'calculator.memorySubtract': 'Subtract displayed value from memory',
+    'calculator.memoryRecall': 'Recall memory',
+    'calculator.calculate': 'Calculate',
+    'calculator.error': 'Error',
+  },
+  es: {
+    'calculator.history': 'Historial',
+    'calculator.noHistory': 'Sin historial',
+    'calculator.angleDegrees': 'Grados',
+    'calculator.angleRadians': 'Radianes',
+    'calculator.clear': 'Borrar',
+    'calculator.backspace': 'Borrar último carácter',
+    'calculator.memoryAdd': 'Sumar el valor mostrado a la memoria',
+    'calculator.memorySubtract': 'Restar el valor mostrado de la memoria',
+    'calculator.memoryRecall': 'Recuperar memoria',
+    'calculator.calculate': 'Calcular',
+    'calculator.error': 'Error',
+  },
+} as const;

@@ -118,6 +118,9 @@ export function useDriveShortcuts(handlers: DriveShortcutHandlers): void {
           if (h.onRename) { e.preventDefault(); h.onRename(); }
           break;
         case 'Enter':
+          // Keep native activation for focused navigation/action controls.
+          // Otherwise the global selection shortcut eats breadcrumb Enter.
+          if ((e.target as HTMLElement | null)?.closest?.('button, a[href], [role="button"], input[type="button"], input[type="submit"], input[type="reset"]')) break;
           if (h.onOpen) { e.preventDefault(); h.onOpen(); }
           break;
         case 'Escape':

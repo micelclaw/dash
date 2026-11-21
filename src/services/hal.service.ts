@@ -70,9 +70,15 @@ export interface VpnStatus {
 }
 
 export interface FirewallStatus {
-  active: boolean;
-  rules_count: number;
-  backend: string;
+  state: 'available' | 'unknown';
+  enabled: boolean | null;
+  provider: 'ufw';
+  default_incoming: 'allow' | 'deny' | 'reject' | null;
+  default_outgoing: 'allow' | 'deny' | 'reject' | null;
+  revision: string | null;
+  rules_count: number | null;
+  write_available: boolean;
+  reason?: string;
 }
 
 export interface FirewallRule {
@@ -91,6 +97,9 @@ export interface FirewallService {
   protocol: string;
   lan_allowed: boolean;
   external_allowed: boolean;
+  kind: 'declared_policy';
+  effective_access_verified: false;
+  complete: boolean;
 }
 
 export interface FirewallServicePolicy {
@@ -160,30 +169,61 @@ export async function getFirewallStatus(): Promise<FirewallStatus> {
 }
 
 export async function getFirewallRules(): Promise<FirewallRule[]> {
-  const res = await api.get<{ data: FirewallRule[] }>('/hal/firewall/rules');
+  return (await getFirewallRulesSnapshot()).rules;
+}
+
+export async function getFirewallRulesSnapshot(): Promise<{ rules: FirewallRule[]; revision: string }> {
+  const res = await api.get<{ data: { rules: FirewallRule[]; revision: string } }>(
+    '/hal/firewall/rules', { snapshot: true },
+  );
+  if (!Array.isArray(res?.data?.rules) || typeof res.data.revision !== 'string' || !res.data.revision.trim()) {
+    throw new Error('Invalid firewall rules snapshot');
+  }
   return res.data;
 }
 
-export async function setFirewallEnabled(enabled: boolean): Promise<void> {
-  await api.post(`/hal/firewall/${enabled ? 'enable' : 'disable'}`);
+function requireFirewallRevision(revision: string | undefined): string {
+  if (typeof revision !== 'string' || !revision.trim()) {
+    throw new Error('Refresh firewall configuration before making changes');
+  }
+  return revision;
 }
 
-export async function addFirewallRule(rule: Omit<FirewallRule, 'id'>): Promise<void> {
-  await api.post('/hal/firewall/rules', rule);
+export async function setFirewallEnabled(enabled: boolean, expectedRevision?: string): Promise<void> {
+  await api.post(`/hal/firewall/${enabled ? 'enable' : 'disable'}`, {
+    expected_revision: requireFirewallRevision(expectedRevision),
+  });
 }
 
-export async function deleteFirewallRule(id: string): Promise<void> {
-  await api.delete(`/hal/firewall/rules/${id}`);
+export async function addFirewallRule(rule: Omit<FirewallRule, 'id'>, expectedRevision?: string): Promise<void> {
+  await api.post('/hal/firewall/rules', { ...rule, expected_revision: requireFirewallRevision(expectedRevision) });
+}
+
+export async function deleteFirewallRule(id: string, expectedRevision?: string): Promise<void> {
+  const query = new URLSearchParams({ expected_revision: requireFirewallRevision(expectedRevision) });
+  await api.delete(`/hal/firewall/rules/${encodeURIComponent(id)}?${query}`);
 }
 
 export async function getFirewallServices(): Promise<FirewallService[]> {
-  const res = await api.get<{ data: FirewallService[] }>('/hal/firewall/services');
+  return (await getFirewallServicesSnapshot()).services;
+}
+
+export async function getFirewallServicesSnapshot(): Promise<{ services: FirewallService[]; revision: string }> {
+  const res = await api.get<{ data: { services: FirewallService[]; revision: string } }>(
+    '/hal/firewall/services', { snapshot: true },
+  );
+  if (!Array.isArray(res?.data?.services) || typeof res.data.revision !== 'string' || !res.data.revision.trim()) {
+    throw new Error('Invalid firewall services snapshot');
+  }
   return res.data;
 }
 
 export async function updateFirewallServicePolicy(
   name: string,
   policy: FirewallServicePolicy,
+  expectedRevision?: string,
 ): Promise<void> {
-  await api.put(`/hal/firewall/services/${name}`, policy);
+  await api.put(`/hal/firewall/services/${encodeURIComponent(name)}`, {
+    ...policy, expected_revision: requireFirewallRevision(expectedRevision),
+  });
 }

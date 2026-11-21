@@ -12,6 +12,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Loader2, MessagesSquare, HelpCircle } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import type { Meeting } from '../types';
 
 interface ContinueMeetingModalProps {
@@ -21,15 +22,16 @@ interface ContinueMeetingModalProps {
 }
 
 // Atajos de enfoque para el modo debate: rellenan el textarea de un clic.
-const FOCUS_PRESETS: { label: string; text: string }[] = [
-  { label: 'Más detalle', text: 'Profundizad y dad más detalle sobre lo ya hablado.' },
-  { label: 'Cuestiona las conclusiones', text: 'Haced de abogado del diablo: cuestionad las conclusiones y buscad qué falla.' },
-  { label: 'Explora alternativas', text: 'Explorad alternativas distintas a lo que habéis propuesto.' },
-  { label: 'Concreta las tareas', text: 'Concretad las tareas: hacedlas más accionables, con pasos y criterio de "hecho".' },
-  { label: 'Añade un ángulo nuevo', text: 'Añadid un ángulo que no se haya tratado todavía.' },
+const FOCUS_PRESETS: { label: string; directive: string }[] = [
+  { label: 'council.continue.preset.detail', directive: 'council.continue.directive.detail' },
+  { label: 'council.continue.preset.conclusions', directive: 'council.continue.directive.conclusions' },
+  { label: 'council.continue.preset.alternatives', directive: 'council.continue.directive.alternatives' },
+  { label: 'council.continue.preset.tasks', directive: 'council.continue.directive.tasks' },
+  { label: 'council.continue.preset.angle', directive: 'council.continue.directive.angle' },
 ];
 
 export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueMeetingModalProps) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<'debate' | 'qa'>('debate');
   const [directive, setDirective] = useState('');
   const [rounds, setRounds] = useState(2);
@@ -85,28 +87,29 @@ export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueM
         }}
       >
         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-          Continuar &ldquo;{meeting.title}&rdquo;
+          {t('council.continue.heading', { title: meeting.title })}
         </h3>
         <p style={{ margin: '6px 0 16px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Los agentes retoman el debate con todo el contexto anterior. No se pierde nada de lo ya hablado.
+          {t('council.continue.intro')}
         </p>
 
         {/* Selector de modo */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          {modeBtn('debate', <MessagesSquare size={14} />, 'Continuar el debate')}
-          {modeBtn('qa', <HelpCircle size={14} />, 'Preguntar al council')}
+          {modeBtn('debate', <MessagesSquare size={14} />, t('council.continue.mode.debate'))}
+          {modeBtn('qa', <HelpCircle size={14} />, t('council.continue.mode.qa'))}
         </div>
 
         {/* Enfoque / pregunta */}
         <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6, fontWeight: 600 }}>
-          {mode === 'debate' ? 'Enfoque de la continuación' : 'Tu pregunta al council'}
+          {t(mode === 'debate' ? 'council.continue.focus.debate' : 'council.continue.focus.question')}
         </label>
         <textarea
           value={directive}
           onChange={e => setDirective(e.target.value)}
           placeholder={mode === 'debate'
-            ? 'p.ej. Profundizad en la conciliación bancaria con n8n…'
-            : 'p.ej. ¿Qué riesgos tiene depender de n8n para esto?'}
+            ? t('council.continue.placeholder.debate')
+            : t('council.continue.placeholder.question')}
+          aria-label={t(mode === 'debate' ? 'council.continue.focus.debate' : 'council.continue.focus.question')}
           rows={3}
           style={{
             width: '100%', resize: 'vertical', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
@@ -121,14 +124,14 @@ export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueM
             {FOCUS_PRESETS.map(p => (
               <button
                 key={p.label}
-                onClick={() => setDirective(p.text)}
+                onClick={() => setDirective(t(p.directive))}
                 style={{
                   padding: '4px 10px', borderRadius: 'var(--radius-full)', fontSize: '0.6875rem',
                   cursor: 'pointer', fontFamily: 'var(--font-sans)',
                   border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-dim)',
                 }}
               >
-                {p.label}
+                {t(p.label)}
               </button>
             ))}
           </div>
@@ -138,7 +141,7 @@ export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueM
         {mode === 'debate' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', color: 'var(--text)' }}>
-              Rondas adicionales
+              {t('council.continue.rounds')}
               <select
                 value={rounds}
                 onChange={e => setRounds(Number(e.target.value))}
@@ -157,7 +160,7 @@ export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueM
                 onChange={e => setParticipate(e.target.checked)}
                 style={{ accentColor: 'var(--amber)' }}
               />
-              Participar en esta continuación
+              {t('council.continue.participate')}
             </label>
           </div>
         )}
@@ -172,7 +175,7 @@ export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueM
               border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
             }}
           >
-            Cancelar
+            {t('council.continue.cancel')}
           </button>
           <button
             onClick={submit}
@@ -186,7 +189,7 @@ export function ContinueMeetingModal({ meeting, onClose, onContinue }: ContinueM
             }}
           >
             {busy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-            {mode === 'debate' ? 'Continuar' : 'Preguntar'}
+            {t(mode === 'debate' ? 'council.continue.debateAction' : 'council.continue.questionAction')}
           </button>
         </div>
       </div>

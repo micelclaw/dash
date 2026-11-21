@@ -17,6 +17,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import type { VideoItem } from '@/services/video.service';
 import { useVideoStore } from '@/stores/video.store';
 import { PosterCard } from '../components/PosterCard';
+import { useI18n } from '@/i18n';
 
 const CARD_WIDTH = 150;
 
@@ -43,6 +44,7 @@ function Rail({
 
 /** Home tab — Continue watching / Next up / Recently added rails. */
 export function HomeView() {
+  const { t } = useI18n();
   const resume = useVideoStore((s) => s.resume);
   const nextUp = useVideoStore((s) => s.nextUp);
   const latestMovies = useVideoStore((s) => s.latestMovies);
@@ -57,7 +59,7 @@ export function HomeView() {
 
   if (!loaded) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('video.loading')}</div>
     ) : null;
   }
 
@@ -71,8 +73,8 @@ export function HomeView() {
     return (
       <EmptyState
         icon={Clapperboard}
-        title="Your library is empty"
-        description="Add movies and series to your Jellyfin library to see them here."
+        title={t('video.emptyLibrary')}
+        description={t('video.libraryHint')}
       />
     );
   }
@@ -83,10 +85,10 @@ export function HomeView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 16 }}>
-      <Rail title="Continue watching" items={resume ?? []} showProgress />
-      <Rail title="Next up" items={nextUp ?? []} />
-      <Rail title="Recently added Movies" items={latestMovies ?? []} onSeeAll={goTo('movies')} />
-      <Rail title="Recently added Series" items={latestSeries ?? []} onSeeAll={goTo('series')} />
+      <Rail title={t('video.continueWatching')} items={resume ?? []} showProgress />
+      <Rail title={t('video.nextUp')} items={nextUp ?? []} />
+      <Rail title={t('video.recentMovies')} items={latestMovies ?? []} onSeeAll={goTo('movies')} />
+      <Rail title={t('video.recentSeries')} items={latestSeries ?? []} onSeeAll={goTo('series')} />
     </div>
   );
 }

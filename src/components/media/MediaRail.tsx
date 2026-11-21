@@ -12,6 +12,7 @@
 
 import { Children, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface MediaRailProps {
   title: string;
@@ -24,6 +25,7 @@ interface MediaRailProps {
  * wrapped to a fixed ~160px width with scroll snapping.
  */
 export function MediaRail({ title, onSeeAll, children }: MediaRailProps) {
+  const { t } = useI18n();
   return (
     <section style={{ fontFamily: 'var(--font-sans)' }}>
       {/* Section header */}
@@ -61,7 +63,7 @@ export function MediaRail({ title, onSeeAll, children }: MediaRailProps) {
               color: 'var(--text-dim)',
             }}
           >
-            See all
+            {t('media.seeAll')}
             <ChevronRight size={13} />
           </button>
         )}

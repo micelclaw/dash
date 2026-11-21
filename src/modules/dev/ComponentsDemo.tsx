@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { Tabs } from '@/components/shared/Tabs';
 import { SourceBadge } from '@/components/shared/SourceBadge';
+import { useI18n } from '@/i18n';
 
 const sectionStyle: React.CSSProperties = {
   padding: 24,
@@ -48,6 +49,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 export function Component() {
+  const { t } = useI18n();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmVariant, setConfirmVariant] = useState<'danger' | 'warning' | 'default'>('default');
   const [activeTab, setActiveTab] = useState('tab1');
@@ -56,37 +58,37 @@ export function Component() {
   return (
     <div style={{ padding: 24, maxWidth: 1000, margin: '0 auto', overflow: 'auto', height: '100%' }}>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>
-        Shared Components Demo
+        {t('dev.title')}
       </h1>
       <p style={{ color: 'var(--text-dim)', fontSize: '0.8125rem', marginBottom: 32 }}>
-        Visual reference for all shared components. Only visible in development.
+        {t('dev.description')}
       </p>
 
       {/* SplitPane */}
       <div style={sectionStyle}>
-        <h2 style={titleStyle}>SplitPane — 2 columns</h2>
+        <h2 style={titleStyle}>{t('dev.splitTwo')}</h2>
         <div style={{ height: 200, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
           <SplitPane defaultSizes={[30, 70]} minSizes={[100, 200]}>
             <div style={{ padding: 16, background: 'var(--surface)' }}>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Left panel (30%)</p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('dev.leftPanel')}</p>
             </div>
             <div style={{ padding: 16, background: 'var(--card)' }}>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Right panel (70%)</p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('dev.rightPanel')}</p>
             </div>
           </SplitPane>
         </div>
 
-        <h2 style={{ ...titleStyle, marginTop: 24 }}>SplitPane — 3 columns</h2>
+        <h2 style={{ ...titleStyle, marginTop: 24 }}>{t('dev.splitThree')}</h2>
         <div style={{ height: 200, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
           <SplitPane defaultSizes={[25, 50, 25]} minSizes={[80, 150, 80]}>
             <div style={{ padding: 16, background: 'var(--surface)' }}>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Panel 1</p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('dev.panel', { number: 1 })}</p>
             </div>
             <div style={{ padding: 16, background: 'var(--card)' }}>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Panel 2</p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('dev.panel', { number: 2 })}</p>
             </div>
             <div style={{ padding: 16, background: 'var(--surface)' }}>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Panel 3</p>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('dev.panel', { number: 3 })}</p>
             </div>
           </SplitPane>
         </div>
@@ -95,7 +97,7 @@ export function Component() {
       {/* AvatarInitials */}
       <div style={sectionStyle}>
         <h2 style={titleStyle}>AvatarInitials</h2>
-        <div style={labelStyle}>Sizes: sm, md, lg</div>
+        <div style={labelStyle}>{t('dev.avatarSizes')}</div>
         <div style={rowStyle}>
           <AvatarInitials name="Juan García" size="sm" />
           <AvatarInitials name="Juan García" size="md" />
@@ -111,20 +113,20 @@ export function Component() {
       {/* Tag */}
       <div style={sectionStyle}>
         <h2 style={titleStyle}>Tag</h2>
-        <div style={labelStyle}>Filled variant</div>
+        <div style={labelStyle}>{t('dev.filledVariant')}</div>
         <div style={rowStyle}>
           <Tag label="React" color="var(--info)" />
           <Tag label="TypeScript" color="var(--mod-calendar)" />
           <Tag label="Important" color="var(--error)" />
           <Tag label="Removable" color="var(--amber)" removable onRemove={() => {}} />
         </div>
-        <div style={labelStyle}>Outline variant</div>
+        <div style={labelStyle}>{t('dev.outlineVariant')}</div>
         <div style={rowStyle}>
           <Tag label="React" color="var(--info)" variant="outline" />
           <Tag label="TypeScript" color="var(--mod-calendar)" variant="outline" />
           <Tag label="Removable" color="var(--amber)" variant="outline" removable onRemove={() => {}} />
         </div>
-        <div style={labelStyle}>Small size</div>
+        <div style={labelStyle}>{t('dev.smallSize')}</div>
         <div style={rowStyle}>
           <Tag label="sm filled" color="var(--success)" size="sm" />
           <Tag label="sm outline" color="var(--success)" size="sm" variant="outline" />
@@ -137,11 +139,11 @@ export function Component() {
         <div style={{ height: 280, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
           <EmptyState
             icon={StickyNote}
-            title="No notes yet"
-            description="Create your first note or connect a sync provider to import existing notes."
+            title={t('dev.emptyTitle')}
+            description={t('dev.emptyDescription')}
             actions={[
-              { label: '+ Create Note', onClick: () => {}, variant: 'primary' },
-              { label: 'Connect Provider', onClick: () => {}, variant: 'secondary' },
+              { label: t('dev.createNote'), onClick: () => {}, variant: 'primary' },
+              { label: t('dev.connectProvider'), onClick: () => {}, variant: 'secondary' },
             ]}
           />
         </div>
@@ -155,28 +157,28 @@ export function Component() {
             onClick={() => { setConfirmVariant('default'); setConfirmOpen(true); }}
             style={{ padding: '6px 12px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}
           >
-            Default
+            {t('dev.default')}
           </button>
           <button
             onClick={() => { setConfirmVariant('danger'); setConfirmOpen(true); }}
             style={{ padding: '6px 12px', background: 'var(--error)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}
           >
-            Danger
+            {t('dev.danger')}
           </button>
           <button
             onClick={() => { setConfirmVariant('warning'); setConfirmOpen(true); }}
             style={{ padding: '6px 12px', background: 'var(--warning)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}
           >
-            Warning
+            {t('dev.warning')}
           </button>
         </div>
         <ConfirmDialog
           open={confirmOpen}
           onClose={() => setConfirmOpen(false)}
           onConfirm={() => {}}
-          title={confirmVariant === 'danger' ? 'Delete note?' : confirmVariant === 'warning' ? 'Archive item?' : 'Confirm action?'}
-          description={confirmVariant === 'danger' ? 'This action cannot be undone. The note will be permanently deleted.' : 'Are you sure you want to proceed?'}
-          confirmLabel={confirmVariant === 'danger' ? 'Delete' : 'Confirm'}
+          title={confirmVariant === 'danger' ? t('dev.deleteNote') : confirmVariant === 'warning' ? t('dev.archiveItem') : t('dev.confirmTitle')}
+          description={confirmVariant === 'danger' ? t('dev.deleteDescription') : t('dev.confirmDescription')}
+          confirmLabel={confirmVariant === 'danger' ? t('dev.delete') : t('dev.confirm')}
           variant={confirmVariant}
         />
       </div>
@@ -187,7 +189,7 @@ export function Component() {
         <ContextMenu
           trigger={
             <div style={{ padding: 24, border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.8125rem', cursor: 'context-menu' }}>
-              Right-click here to see the context menu
+              {t('dev.openContextMenu')}
             </div>
           }
           items={[

@@ -13,11 +13,13 @@
 import { useState, useCallback } from 'react';
 import { Plus, Eye, EyeOff, Lock, Unlock, Trash2, Layers } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import type { DiagramLayer } from '../types';
 
 const EMPTY_LAYERS: DiagramLayer[] = [];
 
 export function LayerPanel() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const layers = useDiagramsStore((s) => {
     const page = s.pages.find((p) => p.id === s.activePageId);
@@ -47,7 +49,9 @@ export function LayerPanel() {
       {/* Toggle button — bottom-left of canvas */}
       <button
         onClick={() => setOpen((v) => !v)}
-        title="Layers"
+        title={t('sketches.layers.title')}
+        aria-label={t('sketches.layers.title')}
+        aria-expanded={open}
         style={{
           position: 'absolute',
           bottom: 12,
@@ -96,11 +100,12 @@ export function LayerPanel() {
             }}
           >
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text, #e2e8f0)', fontFamily: 'var(--font-sans)' }}>
-              Layers
+              {t('sketches.layers.title')}
             </span>
             <button
               onClick={() => addLayer()}
-              title="Add layer"
+              title={t('sketches.layers.add')}
+              aria-label={t('sketches.layers.add')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -149,6 +154,7 @@ export function LayerPanel() {
                 {editingId === layer.id ? (
                   <input
                     autoFocus
+                    aria-label={t('sketches.layers.rename', { layer: layer.name })}
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={confirmRename}
@@ -192,7 +198,8 @@ export function LayerPanel() {
                 {/* Visibility toggle */}
                 <button
                   onClick={() => updateLayer(layer.id, { visible: !layer.visible })}
-                  title={layer.visible ? 'Hide layer' : 'Show layer'}
+                  title={t(layer.visible ? 'sketches.layers.hide' : 'sketches.layers.show')}
+                  aria-label={t(layer.visible ? 'sketches.layers.hide' : 'sketches.layers.show')}
                   style={iconBtnStyle}
                 >
                   {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
@@ -201,7 +208,8 @@ export function LayerPanel() {
                 {/* Lock toggle */}
                 <button
                   onClick={() => updateLayer(layer.id, { locked: !layer.locked })}
-                  title={layer.locked ? 'Unlock layer' : 'Lock layer'}
+                  title={t(layer.locked ? 'sketches.layers.unlock' : 'sketches.layers.lock')}
+                  aria-label={t(layer.locked ? 'sketches.layers.unlock' : 'sketches.layers.lock')}
                   style={iconBtnStyle}
                 >
                   {layer.locked ? <Lock size={12} /> : <Unlock size={12} />}
@@ -211,7 +219,8 @@ export function LayerPanel() {
                 {layers.length > 1 && (
                   <button
                     onClick={() => removeLayer(layer.id)}
-                    title="Remove layer"
+                    title={t('sketches.layers.remove')}
+                    aria-label={t('sketches.layers.remove')}
                     style={iconBtnStyle}
                   >
                     <Trash2 size={12} />

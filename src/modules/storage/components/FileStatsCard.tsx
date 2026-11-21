@@ -17,6 +17,7 @@ import { useState, useEffect } from 'react';
 import { Files, Camera } from 'lucide-react';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
+import { useI18n } from '@/i18n';
 
 // Guarda contra valores nulos/undefined/NaN: formatFileSize(undefined)
 // devuelve "NaN undefined". Si no es un número finito, mostramos "—".
@@ -26,9 +27,9 @@ function safeSize(bytes: number | null | undefined): string {
 }
 
 // Cuenta segura: number.toLocaleString() peta si el valor es undefined.
-function safeCount(n: number | null | undefined): string {
+function safeCount(n: number | null | undefined, locale = 'en'): string {
   if (n == null || typeof n !== 'number' || !Number.isFinite(n)) return '—';
-  return n.toLocaleString();
+  return n.toLocaleString(locale);
 }
 
 interface MimeStat {
@@ -61,6 +62,7 @@ const heading: React.CSSProperties = {
 };
 
 export function FileStatsCard() {
+  const { t, locale } = useI18n();
   const [stats, setStats] = useState<FileStats | null>(null);
   const [snapStats, setSnapStats] = useState<SnapshotStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,18 +93,18 @@ export function FileStatsCard() {
     <div style={card}>
       <h3 style={heading}>
         <Files size={14} />
-        Estadísticas de archivos
+        {t('storage.stats.title')}
       </h3>
 
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
         gap: 12, marginBottom: 16,
       }}>
-        <StatItem label="Archivos" value={safeCount(stats.total_files)} />
-        <StatItem label="Carpetas" value={safeCount(stats.total_directories)} />
-        <StatItem label="Tamaño total" value={safeSize(stats.total_size_bytes)} />
+        <StatItem label={t('storage.stats.files')} value={safeCount(stats.total_files, locale)} />
+        <StatItem label={t('storage.stats.folders')} value={safeCount(stats.total_directories, locale)} />
+        <StatItem label={t('storage.stats.totalSize')} value={safeSize(stats.total_size_bytes)} />
         {stats.duplicates && Number(stats.duplicates.files) > 0 && (
-          <StatItem label="Duplicados" value={safeCount(stats.duplicates.files)} warn />
+          <StatItem label={t('storage.stats.duplicates')} value={safeCount(stats.duplicates.files, locale)} warn />
         )}
       </div>
 
@@ -113,13 +115,13 @@ export function FileStatsCard() {
         }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Camera size={12} />
-            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeCount(snapStats.count)}</span> instantáneas
+            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeCount(snapStats.count, locale)}</span> {t('storage.stats.snapshots')}
           </span>
           <span>
-            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeCount(snapStats.files_with_snapshots)}</span> archivos versionados
+            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeCount(snapStats.files_with_snapshots, locale)}</span> {t('storage.stats.versionedFiles')}
           </span>
           <span>
-            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeSize(snapStats.total_snapshot_size)}</span> usados
+            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeSize(snapStats.total_snapshot_size)}</span> {t('storage.stats.used')}
           </span>
         </div>
       )}
@@ -130,7 +132,7 @@ export function FileStatsCard() {
             fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
             color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginBottom: 8,
           }}>
-            Tipos más frecuentes
+            {t('storage.stats.commonTypes')}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {topMimes.map((m, i) => (
@@ -138,7 +140,7 @@ export function FileStatsCard() {
                 padding: '2px 8px', fontSize: '0.625rem', borderRadius: 'var(--radius-sm)',
                 background: 'var(--surface-hover, var(--card))', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)',
               }}>
-                {(m.mime_type ?? 'unknown').split('/').pop()} <span style={{ color: 'var(--text-muted)' }}>({safeCount(m.count)})</span>
+                {(m.mime_type ?? 'unknown').split('/').pop()} <span style={{ color: 'var(--text-muted)' }}>({safeCount(m.count, locale)})</span>
               </span>
             ))}
           </div>

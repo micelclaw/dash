@@ -12,6 +12,7 @@
 
 import { X, CheckCircle2, AlertCircle, Loader2, Upload } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-utils';
+import { useI18n } from '@/i18n';
 import type { UploadQueueItem } from '../hooks/use-upload-queue';
 
 /**
@@ -23,6 +24,7 @@ export function UploadQueuePanel({ items, onClear }: {
   items: UploadQueueItem[];
   onClear: () => void;
 }) {
+  const { t } = useI18n();
   if (items.length === 0) return null;
 
   const doneCount = items.filter(i => i.status === 'done').length;
@@ -30,10 +32,10 @@ export function UploadQueuePanel({ items, onClear }: {
   const inFlight = items.some(i => i.status === 'uploading' || i.status === 'queued');
 
   const title = inFlight
-    ? `Uploading ${Math.min(doneCount + 1, items.length)} of ${items.length}…`
+    ? t('driveUploadQueue.uploading', { current: Math.min(doneCount + 1, items.length), total: items.length })
     : errorCount > 0
-      ? `Uploads finished — ${errorCount} failed`
-      : 'Uploads complete';
+      ? t('driveUploadQueue.failedCount', { count: errorCount })
+      : t('driveUploadQueue.complete');
 
   return (
     <div
@@ -70,8 +72,8 @@ export function UploadQueuePanel({ items, onClear }: {
         {!inFlight && (
           <button
             onClick={onClear}
-            title="Close"
-            aria-label="Close upload panel"
+            title={t('driveUploadQueue.close')}
+            aria-label={t('driveUploadQueue.closePanel')}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 22, height: 22, border: 'none', borderRadius: 'var(--radius-sm)',
@@ -94,6 +96,7 @@ export function UploadQueuePanel({ items, onClear }: {
 }
 
 function UploadRow({ item }: { item: UploadQueueItem }) {
+  const { t } = useI18n();
   const statusIcon = item.status === 'done'
     ? <CheckCircle2 size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
     : item.status === 'error'
@@ -119,9 +122,9 @@ function UploadRow({ item }: { item: UploadQueueItem }) {
           {item.status === 'uploading'
             ? `${item.progress}%`
             : item.status === 'queued'
-              ? 'Queued'
+              ? t('driveUploadQueue.queued')
               : item.status === 'error'
-                ? 'Failed'
+                ? t('driveUploadQueue.failed')
                 : formatFileSize(item.size)}
         </span>
       </div>

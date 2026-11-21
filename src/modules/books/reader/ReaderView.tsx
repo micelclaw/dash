@@ -37,6 +37,7 @@ import type {
 import type { Overlayer as FoliateOverlayer } from '@/vendor/foliate-js/overlayer.js';
 import { useAuthStore } from '@/stores/auth.store';
 import { Slider } from '@/components/ui/slider';
+import { useI18n } from '@/i18n';
 import { ReaderToolbar } from './ReaderToolbar';
 import { TocDrawer } from './TocDrawer';
 import { ReaderSettingsSheet } from './ReaderSettingsSheet';
@@ -64,7 +65,7 @@ export interface ReaderViewProps {
 }
 
 /** Download the EPUB with ?token= auth (one 401-refresh retry). */
-async function fetchEpubFile(id: string, title: string): Promise<File> {
+async function fetchEpubFile(id: string, title: string, t: (key: string, values?: Record<string, string | number>) => string): Promise<File> {
   const get = () => {
     const tok = useAuthStore.getState().tokens?.accessToken ?? '';
     return fetch(
@@ -80,7 +81,7 @@ async function fetchEpubFile(id: string, title: string): Promise<File> {
       /* fall through to the !ok check */
     }
   }
-  if (!res.ok) throw new Error(`Could not download the book (HTTP ${res.status})`);
+  if (!res.ok) throw new Error(t('books.bookDownloadFailed', { status: res.status }));
   const blob = await res.blob();
   return new File([blob], `${title || 'book'}.epub`, { type: 'application/epub+zip' });
 }
@@ -103,6 +104,7 @@ interface AnnotationStore {
 }
 
 export function ReaderView({ book, onClose }: ReaderViewProps) {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   // Título derivado del EPUB cuando el caller no lo aporta (p.ej. deep-link
   // ?book=<id> desde el search global, que solo trae el id).
@@ -235,13 +237,13 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
         viewRef.current?.deselect();
         setSelection(null);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Could not save the highlight';
-        toast.error('Highlight failed', { description: message });
+        const message = err instanceof Error ? err.message : t('books.highlightFailed');
+        toast.error(t('books.highlightFailed'), { description: message });
       } finally {
         setAnnotationBusy(false);
       }
     },
-    [book.id, registerAnnotation],
+    [book.id, registerAnnotation, t],
   );
 
   const handleDeleteAnnotation = useCallback(async () => {
@@ -262,12 +264,12 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
       }
       setSelection(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not delete the highlight';
-      toast.error('Delete failed', { description: message });
+      const message = err instanceof Error ? err.message : t('books.deleteFailed');
+      toast.error(t('books.deleteFailed'), { description: message });
     } finally {
       setAnnotationBusy(false);
     }
-  }, []);
+  }, [t]);
 
   // ── Mount: load foliate + the book, wire every event ──
   useEffect(() => {
@@ -294,7 +296,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
       overlayerRef.current = overlayerMod.Overlayer;
 
       // 2. Download the EPUB.
-      const file = await fetchEpubFile(book.id, book.title);
+      const file = await fetchEpubFile(book.id, book.title, t);
       if (disposed) return;
 
       // 3. Create + open the view.
@@ -420,10 +422,10 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
       bumpActivity();
     })().catch((err: unknown) => {
       if (disposed) return;
-      const message = err instanceof Error ? err.message : 'Could not open the book';
+      const message = err instanceof Error ? err.message : t('books.openFailed');
       setErrorMsg(message);
       setPhase('error');
-      toast.error('Could not open the book', { description: message });
+      toast.error(t('books.openFailed'), { description: message });
     });
 
     return () => {
@@ -442,7 +444,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book.id]);
+  }, [book.id, t]);
 
   // ── Window-level keys (capture, PlayerView precedent) + unload flush ──
   useEffect(() => {
@@ -490,7 +492,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
       className="fixed inset-0 z-[350] flex flex-col"
       style={{ background: theme.bg }}
       role="dialog"
-      aria-label={`Reading ${displayTitle || 'book'}`}
+      aria-label={t('books.readingBook', { title: displayTitle || t('books.bookFallback') })}
       onPointerMove={bumpActivity}
     >
       {/* Book canvas (foliate-view is appended here) */}
@@ -502,13 +504,13 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
           style={{ background: theme.bg, color: theme.dim }}
         >
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">{displayTitle ? `Opening “${displayTitle}”…` : 'Opening…'}</p>
+          <p className="text-sm">{displayTitle ? t('books.openingBook', { title: displayTitle }) : t('books.opening')}</p>
           <button
             onClick={handleClose}
             className="mt-2 rounded-md border px-4 py-2 text-sm"
             style={{ borderColor: theme.dim, color: theme.fg }}
           >
-            Cancel
+            {t('books.cancel')}
           </button>
         </div>
       ) : null}
@@ -524,7 +526,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
             className="rounded-md border px-4 py-2 text-sm"
             style={{ borderColor: theme.dim }}
           >
-            Close
+            {t('books.close')}
           </button>
         </div>
       ) : null}
@@ -533,7 +535,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
         <>
           {/* Click zones */}
           <button
-            aria-label="Previous page"
+            aria-label={t('books.previousPageLabel')}
             onClick={() => void viewRef.current?.goLeft()}
             className="group absolute bottom-16 left-0 top-12 z-10 flex w-12 cursor-pointer items-center justify-center md:w-16"
           >
@@ -544,7 +546,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
             />
           </button>
           <button
-            aria-label="Next page"
+            aria-label={t('books.nextPageLabel')}
             onClick={() => void viewRef.current?.goRight()}
             className="group absolute bottom-16 right-0 top-12 z-10 flex w-12 cursor-pointer items-center justify-center md:w-16"
           >
@@ -570,7 +572,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
               onValueCommit={([v]) =>
                 v !== undefined && void viewRef.current?.goToFraction(v / 1000)
               }
-              aria-label="Reading progress"
+              aria-label={t('books.readingProgressLabel')}
             />
             <span className="w-12 shrink-0 text-right text-xs tabular-nums text-white/80">
               {Math.round(fraction * 100)}%
@@ -597,7 +599,7 @@ export function ReaderView({ book, onClose }: ReaderViewProps) {
         onNavigate={(href) => {
           setTocOpen(false);
           viewRef.current?.goTo(href)?.catch(() => {
-            toast.error('Could not open that chapter');
+            toast.error(t('books.openChapterFailed'));
           });
         }}
       />

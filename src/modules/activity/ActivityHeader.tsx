@@ -25,6 +25,7 @@ import type { Adapter, TimeRange } from './adapters/types';
 import { bucketColor } from './adapters/types';
 import { TimeRangePicker } from './TimeRangePicker';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { hasMessage, useI18n } from '@/i18n';
 
 interface Props<Row> {
   adapter: Adapter<Row>;
@@ -177,6 +178,7 @@ export function ActivityHeader<Row>({
   range,
   onRangeChange,
 }: Props<Row>) {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const { points, buckets, granularity } = useMemo<HistogramResult>(() => {
     if (!adapter.histogramOf) return { points: [], buckets: [], granularity: 'hour' };
@@ -248,6 +250,7 @@ export function ActivityHeader<Row>({
                 height={20}
                 iconType="line"
                 wrapperStyle={{ fontSize: 10, color: 'var(--text-muted)' }}
+                formatter={(value) => translateActivityValue(String(value), t)}
               />
               {orderedBuckets.map((b) => (
                 <Line
@@ -265,7 +268,7 @@ export function ActivityHeader<Row>({
           </ResponsiveContainer>
         ) : (
           <div className="h-full flex items-center justify-center text-xs text-[var(--text-muted)]">
-            Sin actividad en este tab
+            {t('activity.noActivityThisTab')}
           </div>
         )}
       </div>
@@ -278,12 +281,12 @@ export function ActivityHeader<Row>({
             value={filters[facet.key] ?? 'all'}
             onChange={(e) => onFilterChange(facet.key, e.target.value)}
             className="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)]"
-            aria-label={facet.label}
+            aria-label={translateFacetLabel(facet.key, facet.label, t)}
           >
-            <option value="all">{facet.label}: todos</option>
+            <option value="all">{t('activity.allFilter', { label: translateFacetLabel(facet.key, facet.label, t) })}</option>
             {facet.options.map((opt) => (
               <option key={opt.value} value={opt.value}>
-                {opt.label}
+                {translateActivityValue(opt.value, t, opt.label)}
               </option>
             ))}
           </select>
@@ -292,7 +295,7 @@ export function ActivityHeader<Row>({
           type="search"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar…"
+          placeholder={t('activity.search')}
           className="flex-1 min-w-[120px] text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)]"
         />
         {onTogglePause && (
@@ -301,7 +304,7 @@ export function ActivityHeader<Row>({
             className="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]"
             aria-pressed={paused}
           >
-            {paused ? '▶ Reanudar' : '⏸ Pausar'}
+            {paused ? `▶ ${t('activity.resume')}` : `⏸ ${t('activity.pause')}`}
           </button>
         )}
         {onRangeChange && (
@@ -310,4 +313,15 @@ export function ActivityHeader<Row>({
       </div>
     </div>
   );
+}
+
+function translateFacetLabel(key: string, fallback: string, t: ReturnType<typeof useI18n>['t']): string {
+  const messageKey = `activity.filter${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+  return hasMessage(messageKey) ? t(messageKey) : fallback;
+}
+
+function translateActivityValue(value: string, t: ReturnType<typeof useI18n>['t'], fallback = value): string {
+  const normalized = value.toLowerCase();
+  const messageKey = `activity.value${normalized.charAt(0).toUpperCase()}${normalized.slice(1)}`;
+  return hasMessage(messageKey) ? t(messageKey) : fallback;
 }

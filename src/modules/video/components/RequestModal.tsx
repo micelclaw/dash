@@ -21,14 +21,15 @@ import {
 } from '@/components/ui/dialog';
 import type { DiscoverResult } from '@/services/video.service';
 import { useVideoStore } from '@/stores/video.store';
+import { useI18n } from '@/i18n';
 
 /** Public TMDB poster URL for a Jellyseerr discover result. */
 export function tmdbPosterUrl(posterPath: string | undefined, size = 'w342'): string | null {
   return posterPath ? `https://image.tmdb.org/t/p/${size}${posterPath}` : null;
 }
 
-export function discoverTitle(result: DiscoverResult): string {
-  return result.title ?? result.name ?? 'Untitled';
+export function discoverTitle(result: DiscoverResult, fallback = 'Untitled'): string {
+  return result.title ?? result.name ?? fallback;
 }
 
 export function discoverYear(result: DiscoverResult): string | null {
@@ -47,6 +48,7 @@ export function RequestModal({
   result: DiscoverResult | null;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const requesting = useVideoStore((s) => s.requesting);
 
   const submit = async () => {
@@ -67,11 +69,11 @@ export function RequestModal({
           <>
             <DialogHeader>
               <DialogTitle style={{ color: 'var(--text)' }}>
-                Request {result.media_type === 'tv' ? 'series' : 'movie'}
+                {result.media_type === 'tv' ? t('video.requestSeriesTitle') : t('video.requestMovieTitle')}
               </DialogTitle>
               <DialogDescription>
-                Sends a download request to Jellyseerr.
-                {result.media_type === 'tv' && ' All seasons will be requested.'}
+                {t('video.requestDescription')}
+                {result.media_type === 'tv' && ` ${t('video.requestAllSeasons')}`}
               </DialogDescription>
             </DialogHeader>
 
@@ -101,7 +103,7 @@ export function RequestModal({
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-                  {discoverTitle(result)}
+                  {discoverTitle(result, t('video.untitled'))}
                   {discoverYear(result) && (
                     <span style={{ fontWeight: 400, color: 'var(--text-dim)', marginLeft: 8 }}>
                       ({discoverYear(result)})
@@ -141,7 +143,7 @@ export function RequestModal({
                   color: 'var(--text-dim)',
                 }}
               >
-                Cancel
+                {t('video.cancel')}
               </button>
               <button
                 onClick={() => void submit()}
@@ -163,7 +165,7 @@ export function RequestModal({
                 }}
               >
                 <Download size={14} />
-                {requesting ? 'Requesting…' : 'Request'}
+                {requesting ? t('video.requesting') : t('video.request')}
               </button>
             </DialogFooter>
           </>

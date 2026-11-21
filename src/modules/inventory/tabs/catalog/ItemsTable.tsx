@@ -13,6 +13,7 @@
 import { fmtMoney, type InventoryItem } from '@/modules/inventory/types';
 import { ItemStatusPill, ItemTagChips, ItemThumb, QtyCell, WarrantyCell, tdStyle, thStyle } from './catalog-ui';
 import { SortTh, type SortDir, type SortKey } from './sorting';
+import { useI18n } from '@/i18n';
 
 interface ItemsTableProps {
   items: InventoryItem[];
@@ -42,6 +43,7 @@ export function ItemsTable({
   onOpen,
   onTagClick,
 }: ItemsTableProps) {
+  const { t } = useI18n();
   const selectedCount = selected.size;
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -53,19 +55,19 @@ export function ItemsTable({
               checked={allSelected}
               ref={el => { if (el) el.indeterminate = selectedCount > 0 && !allSelected; }}
               onChange={onToggleSelectAll}
-              aria-label="Select all items"
+              aria-label={t('inventory.catalog.selectAll')}
               style={{ cursor: 'pointer' }}
             />
           </th>
           <th style={{ ...thStyle, width: 38 }} />
-          <SortTh label="Name" sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={onSort} style={thStyle} />
-          <SortTh label="Category" sortKey="category" active={sortKey === 'category'} dir={sortDir} onSort={onSort} style={thStyle} />
-          <SortTh label="Location" sortKey="location" active={sortKey === 'location'} dir={sortDir} onSort={onSort} style={thStyle} />
-          <SortTh label="Qty" sortKey="qty" active={sortKey === 'qty'} dir={sortDir} onSort={onSort} style={thStyle} />
-          <SortTh label="Value" sortKey="value" active={sortKey === 'value'} dir={sortDir} onSort={onSort} style={thStyle} />
-          <SortTh label="Warranty" sortKey="warranty" active={sortKey === 'warranty'} dir={sortDir} onSort={onSort} style={thStyle} />
-          <th style={thStyle} scope="col">Tags</th>
-          <SortTh label="Status" sortKey="status" active={sortKey === 'status'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <SortTh label={t('inventory.catalog.name')} sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <SortTh label={t('inventory.category')} sortKey="category" active={sortKey === 'category'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <SortTh label={t('inventory.location')} sortKey="location" active={sortKey === 'location'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <SortTh label={t('inventory.catalog.qty')} sortKey="qty" active={sortKey === 'qty'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <SortTh label={t('inventory.catalog.value')} sortKey="value" active={sortKey === 'value'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <SortTh label={t('inventory.catalog.warranty')} sortKey="warranty" active={sortKey === 'warranty'} dir={sortDir} onSort={onSort} style={thStyle} />
+          <th style={thStyle} scope="col">{t('inventory.catalog.tags')}</th>
+          <SortTh label={t('inventory.status')} sortKey="status" active={sortKey === 'status'} dir={sortDir} onSort={onSort} style={thStyle} />
         </tr>
       </thead>
       <tbody>
@@ -85,7 +87,7 @@ export function ItemsTable({
                   type="checkbox"
                   checked={isSel}
                   onChange={() => onToggleSelect(item.id)}
-                  aria-label={`Select ${item.name}`}
+                  aria-label={t('inventory.catalog.selectItem', { name: item.name })}
                   style={{ cursor: 'pointer' }}
                 />
               </td>

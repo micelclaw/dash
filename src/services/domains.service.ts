@@ -104,6 +104,7 @@ export interface HostSyncStatus {
   supported: boolean;
   platform: 'windows-wsl' | 'macos' | 'linux' | 'headless' | 'unsupported';
   installed: boolean;
+  configured?: boolean;
   state?: string;
   last_run?: string | null;
   reason?: string;

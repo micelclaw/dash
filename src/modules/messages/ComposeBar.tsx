@@ -14,6 +14,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Send, Settings2 } from 'lucide-react';
 import { platformMeta } from '@/config/messaging-platforms';
+import { useI18n } from '@/i18n';
 import type { PlatformCapability } from '@/services/messages.service';
 
 interface ComposeBarProps {
@@ -23,15 +24,16 @@ interface ComposeBarProps {
   sending: boolean;
 }
 
-const SEND_REASON_COPY: Record<string, string> = {
-  not_configured: 'Configure this channel to send from here.',
-  reauth_required: 'Re-authorize this channel to send.',
-  plugin_not_installed: 'This channel needs its plugin installed.',
-  gateway_unreachable: 'The gateway is unavailable right now.',
-  unsupported: 'Sending is not available for this channel.',
+const SEND_REASON_KEYS: Record<string, string> = {
+  not_configured: 'messages.notConfigured',
+  reauth_required: 'messages.reauthRequired',
+  plugin_not_installed: 'messages.pluginMissing',
+  gateway_unreachable: 'messages.gatewayUnavailable',
+  unsupported: 'messages.unsupported',
 };
 
 export function ComposeBar({ platform, capability, onSend, sending }: ComposeBarProps) {
+  const { t } = useI18n();
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const meta = platformMeta(platform);
@@ -62,7 +64,8 @@ export function ComposeBar({ platform, capability, onSend, sending }: ComposeBar
   // Not sendable: show why + a CTA to configure the channel (unless unsupported by design).
   if (!canSend) {
     const reason = capability?.send_reason ?? (capability ? 'not_configured' : undefined);
-    const copy = reason ? SEND_REASON_COPY[reason] ?? SEND_REASON_COPY.unsupported : `Sending isn't available for ${meta.label} yet.`;
+    const key = reason ? SEND_REASON_KEYS[reason] ?? SEND_REASON_KEYS.unsupported! : 'messages.sendUnavailable';
+    const copy = t(key, { platform: meta.label });
     const showCta = capability && reason !== 'unsupported';
 
     return (
@@ -89,7 +92,7 @@ export function ComposeBar({ platform, capability, onSend, sending }: ComposeBar
               textDecoration: 'none', flexShrink: 0,
             }}
           >
-            <Settings2 size={13} /> Configure channel
+            <Settings2 size={13} /> {t('messages.configureChannel')}
           </Link>
         )}
       </div>
@@ -103,8 +106,8 @@ export function ComposeBar({ platform, capability, onSend, sending }: ComposeBar
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={`Send via ${meta.label}...`}
-        aria-label={`Write a message via ${meta.label}`}
+        placeholder={t('messages.sendVia', { platform: meta.label })}
+        aria-label={t('messages.writeVia', { platform: meta.label })}
         rows={1}
         disabled={sending}
         style={{
@@ -118,7 +121,7 @@ export function ComposeBar({ platform, capability, onSend, sending }: ComposeBar
       <button
         onClick={handleSend}
         disabled={!text.trim() || sending}
-        aria-label="Send message"
+        aria-label={t('messages.send')}
         style={{
           padding: '8px 12px',
           background: text.trim() ? meta.color : 'var(--surface)',

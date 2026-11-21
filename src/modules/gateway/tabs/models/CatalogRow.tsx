@@ -12,6 +12,8 @@
 
 import { Star, Cpu, Plus, X, Check, Key, Trash2, Pencil, Download, Undo2 } from 'lucide-react';
 import { getProviderIcon } from '@/config/provider-icons';
+import { canonicalModelAddKey, findModelAddEntry, useGatewayModelAddStore } from '@/stores/gateway-model-add.store';
+import { useGatewayStore } from '@/stores/gateway.store';
 import { StatusPill } from '../../components/StatusPill';
 import type { CatalogModel, ModelTestResult } from '../../types';
 import { PROVIDER_COLORS } from './constants';
@@ -58,6 +60,16 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
   const ProviderIcon = getProviderIcon(model.provider);
   const isMutating = mutatingModel === model.key;
+  const addOperation = useGatewayModelAddStore((state) => findModelAddEntry(state.modelAddOperations, model.key));
+  const checkModelAdd = useGatewayModelAddStore((state) => state.checkModelAdd);
+  const removal = useGatewayStore(state => state.removalOperation);
+  const checkRemoval = useGatewayStore(state => state.checkRemovalOperation);
+  const modelIdentity = canonicalModelAddKey(model.key);
+  const queuedForModel = useGatewayStore(state => !!modelIdentity && state.queuedRemovals.some(key => canonicalModelAddKey(key) === modelIdentity));
+  const removalForModel = modelIdentity && removal?.models.some(key => canonicalModelAddKey(key) === modelIdentity) ? removal : null;
+  const removalPending = removalQueued || queuedForModel || removalInflight || !!removalForModel;
+  const configured = !['running', 'uncertain'].includes(addOperation?.state ?? '')
+    && (model.configured || addOperation?.state === 'succeeded');
 
   // Mientras se añade (carga en VRAM), la tarjeta ENTERA es una barra de progreso.
   if (isAdding) {
@@ -97,7 +109,7 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
         gap: 14,
         padding: '10px 14px',
         background: isHovered ? 'var(--surface-hover)' : 'var(--card)',
-        border: `1px solid ${model.configured ? '#10b98130' : 'var(--border)'}`,
+        border: `1px solid ${configured ? '#10b98130' : 'var(--border)'}`,
         borderRadius: 'var(--radius-md)',
         transition: 'var(--transition-fast)',
         flexWrap: isMobile ? 'wrap' : undefined,
@@ -133,7 +145,7 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
           }}>
             {model.name || model.key}
           </span>
-          {model.configured && (
+          {configured && (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
               background: '#10b98120', color: '#10b981',
@@ -141,7 +153,7 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
               padding: '1px 6px', fontSize: '0.625rem', fontWeight: 600,
               fontFamily: 'var(--font-sans)',
             }}>
-              <Check size={9} /> Configured
+              <Check size={9} /> {addOperation?.state === 'succeeded' ? 'Añadido' : 'Configured'}
             </span>
           )}
           {model.is_default && (
@@ -169,6 +181,16 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
               : <TestResultPill result={testResult} testing={isTesting} />
           }
         </div>
+        {addOperation?.state === 'failed' && (
+          <div role="alert" style={{ color: 'var(--red, #ef4444)', fontSize: '0.75rem', marginTop: 4 }}>
+            {addOperation.message || 'No se pudo añadir el modelo.'}
+          </div>
+        )}
+        {addOperation?.state === 'uncertain' && (
+          <div role="status" style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginTop: 4 }}>
+            {addOperation.message || 'Comprobando resultado…'}
+          </div>
+        )}
         <div style={{
           fontSize: '0.75rem', color: 'var(--text-dim)',
           fontFamily: 'var(--font-sans)', marginTop: 2,
@@ -196,10 +218,10 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
       {/* Actions — columnas fijas (desktop): Test encima de Test, Edit encima
           de Edit, la acción principal (Add/Remove/Configure) en su columna… */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, ...(isMobile ? { width: '100%', flexWrap: 'wrap' as const } : {}) }}>
-        <Slot w={isMobile ? undefined : 30}><AaLinkButton slug={model.aa_slug} /></Slot>
+        <Slot w={isMobile ? undefined : 30}>{!removalPending && <AaLinkButton slug={model.aa_slug} />}</Slot>
         {/* Test de salud — solo con credencial (sin ella no hay nada que testear) */}
         <Slot w={isMobile ? undefined : 66}>
-          {onTest && providerHasCredential ? (
+          {onTest && providerHasCredential && !removalPending ? (
             <TestButton
               onClick={() => onTest(model.key)}
               loading={!!isTesting}
@@ -208,7 +230,7 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
         </Slot>
         {/* Edit ctx/maxTokens — only for configured user-managed providers */}
         <Slot w={isMobile ? undefined : 62}>
-          {onEdit && model.configured ? (
+          {onEdit && model.configured && !removalPending && !['running', 'uncertain'].includes(addOperation?.state ?? '') ? (
             <ActionButton
               icon={<Pencil size={12} />}
               label="Edit"
@@ -219,8 +241,35 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
           ) : null}
         </Slot>
         <Slot w={isMobile ? undefined : 148}>
-        {!model.is_default && (
-          model.configured ? (
+        {removalForModel?.state === 'preparing' && onUndoRemove ? (
+          <ActionButton icon={<Undo2 size={12} />} label="Deshacer" loading={false} onClick={() => onUndoRemove(model.key)} variant="secondary" />
+        ) : removalForModel?.state === 'running' ? (
+          <button type="button" disabled style={{ background: 'transparent', border: 0, color: 'var(--text-dim)' }}>Retirando…</button>
+        ) : removalForModel?.state === 'uncertain' && (removalForModel.canReconcile === false || (removalForModel.code === 'MODEL_OPERATION_MODEL_BUSY' && !removalForModel.canonicalId)) ? (
+          <span role="status" style={{ fontSize: '0.75rem' }}>{removalForModel.message}</span>
+        ) : removalForModel?.state === 'uncertain' ? (
+          <ActionButton icon={null} label="Comprobar retirada" loading={false} onClick={() => { void checkRemoval(); }} variant="secondary" />
+        ) : addOperation?.state === 'running' ? (
+          <button type="button" disabled aria-live="polite" style={{
+            background: 'transparent', color: 'var(--text-dim)', border: 0,
+            padding: '4px 10px', fontSize: '0.75rem', cursor: 'wait', fontFamily: 'var(--font-sans)',
+          }}>Añadiendo…</button>
+        ) : addOperation?.state === 'uncertain' && (addOperation.canReconcile === false || (addOperation.errorCode === 'MODEL_OPERATION_MODEL_BUSY' && !addOperation.canonicalId)) ? null
+        : addOperation?.state === 'uncertain' ? (
+          <ActionButton icon={null} label="Comprobar resultado" loading={false}
+            onClick={() => { void checkModelAdd(model.key); }} variant="secondary" />
+        ) : addOperation?.state === 'failed' && addOperation.errorCode === 'ACCESS_DENIED' ? (
+          <ActionButton icon={null} label="Comprobar permisos" loading={false}
+            onClick={() => { void checkModelAdd(model.key); }} variant="secondary" />
+        ) : addOperation?.state === 'failed' && addOperation.errorCode === 'CREDENTIAL_REQUIRED' ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <ActionButton icon={<Key size={12} />} label="Configure provider" loading={false}
+              onClick={() => onConfigure(model)} variant="secondary" />
+            <ActionButton icon={null} label="Ya conecté mi cuenta" loading={false}
+              onClick={() => { void checkModelAdd(model.key); }} variant="secondary" />
+          </div>
+        ) : !model.is_default && (
+          configured ? (
             removalInflight ? (
               <ActionButton
                 icon={<X size={12} />}
@@ -230,7 +279,7 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
                 variant="secondary"
                 title="Removing… — el borrado ya salió al servidor, no se puede deshacer"
               />
-            ) : removalQueued && onUndoRemove ? (
+            ) : (removalQueued || queuedForModel) && onUndoRemove ? (
               <ActionButton
                 icon={<Undo2 size={12} />}
                 label="Deshacer"
@@ -247,7 +296,7 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
                 variant="danger"
               />
             )
-          ) : providerHasCredential ? (
+          ) : (providerHasCredential || addOperation?.credentialAcknowledged) && !['CREDENTIAL_REQUIRED', 'PROVIDER_NOT_AUTHENTICATED'].includes(addOperation?.errorCode ?? '') ? (
             // Gate por credencial REAL del provider (overview.has_credential),
             // no por model.available: un modelo "destacado" de un provider sin
             // key mostraba +Add y acababa orphan/no-auth en Configured.
@@ -276,12 +325,12 @@ export function CatalogRow({ model, providerHasCredential, isMobile, isHovered, 
         {/* Borrar de disco (hard delete) — solo Ollama. Distinto del Remove
             (que solo quita de la config de chat). */}
         <Slot w={isMobile ? undefined : 34}>
-          {onDeleteFromDisk && model.provider === 'ollama' ? (
+          {onDeleteFromDisk && model.provider === 'ollama' && !removalPending ? (
             <ActionButton
               icon={<Trash2 size={12} />}
               label=""
               title="Borrar del disco (libera espacio; tendrás que volver a descargarlo)"
-              loading={isMutating}
+              loading={isMutating || addOperation?.state === 'running' || addOperation?.state === 'uncertain'}
               onClick={() => onDeleteFromDisk(model)}
               variant="danger"
             />

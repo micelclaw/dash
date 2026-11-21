@@ -374,70 +374,124 @@ const ACTION_OPTIONS = [
 ];
 
 function FirewallSubSection() {
-  const [status, setStatus] = useState<FirewallStatus | null>(null);
-  const [rules, setRules] = useState<FirewallRule[]>([]);
+  const [snapshot, setSnapshot] = useState<{ status: FirewallStatus; rules: FirewallRule[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newRule, setNewRule] = useState({ port: '', protocol: 'tcp', action: 'allow', source: '', description: '' });
+  const requestGeneration = useRef(0);
+  const actionPending = useRef(false);
 
   const fetchData = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+    setLoading(true);
+    setSnapshot(null);
+    setError(null);
     try {
-      const [status, rules] = await Promise.all([hal.getFirewallStatus(), hal.getFirewallRules()]);
-      setStatus(status);
-      setRules(rules);
+      const [status, rulesSnapshot] = await Promise.all([hal.getFirewallStatus(), hal.getFirewallRulesSnapshot()]);
+      if (generation !== requestGeneration.current) return false;
+      if (!status.revision || status.revision !== rulesSnapshot.revision) {
+        throw new Error('Firewall configuration changed while loading');
+      }
+      setSnapshot({ status, rules: rulesSnapshot.rules });
+      return true;
     } catch {
-      // Silent
+      if (generation === requestGeneration.current) {
+        setSnapshot(null);
+        setError('Unable to read a consistent firewall configuration. Refresh to try again.');
+      }
+      return false;
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    void fetchData();
+    return () => { ++requestGeneration.current; };
+  }, [fetchData]);
 
-  const toggleFirewall = async (enable: boolean) => {
+  const status = snapshot?.status;
+  const rules = snapshot?.rules;
+  const known = status?.state === 'available' && typeof status.enabled === 'boolean';
+  const canWrite = known && !!status?.revision && status.write_available === true && !loading && !acting;
+
+  const runMutation = async (
+    mutate: (revision: string) => Promise<void>,
+    successMessage: string,
+    failureMessage: string,
+    onConfirmed?: () => void,
+  ) => {
+    if (!canWrite || !status?.revision || actionPending.current) return;
+    actionPending.current = true;
+    const generation = requestGeneration.current;
     setActing(true);
+    let completed = false;
     try {
-      await hal.setFirewallEnabled(enable);
-      toast.success(enable ? 'Firewall enabled' : 'Firewall disabled');
-      fetchData();
+      await mutate(status.revision);
+      completed = true;
     } catch {
-      toast.error(`Failed to ${enable ? 'enable' : 'disable'} firewall`);
+      // A failed request can have applied a change. Refresh instead of retrying it.
     }
+    if (generation !== requestGeneration.current) {
+      actionPending.current = false;
+      return;
+    }
+    const refreshGeneration = requestGeneration.current + 1;
+    const refreshed = await fetchData();
+    if (refreshGeneration !== requestGeneration.current) {
+      actionPending.current = false;
+      return;
+    }
+    if (completed && refreshed) {
+      onConfirmed?.();
+      toast.success(successMessage);
+    } else {
+      const message = completed
+        ? 'The firewall change could not be confirmed. Refresh before trying again.'
+        : `${failureMessage}. The result may be uncertain; refresh before trying again.`;
+      setError(message);
+      toast.error(message);
+    }
+    actionPending.current = false;
     setActing(false);
   };
 
+  const toggleFirewall = async (enable: boolean) => {
+    await runMutation(
+      (revision) => hal.setFirewallEnabled(enable, revision),
+      enable ? 'Firewall enabled' : 'Firewall disabled',
+      `Failed to ${enable ? 'enable' : 'disable'} firewall`,
+    );
+  };
+
   const addRule = async () => {
-    const port = parseInt(newRule.port);
-    if (!port || port < 1 || port > 65535) {
+    const port = Number(newRule.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
       toast.error('Invalid port number');
       return;
     }
-    try {
-      await hal.addFirewallRule({
+    await runMutation(
+      (revision) => hal.addFirewallRule({
         port,
         protocol: newRule.protocol,
         direction: 'in',
         action: newRule.action,
         source: newRule.source || undefined,
         description: newRule.description || undefined,
-      });
-      toast.success('Firewall rule added');
-      setNewRule({ port: '', protocol: 'tcp', action: 'allow', source: '', description: '' });
-      setShowAddForm(false);
-      fetchData();
-    } catch {
-      toast.error('Failed to add firewall rule');
-    }
+      }, revision),
+      'Firewall rule added',
+      'Failed to add firewall rule',
+      () => {
+        setNewRule({ port: '', protocol: 'tcp', action: 'allow', source: '', description: '' });
+        setShowAddForm(false);
+      },
+    );
   };
 
   const removeRule = async (id: string) => {
-    try {
-      await hal.deleteFirewallRule(id);
-      toast.success('Rule removed');
-      fetchData();
-    } catch {
-      toast.error('Failed to remove rule');
-    }
+    await runMutation((revision) => hal.deleteFirewallRule(id, revision), 'Rule removed', 'Failed to remove rule');
   };
 
   if (loading) {
@@ -454,42 +508,48 @@ function FirewallSubSection() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Status</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: status?.active ? '#22c55e' : '#6b7280' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: status?.active ? '#22c55e' : '#6b7280' }} />
-            {status?.active ? `Active (${status.rules_count} rules)` : 'Inactive'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: known && status.enabled ? '#22c55e' : '#6b7280' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: known && status.enabled ? '#22c55e' : '#6b7280' }} />
+            {known ? (status.enabled ? `Active (${status.rules_count ?? 'Unknown'} rules)` : 'Inactive') : 'Unknown'}
           </span>
           <button
-            onClick={() => toggleFirewall(!status?.active)}
-            disabled={acting}
+            onClick={() => toggleFirewall(!status?.enabled)}
+            disabled={!canWrite}
             style={{
               height: 26, padding: '0 10px',
-              background: status?.active ? 'transparent' : 'var(--amber)',
-              color: status?.active ? 'var(--text-dim)' : '#06060a',
-              border: status?.active ? '1px solid var(--border)' : 'none',
+              background: status?.enabled ? 'transparent' : 'var(--amber)',
+              color: status?.enabled ? 'var(--text-dim)' : '#06060a',
+              border: status?.enabled ? '1px solid var(--border)' : 'none',
               borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600,
-              cursor: acting ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-sans)',
+              cursor: canWrite ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-sans)',
             }}
           >
-            {status?.active ? 'Disable' : 'Enable'}
+            {status?.enabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>
+      {error && <div role="alert" style={{ paddingTop: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{error}</div>}
+      {known && !status.write_available && <div style={{ paddingTop: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Firewall changes are currently unavailable.</div>}
+      {known && status.reason === 'native_entries_unrepresented' && <div style={{ paddingTop: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Some saved native rules cannot be represented here. The list below is partial.</div>}
 
       {/* Rules */}
       <div style={{ padding: '12px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-            Rules ({rules.length})
+            Rules ({rules?.length ?? 'Unknown'}{known && status.reason === 'native_entries_unrepresented' ? ' represented' : ''})
           </span>
           <div style={{ display: 'flex', gap: 4 }}>
             <button
               onClick={fetchData}
+              disabled={acting}
+              aria-label="Refresh firewall configuration"
               style={{ height: 26, padding: '0 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               <RefreshCw size={12} />
             </button>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
+              disabled={!canWrite}
               style={{ height: 26, padding: '0 8px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
             >
               <Plus size={12} /> Add Rule
@@ -502,6 +562,7 @@ function FirewallSubSection() {
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <input
                 placeholder="Port"
+                disabled={!canWrite}
                 type="number"
                 min={1}
                 max={65535}
@@ -511,6 +572,7 @@ function FirewallSubSection() {
               />
               <select
                 value={newRule.protocol}
+                disabled={!canWrite}
                 onChange={(e) => setNewRule((p) => ({ ...p, protocol: e.target.value }))}
                 style={{ height: 30, padding: '0 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none' }}
               >
@@ -518,6 +580,7 @@ function FirewallSubSection() {
               </select>
               <select
                 value={newRule.action}
+                disabled={!canWrite}
                 onChange={(e) => setNewRule((p) => ({ ...p, action: e.target.value }))}
                 style={{ height: 30, padding: '0 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none' }}
               >
@@ -525,6 +588,7 @@ function FirewallSubSection() {
               </select>
               <input
                 placeholder="Source (e.g. any)"
+                disabled={!canWrite}
                 value={newRule.source}
                 onChange={(e) => setNewRule((p) => ({ ...p, source: e.target.value }))}
                 style={{ flex: 1, minWidth: 100, height: 30, padding: '0 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none', fontFamily: 'var(--font-sans)' }}
@@ -532,12 +596,14 @@ function FirewallSubSection() {
             </div>
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowAddForm(false)} style={{ height: 26, padding: '0 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Cancel</button>
-              <button onClick={addRule} style={{ height: 26, padding: '0 10px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Add</button>
+              <button onClick={addRule} disabled={!canWrite} style={{ height: 26, padding: '0 10px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>Add</button>
             </div>
           </div>
         )}
 
-        {rules.length === 0 ? (
+        {!rules ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Rules unavailable</div>
+        ) : rules.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No rules configured</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -559,6 +625,8 @@ function FirewallSubSection() {
                 </div>
                 <button
                   onClick={() => removeRule(r.id)}
+                  disabled={!canWrite}
+                  aria-label={`Remove rule ${r.id}`}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0 }}
                 >
                   <Trash2 size={14} />
@@ -577,47 +645,101 @@ function FirewallSubSection() {
 type FirewallService = hal.FirewallService;
 
 function FirewallServicesSubSection() {
-  const [services, setServices] = useState<FirewallService[]>([]);
+  const [snapshot, setSnapshot] = useState<{ status: FirewallStatus; services: FirewallService[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const requestGeneration = useRef(0);
+  const actionPending = useRef(false);
 
   const fetchServices = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+    setLoading(true);
+    setSnapshot(null);
+    setError(null);
     try {
-      setServices(await hal.getFirewallServices());
+      const [status, serviceSnapshot] = await Promise.all([hal.getFirewallStatus(), hal.getFirewallServicesSnapshot()]);
+      if (generation !== requestGeneration.current) return null;
+      if (!status.revision || status.revision !== serviceSnapshot.revision) {
+        throw new Error('Firewall configuration changed while loading');
+      }
+      const next = { status, services: serviceSnapshot.services };
+      setSnapshot(next);
+      return next;
     } catch {
-      // endpoint may not be available
+      if (generation === requestGeneration.current) {
+        setSnapshot(null);
+        setError('Unable to read a consistent service policy. Refresh to try again.');
+      }
+      return null;
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchServices();
+    void fetchServices();
     // Poll every 30s so externally-added services appear without
     // requiring a manual refresh. The interval is intentionally
     // generous — this list rarely changes.
-    const id = setInterval(fetchServices, 30_000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (!actionPending.current) void fetchServices();
+    }, 30_000);
+    return () => {
+      clearInterval(id);
+      ++requestGeneration.current;
+    };
   }, [fetchServices]);
 
+  const status = snapshot?.status;
+  const services = snapshot?.services;
+  const known = status?.state === 'available' && typeof status.enabled === 'boolean';
+  const canWrite = known && !!status?.revision && status.write_available === true && !loading && !updating;
+  const canWriteService = (service: FirewallService) => canWrite && service.kind === 'declared_policy'
+    && service.effective_access_verified === false && service.complete === true;
+
   const toggleAccess = async (name: string, field: 'lan_allowed' | 'external_allowed', value: boolean) => {
+    const svc = services?.find(s => s.name === name);
+    if (!svc || !canWriteService(svc) || !status?.revision || actionPending.current) return;
+    actionPending.current = true;
+    const generation = requestGeneration.current;
+    const policy = {
+      lan_allowed: field === 'lan_allowed' ? value : svc.lan_allowed,
+      external_allowed: field === 'external_allowed' ? value : svc.external_allowed,
+    };
     setUpdating(name);
+    let completed = false;
     try {
-      const svc = services.find(s => s.name === name);
-      if (!svc) return;
-      await hal.updateFirewallServicePolicy(name, {
-        lan_allowed: field === 'lan_allowed' ? value : svc.lan_allowed,
-        external_allowed: field === 'external_allowed' ? value : svc.external_allowed,
-      });
-      setServices(prev => prev.map(s => s.name === name ? { ...s, [field]: value } : s));
-      toast.success(`${name} access updated`);
+      await hal.updateFirewallServicePolicy(name, policy, status.revision);
+      completed = true;
     } catch {
-      toast.error(`Failed to update ${name}`);
+      // A failed request can have applied a change. Read it again without retrying.
     }
+    if (generation !== requestGeneration.current) {
+      actionPending.current = false;
+      return;
+    }
+    const refreshGeneration = requestGeneration.current + 1;
+    const refreshed = await fetchServices();
+    if (refreshGeneration !== requestGeneration.current) {
+      actionPending.current = false;
+      return;
+    }
+    const saved = refreshed?.services.find(service => service.name === name);
+    if (completed && refreshed?.status.state === 'available' && saved?.complete === true
+      && saved.lan_allowed === policy.lan_allowed && saved.external_allowed === policy.external_allowed) {
+      toast.success(`${name} access updated`);
+    } else {
+      const message = `The service policy change could not be confirmed for ${name}. The result may be uncertain; refresh before trying again.`;
+      setError(message);
+      toast.error(message);
+    }
+    actionPending.current = false;
     setUpdating(null);
   };
 
-  const filtered = services.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()));
+  const filtered = services?.filter(s => s.name.toLowerCase().includes(filter.toLowerCase())) ?? [];
 
   if (loading) {
     return (
@@ -627,18 +749,21 @@ function FirewallServicesSubSection() {
     );
   }
 
-  if (services.length === 0) return null;
-
   return (
     <SettingSection
       title="Service Access"
       description="Control which services are accessible from LAN or externally."
       action={
-        <button onClick={fetchServices} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}>
+        <button onClick={fetchServices} disabled={!!updating} aria-label="Refresh service policy" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}>
           <RefreshCw size={14} />
         </button>
       }
     >
+      <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Declared policy only. Effective access is not verified.</div>
+      {error && <div role="alert" style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{error}</div>}
+      {!known && <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Service policy unknown</div>}
+      {known && !status.write_available && <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Firewall changes are currently unavailable.</div>}
+      {known && services?.length === 0 && <div style={{ marginBottom: 8, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No declared service policies</div>}
       <div style={{ marginBottom: 8 }}>
         <input
           placeholder="Filter services..."
@@ -670,9 +795,11 @@ function FirewallServicesSubSection() {
             <div style={{ width: 60, display: 'flex', justifyContent: 'center' }}>
               <button
                 onClick={() => toggleAccess(svc.name, 'lan_allowed', !svc.lan_allowed)}
-                disabled={updating === svc.name}
+                disabled={!canWriteService(svc)}
+                aria-label={`${svc.name} declared LAN policy`}
+                aria-pressed={svc.lan_allowed}
                 style={{
-                  width: 32, height: 18, borderRadius: 9, border: 'none', cursor: updating === svc.name ? 'not-allowed' : 'pointer',
+                  width: 32, height: 18, borderRadius: 9, border: 'none', cursor: canWriteService(svc) ? 'pointer' : 'not-allowed',
                   background: svc.lan_allowed ? '#22c55e' : 'var(--border)',
                   position: 'relative', transition: 'background 0.2s',
                 }}
@@ -687,9 +814,11 @@ function FirewallServicesSubSection() {
             <div style={{ width: 60, display: 'flex', justifyContent: 'center' }}>
               <button
                 onClick={() => toggleAccess(svc.name, 'external_allowed', !svc.external_allowed)}
-                disabled={updating === svc.name}
+                disabled={!canWriteService(svc)}
+                aria-label={`${svc.name} declared external policy`}
+                aria-pressed={svc.external_allowed}
                 style={{
-                  width: 32, height: 18, borderRadius: 9, border: 'none', cursor: updating === svc.name ? 'not-allowed' : 'pointer',
+                  width: 32, height: 18, borderRadius: 9, border: 'none', cursor: canWriteService(svc) ? 'pointer' : 'not-allowed',
                   background: svc.external_allowed ? '#f59e0b' : 'var(--border)',
                   position: 'relative', transition: 'background 0.2s',
                 }}

@@ -19,6 +19,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { X, ChevronUp, ChevronDown } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalWebSocket } from './terminal-ws';
+import { useI18n } from '@/i18n';
 
 const DARK_AMBER_THEME = {
   background: '#0c0a09',
@@ -54,6 +55,7 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ sessionId, ws, isActive, type, cwd, connectionId }: TerminalPanelProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -242,7 +244,8 @@ export function TerminalPanel({ sessionId, ws, isActive, type, cwd, connectionId
                 handleCloseSearch();
               }
             }}
-            placeholder="Search..."
+            placeholder={t('terminal.search')}
+            aria-label={t('terminal.search')}
             autoFocus
             style={{
               flex: 1,
@@ -256,13 +259,13 @@ export function TerminalPanel({ sessionId, ws, isActive, type, cwd, connectionId
               outline: 'none',
             }}
           />
-          <button onClick={handleSearchPrev} style={searchBtnStyle} title="Previous (Shift+Enter)">
+          <button onClick={handleSearchPrev} style={searchBtnStyle} title={t('terminal.previous')} aria-label={t('terminal.previous')}>
             <ChevronUp size={13} />
           </button>
-          <button onClick={handleSearchNext} style={searchBtnStyle} title="Next (Enter)">
+          <button onClick={handleSearchNext} style={searchBtnStyle} title={t('terminal.next')} aria-label={t('terminal.next')}>
             <ChevronDown size={13} />
           </button>
-          <button onClick={handleCloseSearch} style={searchBtnStyle} title="Close (Escape)">
+          <button onClick={handleCloseSearch} style={searchBtnStyle} title={t('terminal.closeSearch')} aria-label={t('terminal.closeSearch')}>
             <X size={13} />
           </button>
         </div>

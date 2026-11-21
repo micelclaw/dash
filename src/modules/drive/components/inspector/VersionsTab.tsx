@@ -17,6 +17,7 @@ import { FileVersionHistory } from '@/components/shared/FileVersionHistory';
 import { api, ApiError } from '@/services/api';
 import { DriveSettingsModal } from './DriveSettingsModal';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 interface VersionsTabProps {
   file: FileRecord;
@@ -28,6 +29,7 @@ interface VersionsTabProps {
  * from the versions endpoint (Free tier) renders the Pro upsell instead.
  */
 export function VersionsTab({ file }: VersionsTabProps) {
+  const { t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [proBlocked, setProBlocked] = useState(false);
 
@@ -53,12 +55,14 @@ export function VersionsTab({ file }: VersionsTabProps) {
         borderBottom: '1px solid var(--border)', flexShrink: 0,
       }}>
         <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-          Snapshots of <strong style={{ color: 'var(--text)' }}>{file.filename}</strong>
+          {t('drive.versionsTab.snapshotsOf', { filename: '' })}
+          <strong style={{ color: 'var(--text)' }}>{file.filename}</strong>
         </span>
         <div style={{ flex: 1 }} />
         <button
           onClick={() => setSettingsOpen(true)}
-          title="Drive snapshot settings"
+          title={t('drive.versionsTab.settings')}
+          aria-label={t('drive.versionsTab.settingsAria')}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', padding: 2, display: 'flex',
@@ -72,12 +76,12 @@ export function VersionsTab({ file }: VersionsTabProps) {
         <div style={{ padding: 14 }}>
           <ProUpsellPanel
             feature="Version history"
-            description="Automatic file snapshots with restore are a Pro feature. Upgrade to keep a full history of every file."
+            description={t('drive.versionsTab.upgradeDescription')}
           />
         </div>
       ) : file.is_directory ? (
         <div style={{ padding: 14, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          Folders don't have version history.
+          {t('drive.versionsTab.folderHistoryUnavailable')}
         </div>
       ) : (
         <FileVersionHistory fileId={file.id} filename={file.filename} defaultExpanded />

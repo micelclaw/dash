@@ -17,6 +17,7 @@ import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { resolveEntity } from '@/config/entity-registry';
 import type { SearchResult } from '@/types/search';
+import { hasMessage, useI18n } from '@/i18n';
 
 interface RelateModalProps {
   open: boolean;
@@ -30,41 +31,29 @@ interface RelateModalProps {
 
 // Conjunto curado de dominios relacionables (value + label de copy). El icono y
 // el color salen del SSOT (resolveEntity) — no se duplican aquí.
-const DOMAINS: { value: string; label: string }[] = [
-  { value: 'note', label: 'Notes' },
-  { value: 'event', label: 'Events' },
-  { value: 'contact', label: 'Contacts' },
-  { value: 'email', label: 'Emails' },
-  { value: 'file', label: 'Files' },
-  { value: 'diary', label: 'Diary' },
+const DOMAINS: { value: string }[] = [
+  { value: 'note' }, { value: 'event' }, { value: 'contact' },
+  { value: 'email' }, { value: 'file' }, { value: 'diary' },
 ];
 
-const DOMAIN_LABELS: Record<string, string> = {
-  note: 'Notes',
-  event: 'Events',
-  contact: 'Contacts',
-  email: 'Emails',
-  file: 'Files',
-  diary: 'Diary',
-};
-
-function getResultTitle(result: SearchResult): string {
+function getResultTitle(result: SearchResult, t: (key: string) => string): string {
   const r = result.record;
   if (!r) {
-    return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || 'Unknown';
+    return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || t('shared.result.unknown');
   }
   switch (result.domain) {
-    case 'note': return String(r.title || 'Untitled');
-    case 'event': return String(r.title || 'Untitled event');
-    case 'contact': return String(r.display_name || 'Unknown');
-    case 'email': return String(r.subject || '(no subject)');
-    case 'file': return String(r.filename || 'Untitled');
-    case 'diary': return String(r.entry_date || 'Diary entry');
-    default: return 'Unknown';
+    case 'note': return String(r.title || t('shared.result.untitled'));
+    case 'event': return String(r.title || t('shared.result.untitledEvent'));
+    case 'contact': return String(r.display_name || t('shared.result.unknown'));
+    case 'email': return String(r.subject || t('shared.result.noSubject'));
+    case 'file': return String(r.filename || t('shared.result.untitled'));
+    case 'diary': return String(r.entry_date || t('shared.result.diaryEntry'));
+    default: return t('shared.result.unknown');
   }
 }
 
 export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, onLinked }: RelateModalProps) {
+  const { t } = useI18n();
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -151,22 +140,22 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
           created_by: 'user',
         });
       }
-      toast.success(ids.length > 1 ? `${ids.length} relations created` : 'Relation created');
+      toast.success(ids.length > 1 ? t('shared.relate.createdMany', { count: ids.length }) : t('shared.relate.createdOne'));
       window.dispatchEvent(new CustomEvent('links-changed'));
       onLinked?.();
       onClose();
     } catch {
-      toast.error('Failed to create relation');
+      toast.error(t('shared.relate.createError'));
     }
     setLinking(false);
-  }, [selectedResult, sourceType, sourceId, sourceIds, onLinked, onClose]);
+  }, [selectedResult, sourceType, sourceId, sourceIds, onLinked, onClose, t]);
 
   if (!open) return null;
 
   const showSemanticScore = searchMode === 'semantic' || lastSearchType === 'hybrid_rrf';
   const placeholder = selectedDomain
-    ? `Search ${DOMAIN_LABELS[selectedDomain]?.toLowerCase() ?? 'items'}...`
-    : 'Search across all domains...';
+    ? t('shared.relate.searchDomain', { domain: t(hasMessage(`shared.domain.${selectedDomain}`) ? `shared.domain.${selectedDomain}` : 'shared.result.unknown').toLowerCase() })
+    : t('shared.relate.searchAll');
 
   return (
     <div
@@ -203,9 +192,9 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
           flexShrink: 0,
         }}>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-            Relate with...
+            {t('shared.relate.title')}
           </h3>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} title={t('shared.action.close')} aria-label={t('shared.action.close')} style={{
             background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2,
           }}>
             <X size={16} />
@@ -218,6 +207,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
             {/* All domains button */}
             <button
               onClick={() => { setSelectedDomain(null); setSelectedId(null); setResults([]); }}
+              aria-pressed={selectedDomain === null}
               style={{
                 display: 'flex', alignItems: 'center', gap: 4,
                 padding: '4px 10px',
@@ -231,7 +221,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
               }}
             >
               <Layers size={12} />
-              All
+              {t('shared.domain.all')}
             </button>
             {DOMAINS.map(d => {
               const ent = resolveEntity(d.value);
@@ -242,6 +232,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
                 <button
                   key={d.value}
                   onClick={() => { setSelectedDomain(d.value); setSelectedId(null); setResults([]); }}
+                  aria-pressed={active}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 4,
                     padding: '4px 10px',
@@ -255,7 +246,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
                   }}
                 >
                   <Icon size={12} />
-                  {d.label}
+                  {t(`shared.domain.${d.value}`)}
                 </button>
               );
             })}
@@ -271,6 +262,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
               value={query}
               onChange={e => { setQuery(e.target.value); setSelectedId(null); }}
               placeholder={placeholder}
+              aria-label={placeholder}
               autoFocus
               style={{
                 width: '100%',
@@ -296,19 +288,19 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
           }}>
             {searching && (
               <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Searching...
+                {t('shared.relate.searching')}
               </div>
             )}
             {!searching && query.length >= 2 && results.length === 0 && (
               <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                No results found
+                {t('shared.relate.noResults')}
               </div>
             )}
             {results.length > 0 && Array.from(groupedResults.entries()).map(([domain, items]) => {
               const domainEnt = resolveEntity(domain);
               const DomainIcon = domainEnt.Icon;
               const domainColor = domainEnt.color;
-              const label = DOMAIN_LABELS[domain] ?? domain;
+              const label = t(hasMessage(`shared.domain.${domain}`) ? `shared.domain.${domain}` : 'shared.result.unknown');
 
               return (
                 <div key={domain}>
@@ -330,6 +322,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
                       <button
                         key={result.record_id}
                         onClick={() => setSelectedId(isSelected ? null : result.record_id)}
+                        aria-pressed={isSelected}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           width: '100%', padding: '6px 12px 6px 24px',
@@ -350,7 +343,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
                             color: 'var(--text)', fontWeight: 500,
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           }}>
-                            {getResultTitle(result)}
+                            {getResultTitle(result, t)}
                           </div>
                           {result.snippet && (
                             <div style={{
@@ -394,6 +387,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
                   setSearchMode(next);
                   try { localStorage.setItem('claw-search-mode', next); } catch { /* */ }
                 }}
+                aria-pressed={isActive}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 4,
                   height: 24,
@@ -409,18 +403,18 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
                 }}
               >
                 {sm === 'fulltext' ? <Type size={10} /> : <Brain size={10} />}
-                {sm === 'fulltext' ? 'Keywords' : 'Semantic'}
+                {sm === 'fulltext' ? t('shared.relate.keywords') : t('shared.relate.semantic')}
                 {sm === 'semantic' && searchMode !== 'semantic' && <Lock size={8} style={{ opacity: 0.6 }} />}
               </button>
             );
           })}
           {lastSearchType === 'hybrid_rrf' && searchMode === 'auto' && results.length > 0 && (
             <span style={{ marginLeft: 4, fontSize: '0.625rem', color: 'var(--amber)', fontFamily: 'var(--font-sans)' }}>
-              semantic
+              {t('shared.relate.semantic')}
             </span>
           )}
           <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-            {searchMode === 'auto' ? 'Auto' : searchMode === 'fulltext' ? 'Keywords' : 'Semantic'}
+            {searchMode === 'auto' ? t('shared.relate.auto') : searchMode === 'fulltext' ? t('shared.relate.keywords') : t('shared.relate.semantic')}
           </span>
         </div>
 
@@ -439,7 +433,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('shared.action.cancel')}
           </button>
           <button
             onClick={handleLink}
@@ -456,7 +450,7 @@ export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, on
             }}
           >
             <Link2 size={14} />
-            {linking ? 'Linking...' : 'Create relation'}
+            {linking ? t('shared.relate.linking') : t('shared.relate.create')}
           </button>
         </div>
       </div>

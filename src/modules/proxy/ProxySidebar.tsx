@@ -16,6 +16,7 @@ import {
   ShieldCheck, Lock, FileText, Settings, Radio,
 } from 'lucide-react';
 import type { ProxyStatus } from './hooks/use-proxy-status';
+import { useI18n } from '@/i18n';
 
 export type ProxySection =
   | 'overview' | 'hosts' | 'redirects' | 'streams' | '404_hosts'
@@ -34,6 +35,7 @@ interface ProxySidebarProps {
 export function ProxySidebar({
   active, onChange, status, hostCounts, certCount, aclCount,
 }: ProxySidebarProps) {
+  const { t } = useI18n();
   return (
     <div style={{
       width: 210, flexShrink: 0,
@@ -56,30 +58,30 @@ export function ProxySidebar({
           boxShadow: status?.running ? '0 0 6px rgba(34,197,94,0.4)' : 'none',
           flexShrink: 0,
         }} />
-        Reverse Proxy
+        {t('proxy.reverseProxy')}
       </div>
 
       {/* ─── PROXY ─── */}
-      <SectionHeader label="Proxy" />
-      <NavItem icon={LayoutDashboard} label="Dashboard" active={active === 'overview'} onClick={() => onChange('overview')} />
-      <NavItem icon={Server} label="Proxy Hosts" active={active === 'hosts'} onClick={() => onChange('hosts')} count={hostCounts.proxy} />
-      <NavItem icon={ArrowLeftRight} label="Redirections" active={active === 'redirects'} onClick={() => onChange('redirects')} count={hostCounts.redirect} />
-      <NavItem icon={Radio} label="Streams" active={active === 'streams'} onClick={() => onChange('streams')} badge="SOON" />
-      <NavItem icon={Ban} label="404 Hosts" active={active === '404_hosts'} onClick={() => onChange('404_hosts')} count={hostCounts.notfound} />
+      <SectionHeader label={t('proxy.section')} />
+      <NavItem icon={LayoutDashboard} label={t('proxy.dashboard')} active={active === 'overview'} onClick={() => onChange('overview')} />
+      <NavItem icon={Server} label={t('proxy.hosts')} active={active === 'hosts'} onClick={() => onChange('hosts')} count={hostCounts.proxy} />
+      <NavItem icon={ArrowLeftRight} label={t('proxy.redirections')} active={active === 'redirects'} onClick={() => onChange('redirects')} count={hostCounts.redirect} />
+      <NavItem icon={Radio} label={t('proxy.streams')} active={active === 'streams'} onClick={() => onChange('streams')} badge={t('proxy.soon')} />
+      <NavItem icon={Ban} label={t('proxy.notFoundHosts')} active={active === '404_hosts'} onClick={() => onChange('404_hosts')} count={hostCounts.notfound} />
 
       <Divider />
 
       {/* ─── SECURITY ─── */}
-      <SectionHeader label="Security" />
-      <NavItem icon={Lock} label="SSL Certificates" active={active === 'certificates'} onClick={() => onChange('certificates')} count={certCount} />
-      <NavItem icon={ShieldCheck} label="Access Lists" active={active === 'access_lists'} onClick={() => onChange('access_lists')} count={aclCount} />
+      <SectionHeader label={t('proxy.security')} />
+      <NavItem icon={Lock} label={t('proxy.certificates')} active={active === 'certificates'} onClick={() => onChange('certificates')} count={certCount} />
+      <NavItem icon={ShieldCheck} label={t('proxy.accessLists')} active={active === 'access_lists'} onClick={() => onChange('access_lists')} count={aclCount} />
 
       <Divider />
 
       {/* ─── SYSTEM ─── */}
-      <SectionHeader label="System" />
-      <NavItem icon={FileText} label="Audit Log" active={active === 'audit_log'} onClick={() => onChange('audit_log')} />
-      <NavItem icon={Settings} label="Settings" active={active === 'settings'} onClick={() => onChange('settings')} />
+      <SectionHeader label={t('proxy.system')} />
+      <NavItem icon={FileText} label={t('proxy.auditLog')} active={active === 'audit_log'} onClick={() => onChange('audit_log')} />
+      <NavItem icon={Settings} label={t('proxy.settings')} active={active === 'settings'} onClick={() => onChange('settings')} />
 
       <div style={{ flex: 1 }} />
     </div>

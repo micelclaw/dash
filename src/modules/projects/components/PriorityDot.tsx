@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useI18n } from '@/i18n';
+
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
   high: '#f97316',
@@ -34,12 +36,13 @@ export function PriorityDot({ priority }: { priority: string }) {
 }
 
 export function PriorityBadge({ priority }: { priority: string }) {
-  const labels: Record<string, string> = {
-    urgent: 'Urgent',
-    high: 'High',
-    medium: 'Medium',
-    low: 'Low',
-    none: 'None',
+  const { t } = useI18n();
+  const labelKeys: Record<string, string> = {
+    urgent: 'projects.priorityBadge.urgent',
+    high: 'projects.priorityBadge.high',
+    medium: 'projects.priorityBadge.medium',
+    low: 'projects.priorityBadge.low',
+    none: 'projects.priorityBadge.none',
   };
 
   return (
@@ -53,7 +56,7 @@ export function PriorityBadge({ priority }: { priority: string }) {
       }}
     >
       <PriorityDot priority={priority} />
-      {labels[priority] ?? priority}
+      {labelKeys[priority] ? t(labelKeys[priority]) : priority}
     </span>
   );
 }

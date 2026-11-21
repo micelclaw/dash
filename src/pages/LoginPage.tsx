@@ -15,6 +15,10 @@ import { useNavigate } from 'react-router';
 import { useAuthStore, REMEMBER_KEY } from '@/stores/auth.store';
 import { getMockUser } from '@/services/mock';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
+import { OwnerSetup } from '@/components/onboarding/OwnerSetup';
+import { useInitialStatus } from '@/hooks/use-initial-status';
+import { initialDestination } from '@/components/onboarding/progress';
+import { ImportedEnrollmentStep } from './ImportedEnrollmentStep';
 
 /* ── shared layout constants ─────────────────────────────────────── */
 
@@ -47,10 +51,15 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [enrollment, setEnrollment] = useState<{ token: string; expiresAt: string } | null>(null);
   const [remember, setRemember] = useState(() => {
     try { return localStorage.getItem(REMEMBER_KEY) !== '0'; } catch { return true; }
   });
   const [checkingAutoLogin, setCheckingAutoLogin] = useState(true);
+  const [existingOwner, setExistingOwner] = useState(false);
+  const useMock = import.meta.env.VITE_MOCK_API === 'true';
+  const initial = useInitialStatus(!useMock);
+  const requiresSetup = initial.status?.requires_setup === true && !existingOwner;
   const [vw, setVw] = useState(() => window.innerWidth);
   const login = useAuthStore((s) => s.login);
   const login2fa = useAuthStore((s) => s.login2fa);
@@ -68,38 +77,21 @@ export function LoginPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Auto-login for single_user mode (skip if user explicitly logged out)
+  // A known service status is required before choosing owner setup or login.
   useEffect(() => {
-    const useMock = import.meta.env.VITE_MOCK_API === 'true';
-    if (useMock) {
-      setCheckingAutoLogin(false);
+    if (useMock) { setCheckingAutoLogin(false); return; }
+    const res = initial.status;
+    if (!res) return;
+    if (res.requires_setup) { setCheckingAutoLogin(false); return; }
+    if (sessionStorage.getItem('claw-explicit-logout')) { setCheckingAutoLogin(false); return; }
+    const { mode, auto_login, access_token, user } = res;
+    if (mode === 'single_user' && auto_login && access_token && user) {
+      setAuth({id: user.id, email: user.email ?? '', display_name: user.display_name, role: user.role, tier: user.tier ?? 'free'}, {accessToken: access_token, refreshToken: ''});
+      navigate(initialDestination(useAuthStore.getState().user), { replace: true });
       return;
     }
-
-    if (sessionStorage.getItem('claw-explicit-logout')) {
-      setCheckingAutoLogin(false);
-      return;
-    }
-
-    const baseUrl = import.meta.env.VITE_API_URL ?? '';
-    fetch(`${baseUrl}/api/v1/auth/status`)
-      .then((r) => r.json())
-      .then((res) => {
-        const { mode, auto_login, access_token, user } = res.data ?? {};
-        if (mode === 'single_user' && auto_login && access_token && user) {
-          setAuth(
-            { id: user.id, email: user.email ?? '', display_name: user.display_name, role: user.role, tier: res.tier ?? 'free' },
-            { accessToken: access_token, refreshToken: '' },
-          );
-          navigate('/', { replace: true });
-          return;
-        }
-        setCheckingAutoLogin(false);
-      })
-      .catch(() => {
-        setCheckingAutoLogin(false);
-      });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    setCheckingAutoLogin(false);
+  }, [initial.status, navigate, setAuth, useMock]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -116,17 +108,22 @@ export function LoginPage() {
         const user = getMockUser();
         setAuth(user, { accessToken: 'mock-token', refreshToken: 'mock-refresh' });
         sessionStorage.removeItem('claw-explicit-logout');
-        navigate('/', { replace: true });
+        navigate(initialDestination(useAuthStore.getState().user), { replace: true });
         return;
       }
       const result = await login(email, password);
+      if ('needsEnrollment' in result) {
+        setEnrollment({ token: result.token, expiresAt: result.expiresAt });
+        setPassword('');
+        return;
+      }
       // 2FA gate: do NOT navigate. Component re-renders with the
       // pending2fa state set, switching to the TwoFactorStep view.
       if ('needs2fa' in result) {
         return;
       }
       sessionStorage.removeItem('claw-explicit-logout');
-      navigate('/', { replace: true });
+      navigate(initialDestination(useAuthStore.getState().user), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid credentials. Please try again.');
     } finally {
@@ -140,7 +137,7 @@ export function LoginPage() {
     try {
       await login2fa(code);
       sessionStorage.removeItem('claw-explicit-logout');
-      navigate('/', { replace: true });
+      navigate(initialDestination(useAuthStore.getState().user), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code. Please try again.');
     } finally {
@@ -154,7 +151,7 @@ export function LoginPage() {
     setPassword('');
   }
 
-  if (checkingAutoLogin) {
+  if (!useMock && !initial.status || checkingAutoLogin && initial.phase !== 'unavailable') {
     return (
       <div style={shellStyle}>
         <div style={bgStyle} />
@@ -170,11 +167,16 @@ export function LoginPage() {
             fontSize: '0.875rem',
           }}
         >
-          Connecting...
+          <div role="status" className="space-y-3 text-center"><div aria-hidden="true" className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--primary)]"/>
+            <p>{initial.phase === 'unavailable' ? 'Servicio temporalmente no disponible' : 'Preparando Micelclaw…'}</p>
+            {(initial.phase === 'unavailable'||initial.attempt>=6) && <><p>Estamos preparando el sistema y confirmando su disponibilidad. Reintento {initial.attempt} de 6.</p><button type="button" onClick={initial.retry}>Reintentar comprobación</button></>}
+          </div>
         </div>
       </div>
     );
   }
+
+  if (requiresSetup) return <OwnerSetup onExisting={() => {setExistingOwner(true); setError('El propietario ya existe. Inicia sesión.');}} />;
 
   return (
     <div style={shellStyle}>
@@ -192,7 +194,9 @@ export function LoginPage() {
           paddingBottom: isMobile ? 0 : isNarrow ? 100 : 200,
         }}
       >
-        {pending2fa ? (
+        {enrollment ? (
+          <ImportedEnrollmentStep token={enrollment.token} expiresAt={enrollment.expiresAt} onDone={() => { setEnrollment(null); setPassword(''); setError(''); }} />
+        ) : pending2fa ? (
           <TwoFactorStep
             email={pending2fa.email}
             error={error}
@@ -222,6 +226,7 @@ export function LoginPage() {
             </p>
           </div>
 
+          {initial.status?.ownership_recovery_required && !requiresSetup && <p role="alert">No hay propietario activo, pero existen cuentas. Inicia sesión con una cuenta existente para la recuperación de propiedad; no se permite una nueva apropiación pública.</p>}
           {error && (
             <div
               style={{

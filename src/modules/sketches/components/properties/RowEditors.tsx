@@ -13,6 +13,7 @@
 // ─── Editores de filas key/value (nodos table y card) ───
 
 import { AddButton, PanelInput, RemoveButton, Section, inputStyle } from './shared';
+import { useI18n } from '@/i18n';
 
 export function TableRowsEditor({
   rows,
@@ -21,6 +22,7 @@ export function TableRowsEditor({
   rows: Array<{ key: string; value: string; type?: string }>;
   onChange: (rows: Array<{ key: string; value: string; type?: string }>) => void;
 }) {
+  const { t } = useI18n();
   const update = (i: number, field: string, val: string) => {
     const next = rows.map((r, idx) => (idx === i ? { ...r, [field]: val } : r));
     onChange(next);
@@ -29,13 +31,14 @@ export function TableRowsEditor({
   const add = () => onChange([...rows, { key: '', value: '', type: 'field' }]);
 
   return (
-    <Section title="Columns">
+    <Section title={t('sketches.rowEditors.columns')}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <AddButton onClick={add}>+ Add</AddButton>
+        <AddButton onClick={add}>{t('sketches.rowEditors.add')}</AddButton>
       </div>
       {rows.map((row, i) => (
         <div key={i} style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
           <select
+            aria-label={t('sketches.rowEditors.columnType')}
             value={row.type || 'field'}
             onChange={(e) => update(i, 'type', e.target.value)}
             style={{ ...inputStyle, width: 42, padding: '2px 2px', fontSize: 10 }}
@@ -46,19 +49,21 @@ export function TableRowsEditor({
           </select>
           <PanelInput
             type="text"
+            aria-label={t('sketches.rowEditors.columnName')}
             value={row.key}
             onChange={(e) => update(i, 'key', e.target.value)}
-            placeholder="name"
+            placeholder={t('sketches.rowEditors.columnName')}
             style={{ flex: 1, fontSize: 10, padding: '2px 4px' }}
           />
           <PanelInput
             type="text"
+            aria-label={t('sketches.rowEditors.columnValueType')}
             value={row.value}
             onChange={(e) => update(i, 'value', e.target.value)}
-            placeholder="type"
+            placeholder={t('sketches.rowEditors.columnValueType')}
             style={{ width: 50, fontSize: 10, padding: '2px 4px' }}
           />
-          <RemoveButton onClick={() => remove(i)} />
+          <RemoveButton onClick={() => remove(i)} title={t('sketches.rowEditors.removeColumn')} aria-label={t('sketches.rowEditors.removeColumn')} />
         </div>
       ))}
     </Section>
@@ -72,6 +77,7 @@ export function CardPropertiesEditor({
   properties: Array<{ key: string; value: string }>;
   onChange: (props: Array<{ key: string; value: string }>) => void;
 }) {
+  const { t } = useI18n();
   const update = (i: number, field: string, val: string) => {
     const next = properties.map((p, idx) => (idx === i ? { ...p, [field]: val } : p));
     onChange(next);
@@ -80,27 +86,29 @@ export function CardPropertiesEditor({
   const add = () => onChange([...properties, { key: '', value: '' }]);
 
   return (
-    <Section title="Properties">
+    <Section title={t('sketches.rowEditors.properties')}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <AddButton onClick={add}>+ Add</AddButton>
+        <AddButton onClick={add}>{t('sketches.rowEditors.add')}</AddButton>
       </div>
       {properties.map((prop, i) => (
         <div key={i} style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
           <PanelInput
             type="text"
+            aria-label={t('sketches.rowEditors.propertyKey')}
             value={prop.key}
             onChange={(e) => update(i, 'key', e.target.value)}
-            placeholder="key"
+            placeholder={t('sketches.rowEditors.propertyKey')}
             style={{ flex: 1, fontSize: 10, padding: '2px 4px' }}
           />
           <PanelInput
             type="text"
+            aria-label={t('sketches.rowEditors.propertyValue')}
             value={prop.value}
             onChange={(e) => update(i, 'value', e.target.value)}
-            placeholder="value"
+            placeholder={t('sketches.rowEditors.propertyValue')}
             style={{ flex: 1, fontSize: 10, padding: '2px 4px' }}
           />
-          <RemoveButton onClick={() => remove(i)} />
+          <RemoveButton onClick={() => remove(i)} title={t('sketches.rowEditors.removeProperty')} aria-label={t('sketches.rowEditors.removeProperty')} />
         </div>
       ))}
     </Section>

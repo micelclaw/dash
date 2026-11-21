@@ -17,6 +17,7 @@
 import { RotateCcw } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import { SHAPE_DEFAULTS } from './types';
 import type { NodeShapeType, EdgeMarkerType } from './types';
 import {
@@ -34,6 +35,7 @@ import { SelectionStats } from './components/properties/SelectionStats';
 // ─── Node Style Tab ─────────────────────────────────────
 
 function NodeStyleTab({ id }: { id: string }) {
+  const { t } = useI18n();
   const node = useDiagramsStore((s) => s.nodes.find((n) => n.id === id));
   const updateNodeData = useDiagramsStore((s) => s.updateNodeData);
   if (!node) return null;
@@ -42,21 +44,21 @@ function NodeStyleTab({ id }: { id: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <Section title="Fill">
-        <ColorPicker value={d.color} onChange={(color) => updateNodeData(id, { color })} label="Shape Color" />
-        <ColorPicker value={d.bgColor} onChange={(bgColor) => updateNodeData(id, { bgColor })} label="Background" />
+      <Section title={t('sketches.properties.section.fill')}>
+        <ColorPicker value={d.color} onChange={(color) => updateNodeData(id, { color })} label={t('sketches.properties.field.shapeColor')} />
+        <ColorPicker value={d.bgColor} onChange={(bgColor) => updateNodeData(id, { bgColor })} label={t('sketches.properties.field.background')} />
       </Section>
 
-      <Section title="Text">
+      <Section title={t('sketches.properties.section.text')}>
         <SliderField
-          label="Font Size"
+          label={t('sketches.properties.field.fontSize')}
           value={d.fontSize || 12}
           min={8}
           max={48}
           onChange={(fontSize) => updateNodeData(id, { fontSize })}
           suffix="px"
         />
-        <ColorPicker value={d.textColor} onChange={(textColor) => updateNodeData(id, { textColor })} label="Text Color" />
+        <ColorPicker value={d.textColor} onChange={(textColor) => updateNodeData(id, { textColor })} label={t('sketches.properties.field.textColor')} />
         <TextFormatBar
           fontWeight={d.fontWeight}
           fontStyle={d.fontStyle}
@@ -66,9 +68,9 @@ function NodeStyleTab({ id }: { id: string }) {
         />
       </Section>
 
-      <Section title="Border" defaultOpen={false}>
+      <Section title={t('sketches.properties.section.border')} defaultOpen={false}>
         <SliderField
-          label="Width"
+          label={t('sketches.properties.field.width')}
           value={d.borderWidth ?? 0}
           min={0}
           max={8}
@@ -80,7 +82,7 @@ function NodeStyleTab({ id }: { id: string }) {
           <>
             <ColorPicker value={d.borderColor} onChange={(borderColor) => updateNodeData(id, { borderColor })} />
             <div>
-              <span style={miniLabelStyle}>Style</span>
+              <span style={miniLabelStyle}>{t('sketches.properties.field.style')}</span>
               <Segmented
                 options={['solid', 'dashed', 'dotted'] as const}
                 value={d.borderStyle || 'solid'}
@@ -90,7 +92,7 @@ function NodeStyleTab({ id }: { id: string }) {
           </>
         )}
         <SliderField
-          label="Radius"
+          label={t('sketches.properties.field.radius')}
           value={d.borderRadius ?? 0}
           min={0}
           max={50}
@@ -99,9 +101,9 @@ function NodeStyleTab({ id }: { id: string }) {
         />
       </Section>
 
-      <Section title="Opacity" defaultOpen={false}>
+      <Section title={t('sketches.properties.section.opacity')} defaultOpen={false}>
         <SliderField
-          label="Opacity"
+          label={t('sketches.properties.field.opacity')}
           value={d.opacity ?? 100}
           min={0}
           max={100}
@@ -110,8 +112,8 @@ function NodeStyleTab({ id }: { id: string }) {
         />
       </Section>
 
-      <Section title="Animation" defaultOpen={false}>
-        <Toggle label="Pulse" value={!!d.pulse} onChange={(v) => updateNodeData(id, { pulse: v })} />
+      <Section title={t('sketches.properties.section.animation')} defaultOpen={false}>
+        <Toggle label={t('sketches.properties.field.pulse')} value={!!d.pulse} onChange={(v) => updateNodeData(id, { pulse: v })} />
       </Section>
     </div>
   );
@@ -120,6 +122,7 @@ function NodeStyleTab({ id }: { id: string }) {
 // ─── Node Data Tab ──────────────────────────────────────
 
 function NodeDataTab({ id }: { id: string }) {
+  const { t } = useI18n();
   const node = useDiagramsStore((s) => s.nodes.find((n) => n.id === id));
   const updateNodeData = useDiagramsStore((s) => s.updateNodeData);
   const removeNode = useDiagramsStore((s) => s.removeNode);
@@ -127,7 +130,7 @@ function NodeDataTab({ id }: { id: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <Field label="Label">
+      <Field label={t('sketches.properties.field.label')}>
         <PanelInput
           data-diagram-label-input
           type="text"
@@ -136,7 +139,7 @@ function NodeDataTab({ id }: { id: string }) {
         />
       </Field>
 
-      <Field label="Description">
+      <Field label={t('sketches.properties.field.description')}>
         <textarea
           value={node.data.description || ''}
           onChange={(e) => updateNodeData(id, { description: e.target.value })}
@@ -145,14 +148,14 @@ function NodeDataTab({ id }: { id: string }) {
         />
       </Field>
 
-      <Section title="Icon">
+      <Section title={t('sketches.properties.section.icon')}>
         <IconPicker
           value={node.data.icon}
           onChange={(icon) => updateNodeData(id, { icon })}
         />
       </Section>
 
-      <Field label="Type">
+      <Field label={t('sketches.properties.field.type')}>
         <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
           {node.type}
         </span>
@@ -172,7 +175,7 @@ function NodeDataTab({ id }: { id: string }) {
         />
       )}
 
-      <DangerButton onClick={() => removeNode(id)}>Delete Node</DangerButton>
+      <DangerButton onClick={() => removeNode(id)}>{t('sketches.properties.action.deleteNode')}</DangerButton>
     </div>
   );
 }
@@ -180,6 +183,7 @@ function NodeDataTab({ id }: { id: string }) {
 // ─── Node Position Tab ──────────────────────────────────
 
 function NodePositionTab({ id }: { id: string }) {
+  const { t } = useI18n();
   const node = useDiagramsStore((s) => s.nodes.find((n) => n.id === id));
   const updateNodeSize = useDiagramsStore((s) => s.updateNodeSize);
   if (!node) return null;
@@ -192,19 +196,19 @@ function NodePositionTab({ id }: { id: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Field label="X">
+        <Field label={t('sketches.properties.field.x')}>
           <span style={readOnlyValue}>{x}</span>
         </Field>
-        <Field label="Y">
+        <Field label={t('sketches.properties.field.y')}>
           <span style={readOnlyValue}>{y}</span>
         </Field>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <Field label="Width">
+        <Field label={t('sketches.properties.field.width')}>
           <span style={readOnlyValue}>{w}</span>
         </Field>
-        <Field label="Height">
+        <Field label={t('sketches.properties.field.height')}>
           <span style={readOnlyValue}>{h}</span>
         </Field>
       </div>
@@ -217,7 +221,7 @@ function NodePositionTab({ id }: { id: string }) {
         }}
       >
         <RotateCcw size={10} />
-        Reset to Default Size
+        {t('sketches.properties.action.resetSize')}
       </AddButton>
     </div>
   );
@@ -226,19 +230,20 @@ function NodePositionTab({ id }: { id: string }) {
 // ─── Node Properties Form (with Tabs) ───────────────────
 
 function NodePropertiesForm({ id }: { id: string }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <SectionTitle>Node Properties</SectionTitle>
+      <SectionTitle>{t('sketches.properties.tab.nodeProperties')}</SectionTitle>
       <Tabs defaultValue="style" className="w-full">
         <TabsList className="w-full h-7 bg-[var(--background,#111)] p-0.5 rounded-md">
           <TabsTrigger value="style" className="text-[10px] h-6 px-2 data-[state=active]:bg-[var(--amber,#d4a017)] data-[state=active]:text-black rounded">
-            Style
+            {t('sketches.properties.tab.style')}
           </TabsTrigger>
           <TabsTrigger value="data" className="text-[10px] h-6 px-2 data-[state=active]:bg-[var(--amber,#d4a017)] data-[state=active]:text-black rounded">
-            Data
+            {t('sketches.properties.tab.data')}
           </TabsTrigger>
           <TabsTrigger value="position" className="text-[10px] h-6 px-2 data-[state=active]:bg-[var(--amber,#d4a017)] data-[state=active]:text-black rounded">
-            Position
+            {t('sketches.properties.tab.position')}
           </TabsTrigger>
         </TabsList>
         <TabsContent value="style" className="mt-2">
@@ -258,6 +263,7 @@ function NodePropertiesForm({ id }: { id: string }) {
 // ─── Edge Properties Form ───────────────────────────────
 
 function EdgePropertiesForm({ id }: { id: string }) {
+  const { t } = useI18n();
   const edge = useDiagramsStore((s) => s.edges.find((e) => e.id === id));
   const updateEdgeData = useDiagramsStore((s) => s.updateEdgeData);
   const updateEdgeType = useDiagramsStore((s) => s.updateEdgeType);
@@ -270,9 +276,9 @@ function EdgePropertiesForm({ id }: { id: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <SectionTitle>Edge Properties</SectionTitle>
+      <SectionTitle>{t('sketches.properties.tab.edgeProperties')}</SectionTitle>
 
-      <Field label="Label">
+      <Field label={t('sketches.properties.field.label')}>
         <PanelInput
           type="text"
           value={(edge.label as string) || ''}
@@ -280,54 +286,54 @@ function EdgePropertiesForm({ id }: { id: string }) {
         />
       </Field>
 
-      <Field label="Type">
+      <Field label={t('sketches.properties.field.type')}>
         <select
           value={edge.type || 'smoothstep'}
           onChange={(e) => updateEdgeType(id, e.target.value)}
           style={inputStyle}
         >
-          <option value="smoothstep">Smooth Step</option>
-          <option value="step">Step</option>
-          <option value="straight">Straight</option>
-          <option value="default">Bezier</option>
-          <option value="smart">Smart (avoid nodes)</option>
-          <option value="elbow">Elbow (90°)</option>
-          <option value="curved">Curved</option>
+          <option value="smoothstep">{t('sketches.properties.edgeType.smoothStep')}</option>
+          <option value="step">{t('sketches.properties.edgeType.step')}</option>
+          <option value="straight">{t('sketches.properties.edgeType.straight')}</option>
+          <option value="default">{t('sketches.properties.edgeType.bezier')}</option>
+          <option value="smart">{t('sketches.properties.edgeType.smart')}</option>
+          <option value="elbow">{t('sketches.properties.edgeType.elbow')}</option>
+          <option value="curved">{t('sketches.properties.edgeType.curved')}</option>
         </select>
       </Field>
 
-      <Section title="Markers">
-        <Field label="Start">
+      <Section title={t('sketches.properties.section.markers')}>
+        <Field label={t('sketches.properties.field.start')}>
           <select
             value={(edgeData.markerStart as string) || 'none'}
             onChange={(e) => updateEdgeData(id, { markerStart: e.target.value as EdgeMarkerType })}
             style={inputStyle}
           >
-            <option value="none">None</option>
-            <option value="arrow">Arrow</option>
-            <option value="arrowClosed">Arrow (filled)</option>
-            <option value="diamond">Diamond</option>
-            <option value="circle">Circle</option>
+            <option value="none">{t('sketches.properties.marker.none')}</option>
+            <option value="arrow">{t('sketches.properties.marker.arrow')}</option>
+            <option value="arrowClosed">{t('sketches.properties.marker.arrowFilled')}</option>
+            <option value="diamond">{t('sketches.properties.marker.diamond')}</option>
+            <option value="circle">{t('sketches.properties.marker.circle')}</option>
           </select>
         </Field>
-        <Field label="End">
+        <Field label={t('sketches.properties.field.end')}>
           <select
             value={(edgeData.markerEnd as string) || 'none'}
             onChange={(e) => updateEdgeData(id, { markerEnd: e.target.value as EdgeMarkerType })}
             style={inputStyle}
           >
-            <option value="none">None</option>
-            <option value="arrow">Arrow</option>
-            <option value="arrowClosed">Arrow (filled)</option>
-            <option value="diamond">Diamond</option>
-            <option value="circle">Circle</option>
+            <option value="none">{t('sketches.properties.marker.none')}</option>
+            <option value="arrow">{t('sketches.properties.marker.arrow')}</option>
+            <option value="arrowClosed">{t('sketches.properties.marker.arrowFilled')}</option>
+            <option value="diamond">{t('sketches.properties.marker.diamond')}</option>
+            <option value="circle">{t('sketches.properties.marker.circle')}</option>
           </select>
         </Field>
       </Section>
 
-      <Section title="Appearance">
+      <Section title={t('sketches.properties.section.appearance')}>
         <div>
-          <span style={miniLabelStyle}>Style</span>
+          <span style={miniLabelStyle}>{t('sketches.properties.field.style')}</span>
           <Segmented
             options={['solid', 'dashed'] as const}
             value={edgeData.dashed ? 'dashed' : 'solid'}
@@ -336,7 +342,7 @@ function EdgePropertiesForm({ id }: { id: string }) {
         </div>
 
         <SliderField
-          label="Stroke Width"
+          label={t('sketches.properties.field.strokeWidth')}
           value={(edgeData.strokeWidth as number) || 1.5}
           min={0.5}
           max={5}
@@ -346,39 +352,39 @@ function EdgePropertiesForm({ id }: { id: string }) {
         />
 
         <Toggle
-          label="Animated"
+          label={t('sketches.properties.field.animated')}
           value={!!edge.animated}
           onChange={(v) => updateEdgeAnimated(id, v)}
         />
       </Section>
 
-      <Section title="Colors" defaultOpen={false}>
+      <Section title={t('sketches.properties.section.colors')} defaultOpen={false}>
         <ColorPicker
           value={edgeData.color as string | undefined}
           onChange={(color) => updateEdgeData(id, { color })}
-          label="Stroke Color"
+          label={t('sketches.properties.field.strokeColor')}
         />
         <ColorPicker
           value={edgeData.labelBgColor as string | undefined}
           onChange={(labelBgColor) => updateEdgeData(id, { labelBgColor })}
-          label="Label Background"
+          label={t('sketches.properties.field.labelBackground')}
         />
       </Section>
 
-      <Section title="Animation" defaultOpen={false}>
+      <Section title={t('sketches.properties.section.animation')} defaultOpen={false}>
         <Toggle
-          label="Data Flow"
+          label={t('sketches.properties.field.dataFlow')}
           value={!!edgeData.dataFlow}
           onChange={(v) => updateEdgeData(id, { dataFlow: v })}
         />
         <Toggle
-          label="Glow"
+          label={t('sketches.properties.field.glow')}
           value={!!edgeData.glow}
           onChange={(v) => updateEdgeData(id, { glow: v })}
         />
       </Section>
 
-      <DangerButton onClick={() => removeEdge(id)}>Delete Edge</DangerButton>
+      <DangerButton onClick={() => removeEdge(id)}>{t('sketches.properties.action.deleteEdge')}</DangerButton>
     </div>
   );
 }
@@ -386,18 +392,19 @@ function EdgePropertiesForm({ id }: { id: string }) {
 // ─── Canvas Settings Form ───────────────────────────────
 
 function CanvasSettingsForm() {
+  const { t } = useI18n();
   const settings = useDiagramsStore((s) => s.settings);
   const updateSettings = useDiagramsStore((s) => s.updateSettings);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <SectionTitle>Canvas Settings</SectionTitle>
+      <SectionTitle>{t('sketches.properties.tab.canvasSettings')}</SectionTitle>
 
-      <Section title="Grid">
-        <Toggle label="Show Grid" value={settings.showGrid} onChange={(v) => updateSettings({ showGrid: v })} />
-        <Toggle label="Snap to Grid" value={settings.snapToGrid} onChange={(v) => updateSettings({ snapToGrid: v })} />
+      <Section title={t('sketches.properties.section.grid')}>
+        <Toggle label={t('sketches.properties.field.showGrid')} value={settings.showGrid} onChange={(v) => updateSettings({ showGrid: v })} />
+        <Toggle label={t('sketches.properties.field.snapToGrid')} value={settings.snapToGrid} onChange={(v) => updateSettings({ snapToGrid: v })} />
         <SliderField
-          label="Grid Size"
+          label={t('sketches.properties.field.gridSize')}
           value={settings.gridSize}
           min={5}
           max={50}
@@ -407,12 +414,12 @@ function CanvasSettingsForm() {
         />
       </Section>
 
-      <Section title="Guides">
-        <Toggle label="Snap to Guides" value={settings.snapToGuides} onChange={(v) => updateSettings({ snapToGuides: v })} />
+      <Section title={t('sketches.properties.section.guides')}>
+        <Toggle label={t('sketches.properties.field.snapToGuides')} value={settings.snapToGuides} onChange={(v) => updateSettings({ snapToGuides: v })} />
       </Section>
 
-      <Section title="View">
-        <Toggle label="Show Minimap" value={settings.showMinimap} onChange={(v) => updateSettings({ showMinimap: v })} />
+      <Section title={t('sketches.properties.section.view')}>
+        <Toggle label={t('sketches.properties.field.showMinimap')} value={settings.showMinimap} onChange={(v) => updateSettings({ showMinimap: v })} />
       </Section>
     </div>
   );

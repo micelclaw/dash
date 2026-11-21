@@ -15,6 +15,7 @@
 // fuera del lenguaje visual de los Button canónicos.
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import { COLOR_PALETTE } from '../../types';
 import { miniLabelStyle, PanelInput } from './shared';
 
@@ -27,6 +28,7 @@ export function ColorPicker({
   onChange: (c: string) => void;
   label?: string;
 }) {
+  const { t } = useI18n();
   const [hexInput, setHexInput] = useState('');
   const [showHex, setShowHex] = useState(false);
 
@@ -39,6 +41,7 @@ export function ColorPicker({
             key={c}
             onClick={() => onChange(c)}
             title={c}
+            aria-label={t('sketches.colorPicker.setColor', { color: c })}
             style={{
               width: 18,
               height: 18,
@@ -53,7 +56,8 @@ export function ColorPicker({
         ))}
         <button
           onClick={() => setShowHex(!showHex)}
-          title="Custom HEX"
+          title={t('sketches.colorPicker.customHex')}
+          aria-label={t('sketches.colorPicker.customHex')}
           style={{
             width: 18,
             height: 18,
@@ -75,6 +79,7 @@ export function ColorPicker({
           <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>#</span>
           <PanelInput
             type="text"
+            aria-label={t('sketches.colorPicker.hexValue')}
             value={hexInput || (value?.replace('#', '') ?? '')}
             onChange={(e) => {
               const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6);

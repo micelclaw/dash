@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { X, Plus, Globe, Server, Mail, Zap } from 'lucide-react';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import type { ProxyHostInput, ProxyHost } from '../hooks/use-proxy-hosts';
+import { hasMessage, useI18n } from '@/i18n';
 
 interface HostEditorDialogProps {
   host?: ProxyHost | null;
@@ -53,6 +54,7 @@ const PRESETS: Preset[] = [
 // ─── Component ───────────────────────────────────────────────────────
 
 export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProps) {
+  const { t } = useI18n();
   const isEdit = !!host;
   const [tab, setTab] = useState<'details' | 'ssl' | 'advanced'>('details');
   const [saving, setSaving] = useState(false);
@@ -136,7 +138,7 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
     }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{
+      <div role="dialog" aria-modal="true" aria-labelledby="proxy-host-dialog-title" style={{
         width: 640, maxHeight: '85vh',
         background: 'var(--bg)',
         border: '1px solid var(--border)',
@@ -150,10 +152,10 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
           padding: '16px 20px',
           borderBottom: '1px solid var(--border)',
         }}>
-          <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-            {isEdit ? 'Edit Proxy Host' : 'New Proxy Host'}
+          <span id="proxy-host-dialog-title" style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
+            {isEdit ? t('proxy.editHost') : t('proxy.newHost')}
           </span>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label={t('proxy.close')} title={t('proxy.close')} style={{
             background: 'none', border: 'none', padding: 4,
             cursor: 'pointer', color: 'var(--text-muted)', display: 'flex',
           }}>
@@ -166,34 +168,38 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
           display: 'flex', gap: 0,
           borderBottom: '1px solid var(--border)',
           padding: '0 20px',
-        }}>
-          {(['details', 'ssl', 'advanced'] as const).map(t => (
+        }} role="tablist" aria-label={t('proxy.tabs')}>
+          {(['details', 'ssl', 'advanced'] as const).map(tabKey => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabKey}
+              id={`proxy-tab-${tabKey}`}
+              role="tab"
+              aria-selected={tab === tabKey}
+              aria-controls="proxy-host-panel"
+              onClick={() => setTab(tabKey)}
               style={{
                 padding: '10px 16px',
                 background: 'none', border: 'none',
-                borderBottom: tab === t ? '2px solid var(--amber)' : '2px solid transparent',
-                color: tab === t ? 'var(--text)' : 'var(--text-muted)',
+                borderBottom: tab === tabKey ? '2px solid var(--amber)' : '2px solid transparent',
+                color: tab === tabKey ? 'var(--text)' : 'var(--text-muted)',
                 fontSize: '0.8125rem', fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'var(--font-sans)',
                 textTransform: 'capitalize',
               }}
             >
-              {t}
+              {t(`proxy.${tabKey}`)}
             </button>
           ))}
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        <div id="proxy-host-panel" role="tabpanel" aria-labelledby={`proxy-tab-${tab}`} style={{ flex: 1, overflow: 'auto', padding: 20 }}>
           {tab === 'details' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Presets (only for new) */}
               {!isEdit && (
                 <div>
-                  <FieldLabel>Quick Preset</FieldLabel>
+                  <FieldLabel>{t('proxy.quickPreset')}</FieldLabel>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {PRESETS.map(p => (
                       <button
@@ -214,7 +220,7 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                       >
                         <p.icon size={12} style={{ color: p.color }} />
-                        {p.label}
+                        {hasMessage(`proxy.preset.${p.id}`) ? t(`proxy.preset.${p.id}`) : p.label}
                       </button>
                     ))}
                   </div>
@@ -223,17 +229,18 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
 
               {/* Domain Names */}
               <div>
-                <FieldLabel>Domain Names</FieldLabel>
+                <FieldLabel>{t('proxy.domainNames')}</FieldLabel>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="e.g. app.example.com"
+                    placeholder={t('proxy.domainExample')}
+                    aria-label={t('proxy.domainNames')}
                     value={domainInput}
                     onChange={(e) => setDomainInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addDomain(); } }}
                     style={{ ...inputStyle, flex: 1 }}
                   />
-                  <button onClick={addDomain} style={smallBtnStyle}>
+                  <button onClick={addDomain} style={smallBtnStyle} title={t('proxy.addDomain')} aria-label={t('proxy.addDomain')}>
                     <Plus size={14} />
                   </button>
                 </div>
@@ -251,7 +258,7 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
                         color: 'var(--text)',
                       }}>
                         {d}
-                        <button onClick={() => removeDomain(d)} style={{
+                        <button onClick={() => removeDomain(d)} title={t('proxy.removeDomain', { domain: d })} aria-label={t('proxy.removeDomain', { domain: d })} style={{
                           background: 'none', border: 'none', padding: 0,
                           cursor: 'pointer', color: 'var(--text-muted)', display: 'flex',
                         }}>
@@ -266,8 +273,9 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
               {/* Forward destination */}
               <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 100px', gap: 10 }}>
                 <div>
-                  <FieldLabel>Scheme</FieldLabel>
+                  <FieldLabel>{t('proxy.scheme')}</FieldLabel>
                   <select
+                    aria-label={t('proxy.scheme')}
                     value={scheme}
                     onChange={(e) => setScheme(e.target.value)}
                     style={inputStyle}
@@ -277,19 +285,21 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
                   </select>
                 </div>
                 <div>
-                  <FieldLabel>Forward Host</FieldLabel>
+                  <FieldLabel>{t('proxy.forwardHost')}</FieldLabel>
                   <input
                     type="text"
                     placeholder="localhost"
+                    aria-label={t('proxy.forwardHost')}
                     value={forwardHost}
                     onChange={(e) => setForwardHost(e.target.value)}
                     style={inputStyle}
                   />
                 </div>
                 <div>
-                  <FieldLabel>Port</FieldLabel>
+                  <FieldLabel>{t('proxy.port')}</FieldLabel>
                   <input
                     type="number"
+                    aria-label={t('proxy.port')}
                     value={forwardPort}
                     onChange={(e) => setForwardPort(parseInt(e.target.value) || 80)}
                     style={inputStyle}
@@ -300,20 +310,22 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
               {/* Label & Notes */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <FieldLabel>Label (optional)</FieldLabel>
+                  <FieldLabel>{t('proxy.labelOptional')}</FieldLabel>
                   <input
                     type="text"
-                    placeholder="e.g. My App"
+                    placeholder={t('proxy.labelExample')}
+                    aria-label={t('proxy.labelOptional')}
                     value={label}
                     onChange={(e) => setLabel(e.target.value)}
                     style={inputStyle}
                   />
                 </div>
                 <div>
-                  <FieldLabel>Notes (optional)</FieldLabel>
+                  <FieldLabel>{t('proxy.notesOptional')}</FieldLabel>
                   <input
                     type="text"
-                    placeholder="Internal notes..."
+                    placeholder={t('proxy.internalNotes')}
+                    aria-label={t('proxy.notesOptional')}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     style={inputStyle}
@@ -326,7 +338,7 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
           {tab === 'ssl' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <FieldLabel>SSL Mode</FieldLabel>
+                <FieldLabel>{t('proxy.sslMode')}</FieldLabel>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['none', 'auto', 'custom', 'dns_challenge'] as const).map(m => (
                     <button
@@ -342,36 +354,37 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
                         cursor: 'pointer', fontFamily: 'var(--font-sans)',
                       }}
                     >
-                      {m === 'none' ? 'None' : m === 'auto' ? 'Auto (ACME)' : m === 'custom' ? 'Custom' : 'DNS Challenge'}
+                      {m === 'none' ? t('proxy.ssl.none') : m === 'auto' ? t('proxy.ssl.auto') : m === 'custom' ? t('proxy.ssl.custom') : t('proxy.ssl.dnsChallenge')}
                     </button>
                   ))}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6 }}>
-                  {sslMode === 'auto' && "Caddy will automatically obtain and renew certificates via Let's Encrypt / ZeroSSL."}
-                  {sslMode === 'none' && 'No SSL — traffic will be served over HTTP only.'}
-                  {sslMode === 'custom' && 'Upload your own certificate and key files.'}
-                  {sslMode === 'dns_challenge' && 'Use DNS-01 challenge for wildcard certificates.'}
+                  {sslMode === 'auto' && t('proxy.ssl.autoHelp')}
+                  {sslMode === 'none' && t('proxy.ssl.noneHelp')}
+                  {sslMode === 'custom' && t('proxy.ssl.customHelp')}
+                  {sslMode === 'dns_challenge' && t('proxy.ssl.dnsHelp')}
                 </div>
               </div>
 
-              <ToggleField label="Force HTTPS" description="Redirect all HTTP traffic to HTTPS" checked={forceSsl} onChange={setForceSsl} />
-              <ToggleField label="HSTS" description="Enable HTTP Strict Transport Security header" checked={hstsEnabled} onChange={setHstsEnabled} />
+              <ToggleField label={t('proxy.forceHttps')} description={t('proxy.forceHttpsHelp')} checked={forceSsl} onChange={setForceSsl} />
+              <ToggleField label={t('proxy.hsts')} description={t('proxy.hstsHelp')} checked={hstsEnabled} onChange={setHstsEnabled} />
             </div>
           )}
 
           {tab === 'advanced' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <ToggleField label="Block Common Exploits" description="Add security headers (X-Frame-Options, X-XSS-Protection, etc.)" checked={blockExploits} onChange={setBlockExploits} />
-              <ToggleField label="WebSocket Support" description="Enable WebSocket proxying (flush interval = -1)" checked={websocketSupport} onChange={setWebsocketSupport} />
-              <ToggleField label="Compression" description="Enable gzip + zstd compression" checked={compression} onChange={setCompression} />
-              <ToggleField label="Cache Assets" description="Cache static assets (images, CSS, JS)" checked={cacheAssets} onChange={setCacheAssets} />
-              <ToggleField label="HTTP/2" description="Enable HTTP/2 protocol support" checked={http2Support} onChange={setHttp2Support} />
+              <ToggleField label={t('proxy.blockExploits')} description={t('proxy.blockExploitsHelp')} checked={blockExploits} onChange={setBlockExploits} />
+              <ToggleField label={t('proxy.websocket')} description={t('proxy.websocketHelp')} checked={websocketSupport} onChange={setWebsocketSupport} />
+              <ToggleField label={t('proxy.compression')} description={t('proxy.compressionHelp')} checked={compression} onChange={setCompression} />
+              <ToggleField label={t('proxy.cacheAssets')} description={t('proxy.cacheAssetsHelp')} checked={cacheAssets} onChange={setCacheAssets} />
+              <ToggleField label={t('proxy.http2')} description={t('proxy.http2Help')} checked={http2Support} onChange={setHttp2Support} />
 
               <div>
-                <FieldLabel>Rate Limit</FieldLabel>
+                <FieldLabel>{t('proxy.rateLimit')}</FieldLabel>
                 <input
                   type="text"
-                  placeholder="e.g. 100r/m (leave empty for no limit)"
+                  placeholder={t('proxy.rateLimitPlaceholder')}
+                  aria-label={t('proxy.rateLimit')}
                   value={rateLimit}
                   onChange={(e) => setRateLimit(e.target.value)}
                   style={{ ...inputStyle, maxWidth: 250 }}
@@ -387,7 +400,7 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
           padding: '14px 20px',
           borderTop: '1px solid var(--border)',
         }}>
-          <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+          <button onClick={onClose} style={cancelBtnStyle}>{t('proxy.cancel')}</button>
           <button
             onClick={handleSave}
             disabled={!canSave || saving}
@@ -397,7 +410,7 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
               cursor: (!canSave || saving) ? 'not-allowed' : 'pointer',
             }}
           >
-            {saving ? 'Saving...' : isEdit ? 'Update Host' : 'Create Host'}
+            {saving ? t('proxy.saving') : isEdit ? t('proxy.updateHost') : t('proxy.createHost')}
           </button>
         </div>
       </div>

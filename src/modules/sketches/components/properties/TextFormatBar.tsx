@@ -15,6 +15,7 @@
 import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n';
 
 function FormatButton({
   active,
@@ -33,6 +34,7 @@ function FormatButton({
       size="icon"
       onClick={onClick}
       title={title}
+      aria-label={title}
       className={cn(
         'h-6 w-[26px] p-0 border border-[var(--border,#333)]',
         active
@@ -59,10 +61,11 @@ export function TextFormatBar({
   textAlign?: string;
   onChange: (data: Record<string, unknown>) => void;
 }) {
+  const { t } = useI18n();
   const toggles = [
-    { key: 'fontWeight', icon: Bold, active: fontWeight === 'bold', on: 'bold', off: 'normal' },
-    { key: 'fontStyle', icon: Italic, active: fontStyle === 'italic', on: 'italic', off: 'normal' },
-    { key: 'textDecoration', icon: Underline, active: textDecoration === 'underline', on: 'underline', off: 'none' },
+    { key: 'fontWeight', labelKey: 'sketches.textFormat.bold', icon: Bold, active: fontWeight === 'bold', on: 'bold', off: 'normal' },
+    { key: 'fontStyle', labelKey: 'sketches.textFormat.italic', icon: Italic, active: fontStyle === 'italic', on: 'italic', off: 'normal' },
+    { key: 'textDecoration', labelKey: 'sketches.textFormat.underline', icon: Underline, active: textDecoration === 'underline', on: 'underline', off: 'none' },
   ] as const;
 
   const aligns = [
@@ -74,8 +77,8 @@ export function TextFormatBar({
   return (
     <div style={{ display: 'flex', gap: 2 }}>
       <div style={{ display: 'flex', gap: 1, borderRight: '1px solid var(--border, #333)', paddingRight: 4, marginRight: 2 }}>
-        {toggles.map(({ key, icon: Icon, active, on, off }) => (
-          <FormatButton key={key} active={active} title={key} onClick={() => onChange({ [key]: active ? off : on })}>
+        {toggles.map(({ key, labelKey, icon: Icon, active, on, off }) => (
+          <FormatButton key={key} active={active} title={t(labelKey)} onClick={() => onChange({ [key]: active ? off : on })}>
             <Icon size={13} />
           </FormatButton>
         ))}
@@ -85,7 +88,7 @@ export function TextFormatBar({
           <FormatButton
             key={value}
             active={(textAlign || 'center') === value}
-            title={`Align ${value}`}
+            title={t(value === 'left' ? 'sketches.textFormat.alignLeft' : value === 'center' ? 'sketches.textFormat.alignCenter' : 'sketches.textFormat.alignRight')}
             onClick={() => onChange({ textAlign: value })}
           >
             <Icon size={13} />

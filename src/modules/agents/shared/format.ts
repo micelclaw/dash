@@ -15,10 +15,24 @@
 // (formatTokens/modelShort/MODEL_PALETTE) para que Activity Center (A),
 // Fleet/Analytics (B) y Council (C) los reusen sin duplicar.
 
-/** Tiempo relativo en español ("hace 3 min", "hace 2 h", "nunca"). */
-export function formatRelativeTime(dateStr: string | null): string {
-  if (!dateStr) return 'nunca';
+/** Tiempo relativo; los consumidores anteriores conservan español por defecto. */
+export function formatRelativeTime(dateStr: string | null, locale: 'en' | 'es' = 'es'): string {
+  if (!dateStr) return locale === 'en' ? 'never' : 'nunca';
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (locale === 'en') {
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} d ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} month${months !== 1 ? 's' : ''} ago`;
+    const years = Math.floor(months / 12);
+    return `${years} year${years !== 1 ? 's' : ''} ago`;
+  }
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return 'justo ahora';
   const minutes = Math.floor(seconds / 60);

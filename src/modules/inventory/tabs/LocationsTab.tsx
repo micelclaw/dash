@@ -35,15 +35,16 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { LabelModal } from '@/modules/inventory/components/LabelModal';
 import { fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryItem, InventoryLocation } from '@/modules/inventory/types';
+import { useI18n } from '@/i18n';
 
 type LocationKind = InventoryLocation['kind'];
 
 const KIND_OPTIONS: Array<{ value: LocationKind; label: string; icon: LucideIcon }> = [
-  { value: 'room', label: 'Room', icon: Home },
-  { value: 'container', label: 'Container', icon: Package },
-  { value: 'vehicle', label: 'Vehicle', icon: Truck },
-  { value: 'storage', label: 'Storage', icon: Archive },
-  { value: 'other', label: 'Other', icon: MapPin },
+  { value: 'room', label: 'inventory.locations.kind.room', icon: Home },
+  { value: 'container', label: 'inventory.locations.kind.container', icon: Package },
+  { value: 'vehicle', label: 'inventory.locations.kind.vehicle', icon: Truck },
+  { value: 'storage', label: 'inventory.locations.kind.storage', icon: Archive },
+  { value: 'other', label: 'inventory.locations.kind.other', icon: MapPin },
 ];
 
 const KIND_ICONS: Record<LocationKind, LucideIcon> = {
@@ -97,6 +98,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
   deepLinkLocationId?: string | null;
   onLocationConsumed?: () => void;
 } = {}) {
+  const { t: tr } = useI18n();
   const locations = useInventoryStore(s => s.locations);
   const createLocation = useInventoryStore(s => s.createLocation);
   const updateLocation = useInventoryStore(s => s.updateLocation);
@@ -270,7 +272,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
   const handleCreate = async () => {
     const name = formName.trim();
     if (!name) {
-      toast.error('Name is required');
+      toast.error(tr('inventory.locations.nameRequired'));
       return;
     }
     setCreating(true);
@@ -280,14 +282,14 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
         kind: formKind,
         parent_id: formParent || null,
       });
-      toast.success('Location created');
+      toast.success(tr('inventory.locations.created'));
       setFormName('');
       setFormParent('');
       setFormKind('room');
       setShowForm(false);
       setSelectedId(loc.id);
     } catch (err) {
-      toast.error(errMessage(err, 'Could not create location'));
+      toast.error(errMessage(err, tr('inventory.locations.createFailed')));
     } finally {
       setCreating(false);
     }
@@ -297,16 +299,16 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
     if (!selected) return;
     const name = editName.trim();
     if (!name) {
-      toast.error('Name is required');
+      toast.error(tr('inventory.locations.nameRequired'));
       return;
     }
     setSaving(true);
     try {
       await updateLocation(selected.id, { name, kind: editKind, parent_id: editParent || null });
-      toast.success('Location updated');
+      toast.success(tr('inventory.locations.updated'));
       setEditing(false);
     } catch (err) {
-      toast.error(errMessage(err, 'Could not update location'));
+      toast.error(errMessage(err, tr('inventory.locations.updateFailed')));
     } finally {
       setSaving(false);
     }
@@ -316,10 +318,10 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
     if (!selected) return;
     try {
       await deleteLocation(selected.id);
-      toast.success('Location deleted');
+      toast.success(tr('inventory.locations.deleted'));
       setSelectedId(null);
     } catch (err) {
-      toast.error(errMessage(err, 'Could not delete location'));
+      toast.error(errMessage(err, tr('inventory.locations.deleteFailed')));
     }
   };
 
@@ -415,7 +417,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input
             type="text"
-            placeholder="Search locations…"
+            placeholder={tr('inventory.locations.search')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={inputStyle}
@@ -425,7 +427,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
             style={{ ...primaryBtn, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
           >
             <Plus size={14} />
-            New location
+            {tr('inventory.locations.new')}
           </button>
           {showForm && (
             <div
@@ -441,7 +443,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
             >
               <input
                 type="text"
-                placeholder="Name *"
+                placeholder={tr('inventory.locations.name')}
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
                 style={inputStyle}
@@ -455,13 +457,13 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
                 >
                   {KIND_OPTIONS.map(k => (
                     <option key={k.value} value={k.value}>
-                      {k.label}
+                      {tr(k.label)}
                     </option>
                   ))}
                 </select>
               </div>
               <select value={formParent} onChange={e => setFormParent(e.target.value)} style={inputStyle}>
-                <option value="">No parent (top level)</option>
+                <option value="">{tr('inventory.locations.noParent')}</option>
                 {flatTree.map(({ loc, depth }) => (
                   <option key={loc.id} value={loc.id}>
                     {' '.repeat(depth * 2)}
@@ -471,10 +473,10 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
               </select>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={handleCreate} disabled={creating} style={{ ...primaryBtn, flex: 1, opacity: creating ? 0.6 : 1 }}>
-                  {creating ? 'Creating…' : 'Create'}
+                  {creating ? tr('inventory.locations.creating') : tr('inventory.locations.create')}
                 </button>
                 <button onClick={() => setShowForm(false)} style={secondaryBtn}>
-                  Cancel
+                  {tr('inventory.cancel')}
                 </button>
               </div>
             </div>
@@ -483,7 +485,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
         <div style={{ flex: 1, overflow: 'auto', paddingBottom: 12 }}>
           {roots.length === 0 ? (
             <div style={{ padding: '8px 12px', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              No locations yet.
+              {tr('inventory.locations.noLocations')}
             </div>
           ) : (
             roots.map(root => renderNode(root, 0))
@@ -496,8 +498,8 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
         {!selected ? (
           <EmptyState
             icon={MapPin}
-            title="Select a location"
-            description="Pick a location from the tree to see its details and the items stored there."
+            title={tr('inventory.locations.select')}
+            description={tr('inventory.locations.selectDescription')}
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -531,7 +533,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
                       >
                         {KIND_OPTIONS.map(k => (
                           <option key={k.value} value={k.value}>
-                            {k.label}
+                            {tr(k.label)}
                           </option>
                         ))}
                       </select>
@@ -539,10 +541,10 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
                         value={editParent}
                         onChange={e => setEditParent(e.target.value)}
                         style={{ ...inputStyle, width: 150 }}
-                        aria-label="Parent location"
-                        title="Move under another location"
+                        aria-label={tr('inventory.locations.parent')}
+                        title={tr('inventory.locations.moveParent')}
                       >
-                        <option value="">No parent (top level)</option>
+                        <option value="">{tr('inventory.locations.noParent')}</option>
                         {flatTree
                           .filter(({ loc }) => !selfAndDescendants.has(loc.id))
                           .map(({ loc, depth }) => (
@@ -553,10 +555,10 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
                           ))}
                       </select>
                       <button onClick={handleSaveEdit} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>
-                        {saving ? 'Saving…' : 'Save'}
+                        {saving ? tr('inventory.locations.saving') : tr('inventory.save')}
                       </button>
                       <button onClick={() => setEditing(false)} style={secondaryBtn}>
-                        Cancel
+                        {tr('inventory.cancel')}
                       </button>
                     </span>
                   ) : (
@@ -588,10 +590,10 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
                       setFormKind('container');
                     }}
                     style={secondaryBtn}
-                    title="Add a sub-location inside this one"
+                    title={tr('inventory.locations.subLocationInside')}
                   >
                     <Plus size={13} />
-                    Sub-location
+                    {tr('inventory.locations.subLocation')}
                   </button>
                   <button
                     onClick={() => {
@@ -605,12 +607,12 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
                     <Pencil size={13} />
                     Edit
                   </button>
-                  <button onClick={() => setShowLabel(true)} style={secondaryBtn} title="Print a QR label for this location">
-                    🏷 Label
+                  <button onClick={() => setShowLabel(true)} style={secondaryBtn} title={tr('inventory.locations.labelTitle')}>
+                    🏷 {tr('inventory.locations.label')}
                   </button>
                   <button onClick={() => setConfirmingDelete(true)} style={secondaryBtn}>
                     <Trash2 size={13} />
-                    Delete
+                    {tr('inventory.delete')}
                   </button>
                 </div>
               )}
@@ -618,7 +620,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
 
             {subLocations.length > 0 && (
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6 }}>Sub-locations</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6 }}>{tr('inventory.locations.subLocations')}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {subLocations.map(sub => {
                     const SubIcon = KIND_ICONS[sub.kind];
@@ -650,11 +652,11 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
             )}
 
             <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6 }}>Items here</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6 }}>{tr('inventory.locations.itemsHere')}</div>
               {itemsLoading ? (
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading…</div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{tr('inventory.catalog.loading')}</div>
               ) : locItems.length === 0 ? (
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>No items in this location.</div>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{tr('inventory.locations.noItems')}</div>
               ) : (
                 <div
                   style={{
@@ -726,12 +728,10 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
         open={confirmingDelete && !!selected}
         onClose={() => setConfirmingDelete(false)}
         onConfirm={() => { void handleDelete(); setConfirmingDelete(false); }}
-        title="Delete location"
-        description={selected
-          ? `Delete "${selected.name}"? Items and sub-locations inside it will be left without a location.`
-          : ''}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={tr('inventory.locations.deleteTitle')}
+        description={selected ? tr('inventory.locations.deleteDescription', { name: selected.name }) : ''}
+        confirmLabel={tr('inventory.delete')}
+        cancelLabel={tr('inventory.cancel')}
         variant="danger"
       />
 

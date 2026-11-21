@@ -21,6 +21,7 @@ import {
 import { useVideoStore } from '@/stores/video.store';
 import { RequestModal, discoverTitle, discoverYear, tmdbPosterUrl } from '../components/RequestModal';
 import { StatusBadge, requestDisplayStatus } from '../components/StatusBadge';
+import { useI18n } from '@/i18n';
 
 function DiscoverCard({
   result,
@@ -29,6 +30,7 @@ function DiscoverCard({
   result: DiscoverResult;
   onRequest: (r: DiscoverResult) => void;
 }) {
+  const { t } = useI18n();
   const [imgError, setImgError] = useState(false);
   const poster = tmdbPosterUrl(result.poster_path);
   const available = result.media_info?.status === MEDIA_STATUS_AVAILABLE;
@@ -83,10 +85,10 @@ function DiscoverCard({
             textOverflow: 'ellipsis',
           }}
         >
-          {discoverTitle(result)}
+          {discoverTitle(result, t('video.untitled'))}
         </div>
         <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-          {result.media_type === 'tv' ? 'Series' : 'Movie'}
+          {result.media_type === 'tv' ? t('video.seriesSection') : t('video.movieSection')}
           {discoverYear(result) && ` · ${discoverYear(result)}`}
         </div>
         {result.overview && (
@@ -126,7 +128,7 @@ function DiscoverCard({
                 fontWeight: 600,
               }}
             >
-              <Download size={12} /> Request
+              <Download size={12} /> {t('video.request')}
             </button>
           )}
         </div>
@@ -140,6 +142,7 @@ function DiscoverCard({
  * Jellyseerr is not installed, an explanatory empty state links to Servarr.
  */
 export function RequestsView() {
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const jellyseerrUnavailable = useVideoStore((s) => s.jellyseerrUnavailable);
   const discoverResults = useVideoStore((s) => s.discoverResults);
@@ -167,12 +170,12 @@ export function RequestsView() {
     return (
       <EmptyState
         icon={Download}
-        title="Jellyseerr is not installed"
-        description="Media requests are powered by Jellyseerr. Install and start it from the Servarr module to discover and request new movies and series."
+        title={t('video.jellyseerrMissing')}
+        description={t('video.jellyseerrDescription')}
         actions={[
-          { label: 'Open Servarr', onClick: () => navigate('/multimedia'), variant: 'primary' },
+          { label: t('video.openServarr'), onClick: () => navigate('/multimedia'), variant: 'primary' },
           {
-            label: 'Retry',
+            label: t('video.retry'),
             onClick: () => {
               const store = useVideoStore.getState();
               void store.checkStatus().then(() => {
@@ -199,7 +202,7 @@ export function RequestsView() {
       {/* Discover search */}
       <section>
         <h3 style={{ margin: '0 0 12px', fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-          Discover
+          {t('video.discover')}
         </h3>
         <div
           style={{
@@ -215,7 +218,8 @@ export function RequestsView() {
           <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           <input
             type="text"
-            placeholder="Search movies & series to request…"
+            placeholder={t('video.searchRequests')}
+            aria-label={t('video.searchRequests')}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             style={{
@@ -232,14 +236,14 @@ export function RequestsView() {
 
         {loadingDiscover && (
           <div style={{ padding: '16px 0', color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-            Searching…
+            {t('video.searching')}
           </div>
         )}
 
         {!loadingDiscover && discoverResults && (
           discoverResults.length === 0 ? (
             <div style={{ padding: '16px 0', color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-              No matches found.
+              {t('video.noMatches')}
             </div>
           ) : (
             <div
@@ -265,10 +269,10 @@ export function RequestsView() {
       {/* Existing requests */}
       <section>
         <h3 style={{ margin: '0 0 12px', fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-          Your requests
+          {t('video.yourRequests')}
         </h3>
         {loadingRequests && !requests ? (
-          <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Loading…</div>
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>{t('video.loading')}</div>
         ) : !requests || requests.length === 0 ? (
           <div
             style={{
@@ -279,7 +283,7 @@ export function RequestsView() {
               fontSize: '0.8125rem',
             }}
           >
-            <Inbox size={16} /> No requests yet — search above to request something.
+            <Inbox size={16} /> {t('video.noRequests')}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -299,11 +303,11 @@ export function RequestsView() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
                     {req.media?.title ??
-                      `${req.media?.media_type === 'tv' ? 'Series' : 'Movie'} · TMDB ${req.media?.tmdb_id ?? '?'}`}
+                      `${req.media?.media_type === 'tv' ? t('video.seriesSection') : t('video.movieSection')} · TMDB ${req.media?.tmdb_id ?? '?'}`}
                   </span>
                   {req.created_at && (
                     <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginLeft: 10 }}>
-                      {new Date(req.created_at).toLocaleDateString()}
+                      {new Date(req.created_at).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US')}
                     </span>
                   )}
                 </div>

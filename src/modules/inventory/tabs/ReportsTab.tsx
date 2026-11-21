@@ -20,6 +20,7 @@ import { AccountingSettingsCard } from '@/modules/inventory/components/Accountin
 import { CalendarProjectionCard } from '@/modules/inventory/components/CalendarProjectionCard';
 import { DepreciationReport } from '@/modules/inventory/components/DepreciationReport';
 import { fmtMoney } from '@/modules/inventory/types';
+import { useI18n } from '@/i18n';
 
 type GroupBy = 'category' | 'location';
 
@@ -54,6 +55,7 @@ function csvCell(value: string | number): string {
 }
 
 export function ReportsTab() {
+  const { t, locale } = useI18n();
   const { valuation, locations, fetchValuation, selectItem } = useInventoryStore();
   const [groupBy, setGroupBy] = useState<GroupBy>('category');
   const [atDate, setAtDate] = useState<string>('');
@@ -68,10 +70,10 @@ export function ReportsTab() {
 
   const groupLabel = (key: string): string => {
     if (groupBy === 'location') {
-      if (!key) return 'No location';
+      if (!key) return t('inventory.reports.noLocation');
       return locations.find(l => l.id === key)?.name ?? key;
     }
-    return key || 'Uncategorized';
+    return key || t('inventory.reports.uncategorized');
   };
 
   const maxGroupValue = useMemo(() => {
@@ -86,7 +88,7 @@ export function ReportsTab() {
 
   const handleExportCsv = () => {
     if (!valuation || valuation.lines.length === 0) {
-      toast.error('No valuation data to export');
+      toast.error(t('inventory.reports.noDataExport'));
       return;
     }
     const header = 'name,category,qty,unit_value,value';
@@ -102,7 +104,7 @@ export function ReportsTab() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('Valuation exported as CSV');
+    toast.success(t('inventory.reports.csvExported'));
   };
 
   const handleGenerateDossier = async () => {
@@ -113,10 +115,10 @@ export function ReportsTab() {
         { location_id: dossierLocationId || undefined },
         { timeout: 120_000 },
       );
-      toast.success('Dossier saved to /Inventory/reports/');
+      toast.success(t('inventory.reports.dossierSaved'));
       window.open('/api/v1/files/' + res.data.file_id + '/download');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to generate dossier');
+      toast.error(err instanceof Error ? err.message : t('inventory.reports.dossierFailed'));
     } finally {
       setGeneratingDossier(false);
     }
@@ -153,20 +155,20 @@ export function ReportsTab() {
           <div>
             <div style={sectionTitleStyle}>
               <PieChart size={13} />
-              Inventory value
+              {t('inventory.reports.inventoryValue')}
             </div>
             <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)', lineHeight: 1.1 }}>
               {valuation ? fmtMoney(valuation.total) : '—'}
             </div>
             {valuation && (
               <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                as of {new Date(valuation.at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {t('inventory.reports.asOf', { date: new Date(valuation.at).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' }) })}
               </div>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              Valuation at…
+              {t('inventory.reports.valuationAt')}
               <input
                 type="date"
                 value={atDate}
@@ -182,18 +184,18 @@ export function ReportsTab() {
               />
             </label>
             <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-              {segmentBtn('category', 'By category')}
-              {segmentBtn('location', 'By location')}
+              {segmentBtn('category', t('inventory.reports.byCategory'))}
+              {segmentBtn('location', t('inventory.reports.byLocation'))}
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
           {!valuation && (
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading valuation…</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('inventory.reports.loadingValuation')}</div>
           )}
           {valuation && valuation.groups.length === 0 && (
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>No valued items yet.</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('inventory.reports.noValuedItems')}</div>
           )}
           {valuation?.groups.map(g => (
             <div
@@ -217,7 +219,7 @@ export function ReportsTab() {
                 {fmtMoney(g.value)}
               </span>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'right', minWidth: 56 }}>
-                {g.item_count} items
+                {g.item_count} {t('inventory.reports.items')}
               </span>
             </div>
           ))}
@@ -233,10 +235,10 @@ export function ReportsTab() {
         <div style={cardStyle}>
           <div style={sectionTitleStyle}>
             <TrendingUp size={13} />
-            Top items by value
+            {t('inventory.reports.topItems')}
           </div>
           {topItems.length === 0 ? (
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>No valued items yet.</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('inventory.reports.noValuedItems')}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {topItems.map(line => (
@@ -279,10 +281,10 @@ export function ReportsTab() {
         <div style={cardStyle}>
           <div style={sectionTitleStyle}>
             <ShieldCheck size={13} />
-            Insurance dossier
+            {t('inventory.reports.insuranceDossier')}
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            Expert-ready PDF per location with photos, serials, receipts and values.
+            {t('inventory.reports.dossierDescription')}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <select
@@ -299,7 +301,7 @@ export function ReportsTab() {
                 maxWidth: 180,
               }}
             >
-              <option value="">All locations</option>
+              <option value="">{t('inventory.reports.allLocations')}</option>
               {locations.map(l => (
                 <option key={l.id} value={l.id}>{l.name}</option>
               ))}
@@ -319,11 +321,11 @@ export function ReportsTab() {
                 cursor: generatingDossier ? 'wait' : 'pointer',
               }}
             >
-              {generatingDossier ? 'Generating…' : 'Generate PDF'}
+              {generatingDossier ? t('inventory.reports.generating') : t('inventory.reports.generatePdf')}
             </button>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 12 }}>
-            Reports are saved to /Inventory/reports/
+            {t('inventory.reports.savedLocation')}
           </div>
         </div>
 
@@ -331,10 +333,10 @@ export function ReportsTab() {
         <div style={cardStyle}>
           <div style={sectionTitleStyle}>
             <Download size={13} />
-            Export
+            {t('inventory.reports.export')}
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            Download the current valuation lines as a spreadsheet-friendly CSV file.
+            {t('inventory.reports.exportDescription')}
           </p>
           <button
             onClick={handleExportCsv}
@@ -348,7 +350,7 @@ export function ReportsTab() {
               cursor: 'pointer',
             }}
           >
-            Export CSV
+            {t('inventory.reports.exportCsv')}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useI18n } from '@/i18n';
 import { X, Loader2, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
 import { api } from '@/services/api';
 import { CryptoLogs } from '../shared/CryptoLogs';
@@ -59,6 +60,7 @@ async function waitForService(service: string, timeoutMs: number): Promise<boole
 }
 
 export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Props) {
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>('configure');
   const [config, setConfig] = useState<LightningConfig>({ ...DEFAULTS });
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -142,10 +144,10 @@ export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Prop
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
             <Zap size={16} style={{ color: '#f59e0b' }} />
-            {step === 'configure' && (mode === 'install' ? 'Configure Core Lightning' : 'Lightning Settings')}
-            {step === 'installing' && (mode === 'install' ? 'Installing Core Lightning' : 'Restarting Core Lightning')}
-            {step === 'done' && 'Core Lightning Ready'}
-            {step === 'error' && 'Error'}
+            {step === 'configure' && (mode === 'install' ? t('crypto.wizard.configureLightning') : t('crypto.wizard.lightningSettings'))}
+            {step === 'installing' && (mode === 'install' ? t('crypto.wizard.installingLightning') : t('crypto.wizard.restartingLightning'))}
+            {step === 'done' && t('crypto.wizard.lightningReady')}
+            {step === 'error' && t('crypto.wizard.error')}
           </div>
           <button
             onClick={onClose}
@@ -281,8 +283,8 @@ export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Prop
                     This will restart Core Lightning. Channel state will be preserved.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button className="wizard-btn-secondary" onClick={() => setConfirmRestart(false)}>Cancel</button>
-                    <button className="wizard-btn-primary" onClick={handleConfigure}>Restart Now</button>
+                    <button className="wizard-btn-secondary" onClick={() => setConfirmRestart(false)}>{t('crypto.wizard.cancel')}</button>
+                    <button className="wizard-btn-primary" onClick={handleConfigure}>{t('crypto.wizard.restartNow')}</button>
                   </div>
                 </div>
               )}
@@ -290,11 +292,11 @@ export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Prop
               {/* Actions */}
               {!confirmRestart && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <button className="wizard-btn-secondary" onClick={onClose}>Cancel</button>
+                  <button className="wizard-btn-secondary" onClick={onClose}>{t('crypto.wizard.cancel')}</button>
                   {mode === 'install' ? (
-                    <button className="wizard-btn-primary" onClick={handleInstall} disabled={!canInstall}>Install</button>
+                    <button className="wizard-btn-primary" onClick={handleInstall} disabled={!canInstall}>{t('crypto.wizard.install')}</button>
                   ) : (
-                    <button className="wizard-btn-primary" onClick={handleConfigure}>Apply &amp; Restart</button>
+                    <button className="wizard-btn-primary" onClick={handleConfigure}>{t('crypto.wizard.applyRestart')}</button>
                   )}
                 </div>
               )}

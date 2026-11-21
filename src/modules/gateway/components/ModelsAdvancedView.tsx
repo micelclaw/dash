@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Loader2, Trash2, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
@@ -11,6 +11,7 @@ import { useGatewayStore } from '@/stores/gateway.store';
 import { isModelRefValid } from '../lib/refs';
 import { LocalOllamaBlock } from './LocalOllamaBlock';
 import { ProviderStatusBlock } from './ProviderStatusBlock';
+import { useI18n } from '@/i18n';
 
 /**
  * Models → Advanced sub-tab. Power-user configuration:
@@ -34,6 +35,9 @@ export function ModelsAdvancedView() {
 // ─── Aliases ────────────────────────────────────────────────────────
 
 function AliasesBlock() {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const models = useGatewayStore(s => s.models);
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -48,7 +52,7 @@ function AliasesBlock() {
     try {
       const data = await gwService.getAliases();
       setAliases(data);
-    } catch { toast.error('Failed to load aliases'); }
+    } catch { toast.error(tRef.current('gateway.modelsAdvanced.loadAliasesFailed')); }
     finally { setLoading(false); }
   }, []);
 
@@ -59,13 +63,13 @@ function AliasesBlock() {
     setSaving(true);
     try {
       await gwService.addAlias(newAlias.trim(), newModel.trim());
-      toast.success(`Alias "${newAlias}" added`);
+      toast.success(t('gateway.modelsAdvanced.addedAliasToast', { alias: newAlias }));
       setNewAlias('');
       setNewModel('');
       setShowAdd(false);
       fetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add alias');
+      toast.error(err instanceof Error ? err.message : t('gateway.modelsAdvanced.addAliasFailed'));
     } finally { setSaving(false); }
   };
 
@@ -73,19 +77,19 @@ function AliasesBlock() {
     setRemoving(alias);
     try {
       await gwService.removeAlias(alias);
-      toast.success(`Alias "${alias}" removed`);
+      toast.success(t('gateway.modelsAdvanced.removedAliasToast', { alias }));
       fetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove alias');
+      toast.error(err instanceof Error ? err.message : t('gateway.modelsAdvanced.removeAliasFailed'));
     } finally { setRemoving(null); }
   };
 
   return (
-    <Section title="Aliases" description="Short names for your models. Use them in chat or in the CLI.">
+    <Section title={t('gateway.modelsAdvanced.aliases')} description={t('gateway.modelsAdvanced.aliasesDescription')}>
       {loading ? <SectionLoading /> : (
         <>
           {Object.keys(aliases).length === 0 && !showAdd && (
-            <EmptyHint>No aliases yet. Add one to use shorter names like <code>sonnet</code> instead of <code>anthropic/claude-sonnet-4-6</code>.</EmptyHint>
+            <EmptyHint>{t('gateway.modelsAdvanced.noAliases')}</EmptyHint>
           )}
           {Object.entries(aliases).map(([alias, model]) => {
             const valid = isModelRefValid(model, models);
@@ -95,7 +99,7 @@ function AliasesBlock() {
                   <strong style={{ color: 'var(--amber)' }}>{alias}</strong>
                   <span style={{ color: 'var(--text-dim)', margin: '0 8px' }}>→</span>
                   <span style={{ color: valid ? 'var(--text)' : '#f43f5e' }}>{model}</span>
-                  {!valid && <DanglingBadge title="Target not in configured models" />}
+                  {!valid && <DanglingBadge title={t('gateway.modelsAdvanced.targetMissing')} />}
                 </span>
                 <RemoveButton onClick={() => handleRemove(alias)} loading={removing === alias} />
               </Row>
@@ -113,7 +117,7 @@ function AliasesBlock() {
               <input
                 value={newAlias}
                 onChange={(e) => setNewAlias(e.target.value)}
-                placeholder="Alias (e.g. sonnet)"
+                placeholder={t('gateway.modelsAdvanced.aliasPlaceholder')}
                 style={inlineInput}
                 autoFocus
               />
@@ -128,12 +132,12 @@ function AliasesBlock() {
                 disabled={saving || !newAlias.trim() || !newModel.trim()}
                 style={primaryBtn}
               >
-                {saving ? <Loader2 size={12} className="spin" /> : 'Add'}
+                {saving ? <Loader2 size={12} className="spin" /> : t('gateway.modelsAdvanced.add')}
               </button>
-              <button onClick={() => setShowAdd(false)} style={secondaryBtn}>Cancel</button>
+              <button onClick={() => setShowAdd(false)} style={secondaryBtn}>{t('gateway.modelsAdvanced.cancel')}</button>
             </div>
           ) : (
-            <AddButton label="Add alias" onClick={() => setShowAdd(true)} />
+            <AddButton label={t('gateway.modelsAdvanced.addAlias')} onClick={() => setShowAdd(true)} />
           )}
         </>
       )}
@@ -144,6 +148,9 @@ function AliasesBlock() {
 // ─── Fallbacks (text or image) ──────────────────────────────────────
 
 function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const models = useGatewayStore(s => s.models);
   const [fallbacks, setFallbacks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +169,7 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
     setLoading(true);
     try {
       setFallbacks(await list());
-    } catch { toast.error('Failed to load fallbacks'); }
+    } catch { toast.error(tRef.current('gateway.modelsAdvanced.loadFallbacksFailed')); }
     finally { setLoading(false); }
   }, [list]);
 
@@ -173,12 +180,12 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
     setSaving(true);
     try {
       await add(newModel.trim());
-      toast.success('Fallback added');
+      toast.success(t('gateway.modelsAdvanced.fallbackAdded'));
       setNewModel('');
       setShowAdd(false);
       fetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add fallback');
+      toast.error(err instanceof Error ? err.message : t('gateway.modelsAdvanced.addFallbackFailed'));
     } finally { setSaving(false); }
   };
 
@@ -186,10 +193,10 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
     setRemoving(model);
     try {
       await remove(model);
-      toast.success('Fallback removed');
+      toast.success(t('gateway.modelsAdvanced.fallbackRemoved'));
       fetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove fallback');
+      toast.error(err instanceof Error ? err.message : t('gateway.modelsAdvanced.removeFallbackFailed'));
     } finally { setRemoving(null); }
   };
 
@@ -207,21 +214,21 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
       await setOrder(next);
     } catch (err) {
       setFallbacks(prev);
-      toast.error(err instanceof Error ? err.message : 'Failed to reorder fallbacks');
+      toast.error(err instanceof Error ? err.message : t('gateway.modelsAdvanced.reorderFallbacksFailed'));
     } finally { setReordering(false); }
   };
 
-  const title = kind === 'text' ? 'Fallbacks' : 'Image model fallbacks';
-  const description = kind === 'text'
-    ? 'If the primary model fails, try these in order.'
-    : 'Image generation models to try if the default fails.';
+  const title = t(kind === 'text' ? 'gateway.modelsAdvanced.fallbacks' : 'gateway.modelsAdvanced.imageFallbacks');
+  const description = t(kind === 'text'
+    ? 'gateway.modelsAdvanced.primaryFallbackHelp'
+    : 'gateway.modelsAdvanced.imageFallbackHelp');
 
   return (
     <Section title={title} description={description}>
       {loading ? <SectionLoading /> : (
         <>
           {fallbacks.length === 0 && !showAdd && (
-            <EmptyHint>No {kind === 'text' ? 'text' : 'image'} fallbacks configured.</EmptyHint>
+            <EmptyHint>{t(kind === 'text' ? 'gateway.modelsAdvanced.noTextFallbacks' : 'gateway.modelsAdvanced.noImageFallbacks')}</EmptyHint>
           )}
           {fallbacks.map((model, i) => {
             const valid = isModelRefValid(model, models);
@@ -230,7 +237,7 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
                   <span style={{ color: 'var(--text-dim)', marginRight: 8 }}>{i + 1}.</span>
                   <span style={{ color: valid ? 'var(--text)' : '#f43f5e' }}>{model}</span>
-                  {!valid && <DanglingBadge title="Fallback not in configured models" />}
+                  {!valid && <DanglingBadge title={t('gateway.modelsAdvanced.fallbackNotConfigured')} />}
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <ReorderButton dir="up" disabled={i === 0 || reordering} onClick={() => move(i, -1)} />
@@ -252,17 +259,17 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
               <input
                 value={newModel}
                 onChange={(e) => setNewModel(e.target.value)}
-                placeholder="provider/model"
+                placeholder={t('gateway.modelsAdvanced.providerModelPlaceholder')}
                 style={inlineInput}
                 autoFocus
               />
               <button onClick={handleAdd} disabled={saving || !newModel.trim()} style={primaryBtn}>
-                {saving ? <Loader2 size={12} className="spin" /> : 'Add'}
+                {saving ? <Loader2 size={12} className="spin" /> : t('gateway.modelsAdvanced.add')}
               </button>
-              <button onClick={() => setShowAdd(false)} style={secondaryBtn}>Cancel</button>
+              <button onClick={() => setShowAdd(false)} style={secondaryBtn}>{t('gateway.modelsAdvanced.cancel')}</button>
             </div>
           ) : (
-            <AddButton label={`Add ${kind} fallback`} onClick={() => setShowAdd(true)} />
+            <AddButton label={t(kind === 'text' ? 'gateway.modelsAdvanced.addTextFallback' : 'gateway.modelsAdvanced.addImageFallback')} onClick={() => setShowAdd(true)} />
           )}
         </>
       )}

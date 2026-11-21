@@ -24,6 +24,7 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { useLongPress } from '../drive/use-long-press';
 import { buildExplorerContextMenu, buildExplorerBackgroundMenu, type ExplorerMenuContext } from './context-menu';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 interface FileBrowserProps {
   files: FileRecord[];
@@ -50,6 +51,7 @@ export function FileBrowser({
   files, loading, error, view, density = 'comfortable', selectedFile, selectedIds, isWritable,
   onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll, onRename, menuCtx,
 }: FileBrowserProps) {
+  const { t } = useI18n();
   const compact = density === 'compact';
   // Móvil: long-press = seleccionar, tap con selección activa = toggle, y el
   // menú contextual se abre con el ⋮ único de la batch bar (mismo modelo que Drive).
@@ -100,10 +102,10 @@ export function FileBrowser({
     const entries = selectedIds.size > 0 && selectedIds.has(file.id)
       ? files.filter(f => selectedIds.has(f.id))
       : [file];
-    return buildExplorerContextMenu(entries, fullCtx);
+    return buildExplorerContextMenu(entries, fullCtx, t);
   };
 
-  const backgroundItems = buildExplorerBackgroundMenu(fullCtx);
+  const backgroundItems = buildExplorerBackgroundMenu(fullCtx, t);
 
   /** Wrap content in the background (empty-area) context menu when it has entries. */
   const withBackgroundMenu = (content: React.ReactElement) =>
@@ -132,8 +134,8 @@ export function FileBrowser({
       <div style={{ height: '100%' }}>
         <EmptyState
           icon={FolderOpen}
-          title="No files here"
-          description="This folder is empty. Upload files or create a new folder to get started."
+          title={t('explorer.empty.title')}
+          description={t('explorer.empty.description')}
         />
       </div>
     );
@@ -212,10 +214,10 @@ export function FileBrowser({
           onChange={onToggleAll}
           style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
         />
-        <span>Name</span>
-        <span style={{ display: isMobile ? 'none' : undefined }}>Size</span>
-        <span style={{ display: isMobile ? 'none' : undefined }}>Modified</span>
-        <span style={{ display: isMobile ? 'none' : undefined }}>Type</span>
+        <span>{t('explorer.column.name')}</span>
+        <span style={{ display: isMobile ? 'none' : undefined }}>{t('explorer.column.size')}</span>
+        <span style={{ display: isMobile ? 'none' : undefined }}>{t('explorer.column.modified')}</span>
+        <span style={{ display: isMobile ? 'none' : undefined }}>{t('explorer.column.type')}</span>
       </div>
       {/* Rows */}
       {files.map(file => (

@@ -16,6 +16,7 @@ import { PROVIDER_COLORS } from './constants';
 import type { ProviderEntry } from './types';
 import { ProviderCard, AddProviderTypeCard, AvailableProviderCard } from './ProviderCards';
 import type { InstallableCatalogProvider } from '../../types';
+import { useI18n } from '@/i18n';
 
 export function CatalogProvidersGrid({
   entries, availableProviders, search, isMobile, customProviderIds, deletingProvider, installingProvider,
@@ -36,6 +37,7 @@ export function CatalogProvidersGrid({
   onOpenAdvanced: () => void;
   onInstallProvider: (provider: InstallableCatalogProvider) => void;
 }) {
+  const { t } = useI18n();
   const ollamaStatus = useSettingsStore((s) => s.settings?.ai?.local_models?.ollama_status ?? 'disconnected');
   const ollamaUrl = useSettingsStore((s) => s.settings?.ai?.local_models?.ollama_url ?? 'http://127.0.0.1:11434');
 
@@ -54,7 +56,7 @@ export function CatalogProvidersGrid({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
       <section>
         <h3 style={{ margin: '0 0 10px', color: 'var(--text-dim)', fontSize: '0.6875rem', letterSpacing: '0.08em', fontWeight: 600 }}>
-          INSTALLED PROVIDERS
+          {t('gateway.models.installedProviders')}
         </h3>
         <div style={gridStyle}>
       {filteredEntries.map((entry) => (
@@ -83,7 +85,7 @@ export function CatalogProvidersGrid({
             legacyConfigured: false, enabled: true,
             migrationTarget: null,
           }}
-          subtitle={ollamaStatus === 'connected' ? 'No models pulled yet' : `Disconnected · ${ollamaUrl}`}
+          subtitle={ollamaStatus === 'connected' ? t('gateway.models.noModelsPulled') : t('gateway.models.disconnected', { url: ollamaUrl })}
           onClick={onOpenAdvanced}
         />
       )}
@@ -91,15 +93,15 @@ export function CatalogProvidersGrid({
       {/* Las únicas tarjetas Micelclaw (no OpenClaw) son sus extensiones
           explícitas: endpoint compatible custom y gateway local OmniRoute. */}
       <AddProviderTypeCard
-        label="Custom Provider"
-        description="Any OpenAI or Anthropic-compatible endpoint"
+        label={t('gateway.models.customProvider')}
+        description={t('gateway.models.customProviderDescription')}
         onClick={() => onSelectProviderType('custom')}
         provider="custom"
       />
       {!entries.some((entry) => entry.provider === 'omniroute') && (
         <AddProviderTypeCard
           label="OmniRoute"
-          description="Self-hosted AI gateway managed by Micelclaw"
+          description={t('gateway.models.omniRouteDescription')}
           onClick={() => onSelectProviderType('omniroute')}
           provider="omniroute"
         />
@@ -110,7 +112,7 @@ export function CatalogProvidersGrid({
       {filteredAvailable.length > 0 && (
         <section>
           <h3 style={{ margin: '0 0 10px', color: 'var(--text-dim)', fontSize: '0.6875rem', letterSpacing: '0.08em', fontWeight: 600 }}>
-            AVAILABLE TO INSTALL
+            {t('gateway.models.availableToInstall')}
           </h3>
           <div style={gridStyle}>
             {filteredAvailable.map((provider) => (

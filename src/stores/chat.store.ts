@@ -1,3 +1,8 @@
+import { useProfileStore } from './profile.store';
+import { useAuthStore } from './auth.store';
+import { useNativeCanvasBoardStore } from './native-canvas-board.store';
+import { useCanvasStore } from './canvas.store';
+import { useChatWorkspaceStore } from './chat-workspace.store';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -21,7 +26,7 @@ import { mergeLedgerToolRecord, normalizeToolCallRecord, normalizeToolCallRecord
 import type { Message, MessageApproval, Conversation, Agent, ChatState, StreamingState, ChatAttachment, ToolExecution, ToolCallRecord, ToolRunState, BackgroundRunStatus } from '@/types/chat';
 import { useWebSocketStore } from './websocket.store';
 import { isKnownSlash } from '@/config/slash-commands';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import { writeTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 
 // A restore invalidates in-flight history reads as well as the displayed cache.
@@ -206,6 +211,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       id, filename, mime_type, size_bytes, filepath,
     }));
     const result = useWebSocketStore.getState().send('chat.send', {
+      erp_profile_id: useProfileStore.getState().activeProfileId,
       agent, message: text, conversation_id: convId,
       attachments: attachmentsMeta ?? null,
       message_metadata: { background_chat: true },
@@ -306,6 +312,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     const isMock = import.meta.env.VITE_MOCK_API === 'true';
     const result: WsSendResult = isMock ? { accepted: true } :
       useWebSocketStore.getState().send('chat.send', {
+        erp_profile_id: useProfileStore.getState().activeProfileId,
         agent,
         message: messageToSend,
         conversation_id: convId,
@@ -397,6 +404,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   upsertLedgerMessage: (message: Message) => {
+    if (useChatWorkspaceStore.getState().byConversation[message.conversation_id]?.revoked) return;
     const current = get().messages.get(message.conversation_id) ?? [];
     const existing = current.find(row => row.id === message.id);
     if (message.role !== 'assistant' || existing && existing.role !== 'assistant') return;
@@ -423,6 +431,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   addMessage: (message: Message) => {
+    if (useChatWorkspaceStore.getState().byConversation[message.conversation_id]?.revoked) return;
     set((state) => {
       const updated = new Map(state.messages);
       const existing = updated.get(message.conversation_id) ?? [];
@@ -465,10 +474,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   clearConversationMessages: (conversationId: string) => {
+    useChatWorkspaceStore.getState().reset(conversationId); useNativeCanvasBoardStore.getState().clear(conversationId); useCanvasStore.getState().clearCanvas(conversationId);
+    historyGenerations.set(conversationId, (historyGenerations.get(conversationId) ?? 0) + 1);
     set((state) => {
       const updated = new Map(state.messages);
       updated.set(conversationId, []);
-      return { messages: updated };
+      return { messages: updated, streamingMessage: state.streamingMessage?.conversationId === conversationId ? null : state.streamingMessage };
     });
   },
 
@@ -542,6 +553,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   deleteConversation: (id: string) => {
+    useChatWorkspaceStore.getState().remove(id); useNativeCanvasBoardStore.getState().clear(id); useCanvasStore.getState().clearCanvas(id);
     set((state) => {
       const conversations = state.conversations.filter((c) => c.id !== id);
       const messages = new Map(state.messages);
@@ -585,6 +597,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   loadConversations: async () => {
+    const sessionGeneration = useAuthStore.getState().sessionGeneration;
     try {
       const res = await api.get<{ data: Array<{
         conversation_id: string;
@@ -606,6 +619,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         participants?: Array<{ user_id: string; display_name: string; avatar_url?: string |null }>;
       }> }>('/conversations/threads', { limit: 100 });
 
+      if (useAuthStore.getState().sessionGeneration !== sessionGeneration) return;
       const conversations: Conversation[] = (res.data ?? []).map((t) => ({
         id: t.conversation_id,
         agent: t.agent ?? 'francis',
@@ -651,8 +665,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   loadMessages: async (conversationId: string, options?: { replace?: boolean }) => {
+    if (options?.replace) { useChatWorkspaceStore.getState().reset(conversationId); useNativeCanvasBoardStore.getState().clear(conversationId); useCanvasStore.getState().clearCanvas(conversationId); }
     if (options?.replace) historyGenerations.set(conversationId, (historyGenerations.get(conversationId) ?? 0) + 1);
     const generation = historyGenerations.get(conversationId) ?? 0;
+    const sessionGeneration = useAuthStore.getState().sessionGeneration;
+    let requestEpoch = useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0;
+    const current = () => useAuthStore.getState().sessionGeneration === sessionGeneration && (useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0) === requestEpoch && (historyGenerations.get(conversationId) ?? 0) === generation;
     const beforeReplace = options?.replace
       ? new Set((get().messages.get(conversationId) ?? []).map(message => message.id))
       : null;
@@ -680,7 +698,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         author?: { kind: 'human'; id: string; display_name: string; avatar_url?: string | null };
       }> }>(`/conversations/threads/${conversationId}`);
 
-      if ((historyGenerations.get(conversationId) ?? 0) !== generation) return;
+      if (!current()) return;
+      if (useChatWorkspaceStore.getState().byConversation[conversationId]?.revoked) { useChatWorkspaceStore.getState().authorize(conversationId); requestEpoch = useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0; useNativeCanvasBoardStore.getState().clear(conversationId); }
       const msgs: Message[] = (res.data ?? []).map((m) => {
         // Backend returns tool_calls as jsonb (Drizzle gives us back
         // the array). It's the persisted ToolCallRecord shape but
@@ -763,7 +782,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       // resueltas/expiradas no se rehidratan (no son accionables).
       void import('../services/approvals.service').then(async ({ listPendingApprovals }) => {
         const pending = await listPendingApprovals();
-        if ((historyGenerations.get(conversationId) ?? 0) !== generation) return;
+        if (!current()) return;
         for (const a of pending) {
           if (a.conversation_id !== conversationId) continue;
           get().addMessage({
@@ -791,11 +810,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         }
       }).catch(() => { /* best-effort — la tarjeta viva sigue llegando por WS */ });
     } catch (err) {
+      if (!current()) return;
+      if (err instanceof ApiError && (err.status === 403 || err.status === 404)) { get().clearConversationMessages(conversationId); useChatWorkspaceStore.getState().revokeSource(conversationId); useNativeCanvasBoardStore.getState().revoke(conversationId); return; }
       console.error('[chat] Failed to load messages:', err);
     }
   },
 
   recoverActiveToolRun: async (conversationId: string) => {
+    const sessionGeneration = useAuthStore.getState().sessionGeneration;
+    const epoch = useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0;
+    const current = () => useAuthStore.getState().sessionGeneration === sessionGeneration && (useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0) === epoch && !useChatWorkspaceStore.getState().byConversation[conversationId]?.revoked;
+    if (!current()) return;
     try {
       const response = await api.get<{ data: null | {
         conversation_id: string;
@@ -805,6 +830,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         tools: ToolCallRecord[];
         captured_at: string;
       } }>(`/conversations/${conversationId}/tool-runs/active`);
+      if (!current()) return;
       const snapshot = response.data;
       if (!snapshot || snapshot.conversation_id !== conversationId) return;
       set((state) => {

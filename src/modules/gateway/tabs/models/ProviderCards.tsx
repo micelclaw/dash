@@ -16,6 +16,7 @@ import { ProviderBrandIcon } from '@/config/provider-icons';
 import { PROVIDER_COLORS } from './constants';
 import type { ProviderEntry } from './types';
 import type { InstallableCatalogProvider } from '../../types';
+import { useI18n } from '@/i18n';
 
 // Panel web propio de OmniRoute (el gateway self-hosted local). Solo su tarjeta lleva
 // el enlace: un usuario normal no sabría llegar a él (127.0.0.1:20128) de otra forma.
@@ -30,6 +31,7 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting, onM
   onMigrate?: (e: React.MouseEvent) => void;
   migrating?: boolean;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   return (
     // Card clicable como <div role="button">, NO <button>: contiene un <button> de
@@ -70,7 +72,7 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting, onM
             {entry.label}
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 1 }}>
-            {subtitle ?? `${entry.modelCount} model${entry.modelCount !== 1 ? 's' : ''} · ${entry.legacyConfigured ? 'Legacy CLI config' : entry.hasAuth ? 'Configured' : 'Not configured'}`}
+            {subtitle ?? `${t(entry.modelCount === 1 ? 'gateway.models.modelCountOne' : 'gateway.models.modelCountMany', { count: entry.modelCount })} · ${entry.legacyConfigured ? t('gateway.models.legacyCliConfig') : entry.hasAuth ? t('gateway.models.configured') : t('gateway.models.notConfigured')}`}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -91,7 +93,7 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting, onM
                 background: 'transparent', border: 'none', cursor: deleting ? 'wait' : 'pointer',
                 color: 'var(--text-muted)', padding: 2, display: 'flex', opacity: deleting ? 0.5 : 1,
               }}
-              title="Remove provider"
+              title={t('gateway.models.removeProvider')}
             >
               {deleting ? <Loader2 size={12} className="spin" /> : <Trash2 size={12} />}
             </button>
@@ -108,7 +110,7 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting, onM
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          title="Abrir el panel de OmniRoute en una pestaña nueva"
+          title={t('gateway.models.openOmniRoute')}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
             fontSize: '0.6875rem', color: entry.color, textDecoration: 'none',
@@ -116,14 +118,14 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting, onM
             borderRadius: 'var(--radius-sm)', marginTop: 2, fontFamily: 'var(--font-sans)',
           }}
         >
-          <ExternalLink size={11} /> Abrir OmniRoute
+          <ExternalLink size={11} /> {t('gateway.models.openOmniRouteLabel')}
         </a>
       )}
       {entry.legacyConfigured && onMigrate && (
         <button
           onClick={onMigrate}
           disabled={migrating}
-          title={`Move model refs to ${entry.migrationTarget ?? 'the canonical provider'} and preserve the CLI runtime`}
+          title={t('gateway.models.migrateTitle', { provider: entry.migrationTarget ?? t('gateway.models.canonicalProvider') })}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
             fontSize: '0.6875rem', color: 'var(--amber)', padding: '4px 8px',
@@ -133,7 +135,7 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting, onM
           }}
         >
           {migrating ? <Loader2 size={11} className="spin" /> : <ArrowRightLeft size={11} />}
-          {migrating ? 'Migrating…' : `Migrate to ${entry.migrationTarget ?? 'canonical provider'}`}
+          {migrating ? t('gateway.models.migrating') : t('gateway.models.migrateTo', { provider: entry.migrationTarget ?? t('gateway.models.canonicalProvider') })}
         </button>
       )}
     </div>
@@ -145,6 +147,7 @@ export function AvailableProviderCard({ provider, installing, onInstall }: {
   installing: boolean;
   onInstall: () => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const color = PROVIDER_COLORS[provider.id] ?? 'var(--text-dim)';
   return (
@@ -163,7 +166,7 @@ export function AvailableProviderCard({ provider, installing, onInstall }: {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>{provider.label}</div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>Official OpenClaw plugin</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{t('gateway.models.officialPlugin')}</div>
         </div>
       </div>
       {provider.description && (
@@ -180,7 +183,7 @@ export function AvailableProviderCard({ provider, installing, onInstall }: {
         }}
       >
         {installing ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
-        {installing ? 'Installing…' : 'Install'}
+        {installing ? t('gateway.models.installing') : t('gateway.models.install')}
       </button>
     </div>
   );

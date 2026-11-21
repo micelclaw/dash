@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n';
 
 type Person = { user_id: string; display_name: string; avatar_url?: string | null };
 type Member = Person & { role: 'viewer' | 'participant'; added_by: string; created_at: string };
@@ -21,6 +22,7 @@ type Collaboration = {
 };
 
 export function ConversationCollaboration({ conversationId, compact = false }: { conversationId: string | null; compact?: boolean }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<Collaboration | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
@@ -54,9 +56,9 @@ export function ConversationCollaboration({ conversationId, compact = false }: {
       setError('');
     } catch {
       if (generation !== loadGeneration.current) return;
-      setError('No se pudo cargar la colaboración de esta conversación.');
+      setError(t('chat.collaboration.loadError'));
     }
-  }, [conversationId]);
+  }, [conversationId, t]);
 
   // The compact header is itself a collaboration surface (participants and
   // presence), so load on conversation change as well as when its drawer opens.
@@ -87,7 +89,7 @@ export function ConversationCollaboration({ conversationId, compact = false }: {
       reconcile?.(result);
       await load();
     }
-    catch { setError('No se pudo guardar el cambio de acceso.'); }
+    catch { setError(t('chat.collaboration.saveError')); }
     finally { setPending(false); }
   };
 
@@ -103,36 +105,36 @@ export function ConversationCollaboration({ conversationId, compact = false }: {
   const typingLabel = typingNames.length === 0
     ? null
     : typingNames.length === 1
-      ? `${typingNames[0]} está escribiendo…`
-      : `${typingNames.slice(0, 2).join(' y ')} están escribiendo…`;
+    ? t('chat.collaboration.typingOne', { name: typingNames[0] ?? '' })
+      : t('chat.collaboration.typingMany', { names: typingNames.slice(0, 2).join(t('chat.collaboration.viewingAnd')) });
 
   if (!conversationId) return null;
   return <>
     <button
       onClick={() => setOpen(true)}
-      title="Compartir conversación"
+      title={t('chat.collaboration.share')}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: compact ? '4px 6px' : '4px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 12 }}
     >
-      <Share2 size={14} />{!compact && (typingLabel ?? (presentNames.length > 1 ? `${presentNames.length} viendo` : 'Compartir'))}{(data?.members.length ?? 0) > 0 && <span style={{ color: typingLabel ? 'var(--success)' : 'var(--amber)' }}>{participants > 0 ? participants : data?.members.length}</span>}
+      <Share2 size={14} />{!compact && (typingLabel ?? (presentNames.length > 1 ? t('chat.collaboration.peopleViewing', { count: presentNames.length }) : t('chat.collaboration.sharing')))}{(data?.members.length ?? 0) > 0 && <span style={{ color: typingLabel ? 'var(--success)' : 'var(--amber)' }}>{participants > 0 ? participants : data?.members.length}</span>}
     </button>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-[560px]" style={{ maxHeight: '80dvh', overflowY: 'auto' }}>
         <DialogHeader>
-          <DialogTitle>Compartir conversación</DialogTitle>
-          <DialogDescription>Las personas añadidas podrán acceder al historial completo existente de esta conversación.</DialogDescription>
+          <DialogTitle>{t('chat.collaboration.title')}</DialogTitle>
+          <DialogDescription>{t('chat.collaboration.description')}</DialogDescription>
         </DialogHeader>
         {error && <p style={{ margin: 0, color: 'var(--red)', fontSize: 13 }}>{error}</p>}
         {data && <section style={{ display: 'grid', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 9, border: '1px solid var(--border)', borderRadius: 8 }}>
             <Users size={16} style={{ color: 'var(--amber)' }} />
-            <span style={{ flex: 1 }}><strong>{data.owner?.display_name ?? 'Propietario'}</strong><br /><small style={{ color: 'var(--text-muted)' }}>Propietario</small></span>
+            <span style={{ flex: 1 }}><strong>{data.owner?.display_name ?? t('chat.collaboration.owner')}</strong><br /><small style={{ color: 'var(--text-muted)' }}>{t('chat.collaboration.owner')}</small></span>
           </div>
           {data.can_manage && <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', padding: 10, border: '1px solid var(--border)', borderRadius: 8 }}>
-            <label htmlFor="conversation-collaborator" style={{ display: 'grid', gap: 4, flex: '1 1 180px', fontSize: 12 }}>Persona
-              <select id="conversation-collaborator" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}><option value="">Selecciona una persona…</option>{unassigned.map((person) => <option key={person.user_id} value={person.user_id}>{person.display_name}</option>)}</select>
+            <label htmlFor="conversation-collaborator" style={{ display: 'grid', gap: 4, flex: '1 1 180px', fontSize: 12 }}>{t('chat.collaboration.person')}
+              <select id="conversation-collaborator" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}><option value="">{t('chat.collaboration.selectPerson')}</option>{unassigned.map((person) => <option key={person.user_id} value={person.user_id}>{person.display_name}</option>)}</select>
             </label>
-            <label htmlFor="conversation-collaborator-access" style={{ display: 'grid', gap: 4, fontSize: 12 }}>Acceso
-              <select id="conversation-collaborator-access" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value as 'viewer' | 'participant')}><option value="viewer">Solo lectura</option><option value="participant">Participar</option></select>
+            <label htmlFor="conversation-collaborator-access" style={{ display: 'grid', gap: 4, fontSize: 12 }}>{t('chat.collaboration.access')}
+              <select id="conversation-collaborator-access" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value as 'viewer' | 'participant')}><option value="viewer">{t('chat.collaboration.readOnly')}</option><option value="participant">{t('chat.collaboration.participant')}</option></select>
             </label>
             <Button disabled={!selectedUserId || pending} onClick={() => {
               const memberUserId = selectedUserId;
@@ -154,19 +156,19 @@ export function ConversationCollaboration({ conversationId, compact = false }: {
                   } : current);
                 },
               );
-            }}>Añadir</Button>
+            }}>{t('chat.collaboration.add')}</Button>
           </div>}
           <div style={{ display: 'grid', gap: 7 }}>
-            {data.members.length === 0 && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>Aún no hay personas invitadas.</p>}
+            {data.members.length === 0 && <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>{t('chat.collaboration.noneInvited')}</p>}
             {data.members.map((member) => <div key={member.user_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, borderBottom: '1px solid var(--border)' }}>
               {member.role === 'viewer' ? <Eye size={15} /> : <Pencil size={15} />}
               <span style={{ flex: 1 }}>{member.display_name}</span>
-              {data.can_manage ? <select aria-label={`Acceso de ${member.display_name}`} value={member.role} disabled={pending} onChange={(event) => { const role = event.target.value as Member['role']; void mutate(() => api.patch(`/conversations/${conversationId}/members/${member.user_id}`, { role }), () => setData((current) => current ? { ...current, members: current.members.map((item) => item.user_id === member.user_id ? { ...item, role } : item) } : current)); }}><option value="viewer">Solo lectura</option><option value="participant">Participar</option></select> : <small style={{ color: 'var(--text-muted)' }}>{member.role === 'viewer' ? 'Solo lectura' : 'Participar'}</small>}
-              {data.can_manage && <button aria-label={`Revocar acceso de ${member.display_name}`} disabled={pending} onClick={() => void mutate(() => api.delete(`/conversations/${conversationId}/members/${member.user_id}`), () => setData((current) => current ? { ...current, members: current.members.filter((item) => item.user_id !== member.user_id) } : current))} style={{ color: 'var(--red)', background: 'transparent', border: 0, cursor: 'pointer' }}><X size={16} /></button>}
+              {data.can_manage ? <select aria-label={t('chat.collaboration.memberAccess', { name: member.display_name })} value={member.role} disabled={pending} onChange={(event) => { const role = event.target.value as Member['role']; void mutate(() => api.patch(`/conversations/${conversationId}/members/${member.user_id}`, { role }), () => setData((current) => current ? { ...current, members: current.members.map((item) => item.user_id === member.user_id ? { ...item, role } : item) } : current)); }}><option value="viewer">{t('chat.collaboration.readOnly')}</option><option value="participant">{t('chat.collaboration.participant')}</option></select> : <small style={{ color: 'var(--text-muted)' }}>{member.role === 'viewer' ? t('chat.collaboration.readOnly') : t('chat.collaboration.participant')}</small>}
+              {data.can_manage && <button aria-label={t('chat.collaboration.revokeAccess', { name: member.display_name })} disabled={pending} onClick={() => void mutate(() => api.delete(`/conversations/${conversationId}/members/${member.user_id}`), () => setData((current) => current ? { ...current, members: current.members.filter((item) => item.user_id !== member.user_id) } : current))} style={{ color: 'var(--red)', background: 'transparent', border: 0, cursor: 'pointer' }}><X size={16} /></button>}
             </div>)}
           </div>
         </section>}
-        <DialogFooter>{data && !data.can_manage && data.access !== 'owner' && <Button variant="outline" disabled={pending} onClick={() => void mutate(() => api.post(`/conversations/${conversationId}/leave`))}>Abandonar conversación</Button>}<Button variant="outline" onClick={() => setOpen(false)}>Cerrar</Button></DialogFooter>
+        <DialogFooter>{data && !data.can_manage && data.access !== 'owner' && <Button variant="outline" disabled={pending} onClick={() => void mutate(() => api.post(`/conversations/${conversationId}/leave`))}>{t('chat.collaboration.leave')}</Button>}<Button variant="outline" onClick={() => setOpen(false)}>{t('chat.collaboration.close')}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </>;

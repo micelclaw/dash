@@ -33,8 +33,10 @@ import { useFileExplorer, toVfsApiPath } from './hooks/use-file-explorer';
 import { buildExplorerContextMenu, type ExplorerMenuContext } from './context-menu';
 import { api } from '@/services/api';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -110,14 +112,14 @@ export function Component() {
           const ids = selectedIds.size > 0 ? [...selectedIds] : selectedFile ? [selectedFile.id] : [];
           if (ids.length > 0) {
             clipboard.setClipboard('copy', ids, currentPath, currentSpace);
-            toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} copied`);
+            toast.success(ids.length === 1 ? t('explorer.toast.copiedOne') : t('explorer.toast.copied', { count: ids.length }));
           }
         } else if (e.key === 'x' && isWritable) {
           e.preventDefault();
           const ids = selectedIds.size > 0 ? [...selectedIds] : selectedFile ? [selectedFile.id] : [];
           if (ids.length > 0) {
             clipboard.setClipboard('cut', ids, currentPath, currentSpace);
-            toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} cut`);
+            toast.success(ids.length === 1 ? t('explorer.toast.cutOne') : t('explorer.toast.cut', { count: ids.length }));
           }
         } else if (e.key === 'v' && isWritable && clipboard.operation && clipboard.fileIds.length > 0) {
           e.preventDefault();
@@ -140,7 +142,7 @@ export function Component() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, selectedFile, currentPath, currentSpace, isWritable, clipboard, toggleAll, clearSelection]);
+  }, [selectedIds, selectedFile, currentPath, currentSpace, isWritable, clipboard, toggleAll, clearSelection, t]);
 
   /**
    * Paste the clipboard into `destFolder` (context menu over a folder) or the
@@ -152,12 +154,12 @@ export function Component() {
     if (!op || clipboard.fileIds.length === 0) return;
     if (clipboard.space !== currentSpace) {
       toast.error(clipboard.space === 'index'
-        ? 'Clipboard items are from Drive — paste them there'
-        : 'Clipboard items are File Explorer paths — paste them in a storage source');
+        ? t('explorer.toast.clipboardDrive')
+        : t('explorer.toast.clipboardExplorer'));
       return;
     }
     if (destFolder && clipboard.fileIds.includes(destFolder.id)) {
-      toast.error('Cannot paste a folder into itself');
+      toast.error(t('explorer.toast.selfPaste'));
       return;
     }
 
@@ -183,12 +185,14 @@ export function Component() {
         }
       }
       if (op === 'cut') clipboard.clear();
-      toast.success(`${n} item${n > 1 ? 's' : ''} ${op === 'cut' ? 'moved' : 'pasted'}`);
+      toast.success(op === 'cut'
+        ? n === 1 ? t('explorer.toast.movedOne') : t('explorer.toast.moved', { count: n })
+        : n === 1 ? t('explorer.toast.pastedOne') : t('explorer.toast.pasted', { count: n }));
       await fetchFiles();
     } catch {
-      toast.error('Paste operation failed');
+      toast.error(t('explorer.toast.pasteFailed'));
     }
-  }, [clipboard, currentPath, currentSpace, moveFile, fetchFiles]);
+  }, [clipboard, currentPath, currentSpace, moveFile, fetchFiles, t]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -223,7 +227,7 @@ export function Component() {
     if (isVfs) {
       const filesOnly = targets.filter(f => !f.is_directory);
       if (filesOnly.length < targets.length) {
-        toast.info('Folders can’t be downloaded from this source');
+        toast.info(t('explorer.toast.foldersDownload'));
       }
       filesOnly.forEach(f => { void downloadVfsFile(f.id, f.filename); });
     } else if (targets.length === 1) {
@@ -232,7 +236,7 @@ export function Component() {
     } else {
       void downloadBatch(targets.map(f => f.id));
     }
-  }, [isVfs]);
+  }, [isVfs, t]);
 
   const handleBatchDownload = useCallback(() => {
     handleDownload(files.filter(f => selectedIds.has(f.id)));
@@ -243,14 +247,14 @@ export function Component() {
   const handleCut = useCallback((targets: FileRecord[]) => {
     if (targets.length === 0) return;
     clipboard.setClipboard('cut', targets.map(f => f.id), currentPath, currentSpace);
-    toast.success(`${targets.length} item${targets.length > 1 ? 's' : ''} cut`);
-  }, [clipboard, currentPath, currentSpace]);
+    toast.success(targets.length === 1 ? t('explorer.toast.cutOne') : t('explorer.toast.cut', { count: targets.length }));
+  }, [clipboard, currentPath, currentSpace, t]);
 
   const handleCopy = useCallback((targets: FileRecord[]) => {
     if (targets.length === 0) return;
     clipboard.setClipboard('copy', targets.map(f => f.id), currentPath, currentSpace);
-    toast.success(`${targets.length} item${targets.length > 1 ? 's' : ''} copied`);
-  }, [clipboard, currentPath, currentSpace]);
+    toast.success(targets.length === 1 ? t('explorer.toast.copiedOne') : t('explorer.toast.copied', { count: targets.length }));
+  }, [clipboard, currentPath, currentSpace, t]);
 
   const handlePickerConfirm = useCallback(async (destPath: string) => {
     if (!picker) return;
@@ -259,11 +263,13 @@ export function Component() {
     try {
       if (action === 'move') await batchMove(new Set(ids), destPath);
       else await batchCopy(new Set(ids), destPath);
-      toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} ${action === 'move' ? 'moved' : 'copied'}`);
+      toast.success(action === 'move'
+        ? ids.length === 1 ? t('explorer.toast.movedOne') : t('explorer.toast.moved', { count: ids.length })
+        : ids.length === 1 ? t('explorer.toast.copiedOne') : t('explorer.toast.copied', { count: ids.length }));
     } catch {
-      toast.error(`${action === 'move' ? 'Move' : 'Copy'} failed`);
+      toast.error(t('explorer.toast.operationFailed', { action: t(action === 'move' ? 'explorer.cross.moveHere' : 'explorer.menu.copy') }));
     }
-  }, [picker, batchMove, batchCopy]);
+  }, [picker, batchMove, batchCopy, t]);
 
   const confirmPendingDelete = useCallback(async () => {
     const ids = pendingDeleteIds ?? [];
@@ -272,11 +278,11 @@ export function Component() {
     try {
       if (ids.length === 1) await deleteFile(ids[0]!);
       else await batchDelete(new Set(ids));
-      toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} deleted`);
+      toast.success(ids.length === 1 ? t('explorer.toast.deletedOne') : t('explorer.toast.deleted', { count: ids.length }));
     } catch {
-      toast.error('Delete failed');
+      toast.error(t('explorer.toast.operationFailed', { action: t('explorer.menu.delete') }));
     }
-  }, [pendingDeleteIds, deleteFile, batchDelete]);
+  }, [pendingDeleteIds, deleteFile, batchDelete, t]);
 
   /** Menu context shared by row menus + background menu + header ⋮ (FileBrowser
    *  overrides onRename with its inline rename for the row menus; the header ⋮
@@ -322,8 +328,8 @@ export function Component() {
     [files, selectedIds],
   );
   const selectionMenuItems = useMemo(
-    () => buildExplorerContextMenu(selectedFiles, menuCtx),
-    [selectedFiles, menuCtx],
+    () => buildExplorerContextMenu(selectedFiles, menuCtx, t),
+    [selectedFiles, menuCtx, t],
   );
 
   const fileBrowserBlock = (
@@ -402,15 +408,15 @@ export function Component() {
           }}
         >
           <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-            {selectedIds.size} selected
+            {t('explorer.selection.selected', { count: selectedIds.size })}
           </span>
           <div style={{ flex: 1 }} />
-          <BatchButton icon={Download} label="Download" onClick={handleBatchDownload} />
+          <BatchButton icon={Download} label={t('explorer.batch.download')} onClick={handleBatchDownload} />
           {isWritable && (
-            <BatchButton icon={Trash2} label="Delete" onClick={() => setPendingDeleteIds([...selectedIds])} variant="danger" />
+            <BatchButton icon={Trash2} label={t('explorer.batch.delete')} onClick={() => setPendingDeleteIds([...selectedIds])} variant="danger" />
           )}
           <SelectionMenuButton items={selectionMenuItems} />
-          <BatchButton icon={X} label="Clear" onClick={clearSelection} />
+          <BatchButton icon={X} label={t('explorer.batch.clear')} onClick={clearSelection} />
         </div>
       )}
 
@@ -456,6 +462,8 @@ export function Component() {
               </span>
               <button
                 onClick={() => setSelectedFile(null)}
+                title={t('shared.action.close')}
+                aria-label={t('shared.action.close')}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -500,11 +508,11 @@ export function Component() {
       {/* Delete confirmation (batch bar, Del key, context menu) */}
       <ConfirmDialog
         open={pendingDeleteIds !== null}
-        title={`Delete ${pendingDeleteIds?.length ?? 0} item${(pendingDeleteIds?.length ?? 0) > 1 ? 's' : ''}?`}
+        title={t('explorer.delete.title', { count: pendingDeleteIds?.length ?? 0 })}
         description={currentSpace === 'vfs'
-          ? 'This will permanently delete the selected items from the storage source.'
-          : 'This action will move the selected items to trash.'}
-        confirmLabel="Delete"
+          ? t('explorer.delete.permanent')
+          : t('explorer.delete.trash')}
+        confirmLabel={t('explorer.batch.delete')}
         variant="danger"
         onConfirm={() => { void confirmPendingDelete(); }}
         onClose={() => setPendingDeleteIds(null)}
@@ -514,7 +522,7 @@ export function Component() {
       <RenameDialog
         open={!!renameTarget}
         currentName={renameTarget?.filename ?? ''}
-        title="New name:"
+        title={t('explorer.rename.title')}
         onConfirm={(name) => {
           if (renameTarget && name.trim() && name.trim() !== renameTarget.filename) {
             renameFile(renameTarget.id, name.trim());
@@ -527,10 +535,10 @@ export function Component() {
       <RenameDialog
         open={newFolderOpen}
         currentName=""
-        title="New folder name:"
-        confirmLabel="Create"
+        title={t('explorer.rename.folderTitle')}
+        confirmLabel={t('explorer.rename.create')}
         onConfirm={(name) => {
-          void Promise.resolve(createFolder(name)).catch(() => toast.error('Failed to create folder'));
+          void Promise.resolve(createFolder(name)).catch(() => toast.error(t('explorer.rename.createFolderFailed')));
         }}
         onClose={() => setNewFolderOpen(false)}
       />

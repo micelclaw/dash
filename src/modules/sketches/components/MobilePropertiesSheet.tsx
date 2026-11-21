@@ -13,11 +13,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import { PropertiesPanel } from '../PropertiesPanel';
 
 type SheetState = 'collapsed' | 'half' | 'full';
 
 export function MobilePropertiesSheet() {
+  const { t } = useI18n();
   const [state, setState] = useState<SheetState>('collapsed');
   const selectedElement = useDiagramsStore((s) => s.selectedElement);
   const prevSelectedId = useRef<string | undefined>(undefined);
@@ -93,15 +95,23 @@ export function MobilePropertiesSheet() {
           textAlign: 'left',
         }}>
           {selectedElement
-            ? `${selectedElement.type === 'node' ? 'Node' : 'Edge'} Properties`
-            : 'Canvas Settings'}
+            ? `${t(selectedElement.type === 'node' ? 'sketches.mobileProperties.node' : 'sketches.mobileProperties.edge')} ${t('sketches.mobileProperties.properties')}`
+            : t('sketches.mobileProperties.canvasSettings')}
         </span>
         {state !== 'collapsed' ? (
-          <button onClick={(e) => { e.stopPropagation(); setState('collapsed'); }} style={iconBtnStyle}>
+          <button
+            aria-label={t('sketches.mobileProperties.collapse')}
+            onClick={(e) => { e.stopPropagation(); setState('collapsed'); }}
+            style={iconBtnStyle}
+          >
             <ChevronDown size={16} />
           </button>
         ) : (
-          <button onClick={(e) => { e.stopPropagation(); setState('half'); }} style={iconBtnStyle}>
+          <button
+            aria-label={t('sketches.mobileProperties.expand')}
+            onClick={(e) => { e.stopPropagation(); setState('half'); }}
+            style={iconBtnStyle}
+          >
             <ChevronUp size={16} />
           </button>
         )}

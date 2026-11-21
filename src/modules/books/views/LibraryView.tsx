@@ -18,8 +18,10 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { useBooksStore } from '@/stores/books.store';
 import { coverUrl, type Book } from '@/services/books.service';
+import { useI18n } from '@/i18n';
 
 function BookCard({ book }: { book: Book }) {
+  const { t } = useI18n();
   const openBook = useBooksStore((s) => s.openBook);
   const [shareOpen, setShareOpen] = useState(false);
   return (
@@ -34,7 +36,7 @@ function BookCard({ book }: { book: Book }) {
         onClick={() => openBook({ id: book.id, title: book.title })}
         menu={
           <DropdownMenuItem onClick={() => setShareOpen(true)}>
-            <Share2 size={14} /> Compartir
+            <Share2 size={14} /> {t('books.share')}
           </DropdownMenuItem>
         }
       />
@@ -57,6 +59,7 @@ function BookCard({ book }: { book: Book }) {
  * fullscreen ReaderView overlay (rendered by BooksPage).
  */
 export function LibraryView() {
+  const { t } = useI18n();
   const books = useBooksStore((s) => s.books);
   const booksLoaded = useBooksStore((s) => s.booksLoaded);
   const loading = useBooksStore((s) => s.loadingBooks);
@@ -94,7 +97,7 @@ export function LibraryView() {
 
   if (!booksLoaded) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('books.loading')}</div>
     ) : null;
   }
 
@@ -102,8 +105,8 @@ export function LibraryView() {
     return (
       <EmptyState
         icon={BookOpen}
-        title="Your library is empty"
-        description="Drop .epub files into /data/media/libros to see them here. Readarr and Calibre-web feed this folder automatically."
+        title={t('books.libraryEmpty')}
+        description={t('books.libraryEmptyDescription')}
       />
     );
   }
@@ -112,8 +115,8 @@ export function LibraryView() {
     return (
       <EmptyState
         icon={BookOpen}
-        title="No books match your search"
-        description={`Nothing in the library matches “${search.trim()}”.`}
+        title={t('books.noBooksMatch')}
+        description={t('books.searchNoMatch', { query: search.trim() })}
       />
     );
   }
@@ -121,7 +124,7 @@ export function LibraryView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 16 }}>
       {!query && continueReading.length > 0 && (
-        <MediaRail title="Continue reading">
+        <MediaRail title={t('books.continueReading')}>
           {continueReading.map((book) => (
             <BookCard key={book.id} book={book} />
           ))}

@@ -26,9 +26,11 @@ import { ChannelConfigModal } from '@/components/settings/sections/ChannelConfig
 import { NewChatDialog } from '@/components/settings/sections/NewChatDialog';
 import { platformMeta } from '@/config/messaging-platforms';
 import { refreshChannel } from '@/services/messages.service';
+import { useI18n } from '@/i18n';
 import type { Message } from '@/services/messages.service';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
@@ -55,11 +57,11 @@ export function Component() {
     const cap = capsByPlatform[platform];
     const connectorId = cap?.connector?.id;
     if (!connectorId) {
-      toast.error(`${platform} isn’t connected yet — connect it in Settings → Channel Observers`);
+      toast.error(t('messages.notConnected', { platform }));
       return;
     }
     setPicker({ connectorId, connectorType: platformMeta(platform).connectorType ?? '', platform });
-  }, [capsByPlatform]);
+  }, [capsByPlatform, t]);
 
   /** "Escribir a un contacto nuevo": abre el diálogo con el identificador que pida la plataforma. */
   const [newChat, setNewChat] = useState<{ platform: string; label: string; kind: 'phone' | 'username' | 'phone_or_username' } | null>(null);
@@ -193,10 +195,10 @@ export function Component() {
 
       // El error REAL del backend, no un genérico: "Signal is not configured —
       // reconnect it…" orienta; "Failed to send message" deja a ciegas.
-      if (!result.message) toast.error(result.error ?? 'Failed to send message');
+      if (!result.message) toast.error(result.error ?? t('messages.sendFailed'));
       refetchMessages();
     },
-    [selectedPlatform, selectedChannelId, send, appendOptimistic, refetchMessages],
+    [selectedPlatform, selectedChannelId, send, appendOptimistic, refetchMessages, t],
   );
 
   const activeChannel = channels.find(

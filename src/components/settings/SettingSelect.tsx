@@ -10,16 +10,19 @@
  * https://micelclaw.com
  */
 
+import { useId } from 'react';
+
 interface SettingSelectProps {
   label: string;
   description?: string;
   value: string;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; disabled?: boolean }>;
   onChange: (value: string) => void;
   disabled?: boolean;
 }
 
 export function SettingSelect({ label, description, value, options, onChange, disabled }: SettingSelectProps) {
+  const id = useId();
   return (
     <div
       style={{
@@ -33,7 +36,8 @@ export function SettingSelect({ label, description, value, options, onChange, di
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
+        <label
+          htmlFor={id}
           style={{
             fontSize: '0.875rem',
             fontWeight: 500,
@@ -42,7 +46,7 @@ export function SettingSelect({ label, description, value, options, onChange, di
           }}
         >
           {label}
-        </div>
+        </label>
         {description && (
           <div
             style={{
@@ -58,6 +62,7 @@ export function SettingSelect({ label, description, value, options, onChange, di
         )}
       </div>
       <select
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
@@ -80,7 +85,7 @@ export function SettingSelect({ label, description, value, options, onChange, di
         }}
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+          <option key={opt.value} value={opt.value} disabled={opt.disabled}>
             {opt.label}
           </option>
         ))}

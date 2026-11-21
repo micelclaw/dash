@@ -30,6 +30,7 @@ import { useMusicStore } from '@/stores/music.store';
 import type { Track } from '@/services/music.service';
 import { addTrackToQueue, playTrackNext, playTracks } from '../lib/playback';
 import { formatTrackDuration } from '../lib/format';
+import { useI18n } from '@/i18n';
 
 interface TrackListProps {
   tracks: Track[];
@@ -43,6 +44,7 @@ interface TrackListProps {
  * add-to-playlist submenu, star).
  */
 export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
+  const { t } = useI18n();
   const toggleTrackStar = useMusicStore((s) => s.toggleTrackStar);
   const playlists = useMusicStore((s) => s.playlists);
   const addTracksToPlaylist = useMusicStore((s) => s.addTracksToPlaylist);
@@ -57,7 +59,7 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
   if (tracks.length === 0) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-        No tracks
+        {t('music.noTracks')}
       </div>
     );
   }
@@ -89,7 +91,8 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
               {hovered ? (
                 <button
                   onClick={() => playTracks(tracks, index)}
-                  title="Play"
+                  title={t('music.play')}
+                  aria-label={t('music.play')}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
                     color: 'var(--amber)', display: 'flex',
@@ -128,7 +131,8 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
             {/* Star toggle (optimistic) */}
             <button
               onClick={() => void toggleTrackStar(track)}
-              title={track.starred ? 'Unstar' : 'Star'}
+              title={track.starred ? t('music.unstar') : t('music.star')}
+              aria-label={track.starred ? t('music.unstar') : t('music.star')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer', padding: 4,
                 color: track.starred ? 'var(--amber)' : hovered ? 'var(--text-dim)' : 'transparent',
@@ -152,7 +156,8 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  title="More"
+                  title={t('music.more')}
+                  aria-label={t('music.more')}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer', padding: 4,
                     color: hovered ? 'var(--text-dim)' : 'transparent',
@@ -165,23 +170,23 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => playTracks(tracks, index)}>
-                  <Play size={14} /> Play
+                  <Play size={14} /> {t('music.play')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => playTrackNext(track)}>
-                  <ListStart size={14} /> Play next
+                  <ListStart size={14} /> {t('music.playNext')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => addTrackToQueue(track)}>
-                  <ListEnd size={14} /> Add to queue
+                  <ListEnd size={14} /> {t('music.addToQueue')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
-                    <ListPlus size={14} /> Add to playlist
+                    <ListPlus size={14} /> {t('music.addToPlaylist')}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     {(playlists ?? []).length === 0 ? (
                       <DropdownMenuItem disabled>
-                        <Music size={14} /> No playlists
+                        <Music size={14} /> {t('music.noPlaylistsTrack')}
                       </DropdownMenuItem>
                     ) : (
                       (playlists ?? []).map((pl) => (
@@ -196,7 +201,7 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => void toggleTrackStar(track)}>
-                  <Heart size={14} /> {track.starred ? 'Unstar' : 'Star'}
+                  <Heart size={14} /> {track.starred ? t('music.unstar') : t('music.star')}
                 </DropdownMenuItem>
                 {onRemoveFromPlaylist && (
                   <>
@@ -205,7 +210,7 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
                       onClick={() => onRemoveFromPlaylist(index)}
                       style={{ color: 'var(--error)' }}
                     >
-                      Remove from playlist
+                      {t('music.removeFromPlaylist')}
                     </DropdownMenuItem>
                   </>
                 )}

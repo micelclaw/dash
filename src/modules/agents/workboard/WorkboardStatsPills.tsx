@@ -11,8 +11,18 @@
  */
 
 import { useMemo } from 'react';
+import { hasMessage, useI18n } from '@/i18n';
 import { PILLS, countPill, buildDiagIndex } from './pills';
 import type { WorkboardCard, WorkboardDiagnostic } from './types';
+
+const PILL_MESSAGE: Record<string, string> = {
+  running: 'agents.workboard.pill.running',
+  blocked: 'agents.workboard.pill.blocked',
+  stale: 'agents.workboard.pill.stale',
+  ready_unassigned: 'agents.workboard.pill.readyUnassigned',
+  untested: 'agents.workboard.pill.untested',
+  failed: 'agents.workboard.pill.failed',
+};
 
 interface Props {
   cards: WorkboardCard[];
@@ -22,17 +32,20 @@ interface Props {
 }
 
 export function WorkboardStatsPills({ cards, diagnostics, active, onToggle }: Props) {
+  const { t } = useI18n();
   const diagIndex = useMemo(() => buildDiagIndex(diagnostics), [diagnostics]);
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
       {PILLS.map((pill) => {
         const count = countPill(pill, cards, diagIndex);
         const on = active === pill.key;
+        const labelKey = PILL_MESSAGE[pill.key];
+        const label = labelKey && hasMessage(labelKey) ? t(labelKey) : pill.label;
         return (
           <button
             key={pill.key}
             onClick={() => onToggle(on ? null : pill.key)}
-            title={`Filtrar: ${pill.label}`}
+            title={t('agents.workboard.pill.filter', { label })}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999,
               fontSize: '0.6875rem', cursor: 'pointer',
@@ -43,7 +56,7 @@ export function WorkboardStatsPills({ cards, diagnostics, active, onToggle }: Pr
             }}
           >
             <span style={{ fontWeight: 700, color: count > 0 ? pill.color : 'var(--text-muted)' }}>{count}</span>
-            {pill.label}
+            {label}
           </button>
         );
       })}

@@ -18,6 +18,7 @@
 
 import { Maximize2, Minimize2, ExternalLink } from 'lucide-react';
 import { useServiceUrl } from '@/config/service-urls';
+import { useI18n } from '@/i18n';
 
 interface EmbedActionsProps {
   /** Slug del servicio (= name en services / exposable-services) para resolver el dominio. */
@@ -44,6 +45,7 @@ const iconBtn: React.CSSProperties = {
 };
 
 export function EmbedActions({ slug, fallbackUrl, openUrl, ramMb, fullscreen, onToggleFullscreen }: EmbedActionsProps) {
+  const { t } = useI18n();
   const domainUrl = useServiceUrl(slug, fallbackUrl);
   const href = openUrl ?? domainUrl;
   return (
@@ -53,8 +55,8 @@ export function EmbedActions({ slug, fallbackUrl, openUrl, ramMb, fullscreen, on
         type="button"
         onClick={onToggleFullscreen}
         style={iconBtn}
-        title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
-        aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+        title={t(fullscreen ? 'shared.embed.exitFullscreen' : 'shared.embed.fullscreen')}
+        aria-label={t(fullscreen ? 'shared.embed.exitFullscreenLabel' : 'shared.embed.fullscreenLabel')}
         aria-pressed={fullscreen}
       >
         {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
@@ -64,8 +66,8 @@ export function EmbedActions({ slug, fallbackUrl, openUrl, ramMb, fullscreen, on
         target="_blank"
         rel="noopener noreferrer"
         style={{ ...iconBtn, textDecoration: 'none' }}
-        title="Abrir en pestaña nueva"
-        aria-label="Abrir en pestaña nueva"
+        title={t('shared.embed.openTab')}
+        aria-label={t('shared.embed.openTab')}
       >
         <ExternalLink size={13} />
       </a>

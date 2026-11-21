@@ -12,59 +12,61 @@
 
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface ShortcutsModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-const SHORTCUT_GROUPS: { title: string; items: { keys: string; desc: string }[] }[] = [
+const SHORTCUT_GROUPS: { title: string; titleKey: string; items: { keys: string; descKey: string }[] }[] = [
   {
-    title: 'General',
+    title: 'General', titleKey: 'sketches.shortcuts.group.general',
     items: [
-      { keys: 'Ctrl+S', desc: 'Save diagram' },
-      { keys: 'Ctrl+Z', desc: 'Undo' },
-      { keys: 'Ctrl+Shift+Z', desc: 'Redo' },
-      { keys: 'Ctrl+K', desc: 'Command Palette' },
-      { keys: '?', desc: 'Show shortcuts' },
-      { keys: 'Escape', desc: 'Clear selection / Exit mode' },
+      { keys: 'Ctrl+S', descKey: 'sketches.shortcuts.general.saveDiagram' },
+      { keys: 'Ctrl+Z', descKey: 'sketches.shortcuts.general.undo' },
+      { keys: 'Ctrl+Shift+Z', descKey: 'sketches.shortcuts.general.redo' },
+      { keys: 'Ctrl+K', descKey: 'sketches.shortcuts.general.commandPalette' },
+      { keys: '?', descKey: 'sketches.shortcuts.general.showShortcuts' },
+      { keys: 'Escape', descKey: 'sketches.shortcuts.general.clearSelection' },
     ],
   },
   {
-    title: 'Selection',
+    title: 'Selection', titleKey: 'sketches.shortcuts.group.selection',
     items: [
-      { keys: 'Ctrl+A', desc: 'Select all nodes' },
-      { keys: 'Tab', desc: 'Select next node' },
-      { keys: 'Shift+Tab', desc: 'Select previous node' },
-      { keys: 'Delete / Backspace', desc: 'Delete selected' },
+      { keys: 'Ctrl+A', descKey: 'sketches.shortcuts.selection.selectAll' },
+      { keys: 'Tab', descKey: 'sketches.shortcuts.selection.next' },
+      { keys: 'Shift+Tab', descKey: 'sketches.shortcuts.selection.previous' },
+      { keys: 'Delete / Backspace', descKey: 'sketches.shortcuts.selection.delete' },
     ],
   },
   {
-    title: 'Edit',
+    title: 'Edit', titleKey: 'sketches.shortcuts.group.edit',
     items: [
-      { keys: 'Enter', desc: 'Edit selected node label' },
-      { keys: 'Ctrl+D', desc: 'Duplicate selected' },
-      { keys: 'Ctrl+C', desc: 'Copy' },
-      { keys: 'Ctrl+V', desc: 'Paste' },
-      { keys: 'Ctrl+G', desc: 'Group selected nodes' },
-      { keys: 'Ctrl+Shift+G', desc: 'Ungroup' },
-      { keys: 'Ctrl+]', desc: 'Bring to front' },
-      { keys: 'Ctrl+[', desc: 'Send to back' },
+      { keys: 'Enter', descKey: 'sketches.shortcuts.edit.editLabel' },
+      { keys: 'Ctrl+D', descKey: 'sketches.shortcuts.edit.duplicate' },
+      { keys: 'Ctrl+C', descKey: 'sketches.shortcuts.edit.copy' },
+      { keys: 'Ctrl+V', descKey: 'sketches.shortcuts.edit.paste' },
+      { keys: 'Ctrl+G', descKey: 'sketches.shortcuts.edit.group' },
+      { keys: 'Ctrl+Shift+G', descKey: 'sketches.shortcuts.edit.ungroup' },
+      { keys: 'Ctrl+]', descKey: 'sketches.shortcuts.edit.bringFront' },
+      { keys: 'Ctrl+[', descKey: 'sketches.shortcuts.edit.sendBack' },
     ],
   },
   {
-    title: 'Navigation',
+    title: 'Navigation', titleKey: 'sketches.shortcuts.group.navigation',
     items: [
-      { keys: 'Ctrl+0', desc: 'Fit view' },
-      { keys: 'Ctrl+1', desc: 'Zoom to 100%' },
-      { keys: 'Ctrl+2-9', desc: 'Save viewport bookmark' },
-      { keys: '2-9', desc: 'Navigate to bookmark' },
-      { keys: 'F11', desc: 'Toggle presentation mode' },
+      { keys: 'Ctrl+0', descKey: 'sketches.shortcuts.navigation.fit' },
+      { keys: 'Ctrl+1', descKey: 'sketches.shortcuts.navigation.zoom100' },
+      { keys: 'Ctrl+2-9', descKey: 'sketches.shortcuts.navigation.saveBookmark' },
+      { keys: '2-9', descKey: 'sketches.shortcuts.navigation.openBookmark' },
+      { keys: 'F11', descKey: 'sketches.shortcuts.navigation.presentation' },
     ],
   },
 ];
 
 export function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -90,7 +92,7 @@ export function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       role="dialog"
       aria-modal="true"
-      aria-label="Keyboard shortcuts"
+      aria-label={t('sketches.shortcuts.dialogTitle')}
     >
       <div
         style={{
@@ -118,11 +120,11 @@ export function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
             fontFamily: 'var(--font-sans, system-ui)',
             flex: 1,
           }}>
-            Keyboard Shortcuts
+            {t('sketches.shortcuts.title')}
           </span>
           <button
             onClick={onClose}
-            aria-label="Close shortcuts"
+            aria-label={t('sketches.shortcuts.close')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -159,7 +161,7 @@ export function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
                 fontFamily: 'var(--font-sans, system-ui)',
                 marginBottom: 8,
               }}>
-                {group.title}
+                {t(group.titleKey)}
               </div>
               {group.items.map((item) => (
                 <div
@@ -176,7 +178,7 @@ export function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
                     color: 'var(--text, #e2e8f0)',
                     fontFamily: 'var(--font-sans, system-ui)',
                   }}>
-                    {item.desc}
+                    {t(item.descKey)}
                   </span>
                   <kbd style={{
                     fontSize: 10,

@@ -18,6 +18,7 @@
 // El módulo de correo del dash NO usa Tailwind: estilos en línea con variables CSS.
 
 import { ShieldCheck, ShieldAlert, Paperclip } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface Props {
   /** Imágenes remotas distintas que trae el correo. */
@@ -40,6 +41,8 @@ interface Props {
 export function RemoteContentBanner({
   remotas, hosts, cid, mostrando, recordado, remitente, onMostrar, onSiempre, compacto,
 }: Props) {
+  const { t } = useI18n();
+
   // Nada remoto y nada `cid` → no hay nada que explicar. Y si el remitente ya
   // está permitido, tampoco: la barra solo aparece cuando hay una decisión.
   if (remotas === 0 && cid === 0) return null;
@@ -66,21 +69,21 @@ export function RemoteContentBanner({
         {remotas > 0 && (
           <div style={{ color: 'var(--text)' }}>
             {mostrando
-              ? `Imágenes cargadas por tu servidor (${remotas})`
-              : `Imágenes bloqueadas (${remotas})`}
+              ? t('mail.remoteLoaded', { count: remotas })
+              : t('mail.remoteBlocked', { count: remotas })}
           </div>
         )}
         {remotas > 0 && !compacto && (
           <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>
             {mostrando
-              ? 'Las pide Micelclaw, no tu navegador: el remitente no ve tu IP.'
-              : `Cargarlas avisaría a ${hosts.length === 1 ? hosts[0] : `${hosts.length} servidores del remitente`} de que has abierto el correo.`}
+              ? t('mail.remotePrivacy')
+              : t('mail.remoteWarning', { hosts: hosts.length === 1 && hosts[0] ? hosts[0] : t('mail.remoteHostsMany', { count: hosts.length }) })}
           </div>
         )}
         {cid > 0 && (
           <div style={{ color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Paperclip size={11} style={{ flexShrink: 0 }} />
-            {cid} {cid === 1 ? 'imagen incrustada del propio correo' : 'imágenes incrustadas del propio correo'} — todavía no se muestran
+            {cid} {t(cid === 1 ? 'mail.cidImageOne' : 'mail.cidImageMany')}{t('mail.remoteNotShown')}
           </div>
         )}
       </div>
@@ -89,12 +92,12 @@ export function RemoteContentBanner({
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           {!mostrando && (
             <button data-testid="mail-remote-show" onClick={onMostrar} style={botonStyle(true)}>
-              Mostrar
+              {t('mail.remoteShow')}
             </button>
           )}
           {!recordado && remitente && (
-            <button data-testid="mail-remote-always" onClick={onSiempre} style={botonStyle(false)} title={`Permitir siempre las imágenes de ${remitente}`}>
-              Siempre de este remitente
+            <button data-testid="mail-remote-always" onClick={onSiempre} style={botonStyle(false)} title={t('mail.remoteAlwaysTitle', { sender: remitente })}>
+              {t('mail.remoteAlways')}
             </button>
           )}
         </div>

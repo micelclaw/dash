@@ -13,6 +13,7 @@ import { Camera, ScanLine, StickyNote, Bookmark } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { api } from '@/services/api';
 import type { Photo } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 // Detección del puente nativo (lo inyecta el envoltorio Capacitor; el dash no
 // importa @capacitor/*). Si está, getPhoto abre la cámara in-app.
@@ -41,6 +42,7 @@ async function uploadToDrive(file: File, folder: string): Promise<Photo> {
 }
 
 export function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [busy, setBusy] = useState<string | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -52,20 +54,20 @@ export function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChan
     setBusy('photo');
     try {
       const record = await uploadToDrive(file, '/Photos');
-      toast.success('Foto subida');
+      toast.success(t('shell.capture.photoUploaded'));
       close();
       // Pass the record so Photos shows it INSTANTLY (optimistic prepend + a
       // "processing" badge) instead of waiting for the next timeline fetch.
       navigate('/photos', { state: { uploadedPhoto: record } });
-    } catch (e) { toast.error((e as Error).message ?? 'No se pudo subir'); setBusy(null); }
+    } catch (e) { toast.error((e as Error).message ?? t('shell.capture.uploadFailed')); setBusy(null); }
   };
   const handleTicket = async (file: File) => {
     setBusy('ticket');
     try {
       const record = await uploadToDrive(file, '/Inventory');
       await api.post('/inventory/proposals/from-camera', { file_id: record.id });
-      toast.success('Ticket enviado a Inventario'); close(); navigate('/inventory');
-    } catch (e) { toast.error((e as Error).message ?? 'No se pudo procesar el ticket'); setBusy(null); }
+      toast.success(t('shell.capture.receiptSent')); close(); navigate('/inventory');
+    } catch (e) { toast.error((e as Error).message ?? t('shell.capture.receiptFailed')); setBusy(null); }
   };
 
   // Abre cámara nativa si existe; si no, dispara el <input capture>.
@@ -83,19 +85,19 @@ export function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChan
         color: 'var(--text)', cursor: busy ? 'default' : 'pointer', fontSize: '0.95rem', opacity: busy && busy !== id ? 0.5 : 1,
       }}>
       <Icon size={20} style={{ color: 'var(--amber)' }} />
-      <span>{busy === id ? 'Subiendo…' : label}</span>
+      <span>{busy === id ? t('shell.capture.uploading') : label}</span>
     </button>
   );
 
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) close(); else onOpenChange(true); }}>
       <SheetContent side="bottom" style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }} data-testid="capture-sheet">
-        <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Capturar</div>
+        <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>{t('shell.nav.capture')}</div>
         <div style={{ display: 'grid', gap: 8 }}>
-          <Action id="photo" icon={Camera} label="Hacer foto → Fotos" onClick={() => void capture('photo')} />
-          <Action id="ticket" icon={ScanLine} label="Escanear ticket → Inventario" onClick={() => void capture('ticket')} />
-          <Action id="note" icon={StickyNote} label="Nota rápida" onClick={() => { close(); navigate('/notes'); }} />
-          <Action id="bookmark" icon={Bookmark} label="Marcador" onClick={() => { close(); navigate('/bookmarks'); }} />
+          <Action id="photo" icon={Camera} label={t('shell.capture.photo')} onClick={() => void capture('photo')} />
+          <Action id="ticket" icon={ScanLine} label={t('shell.capture.receipt')} onClick={() => void capture('ticket')} />
+          <Action id="note" icon={StickyNote} label={t('shell.capture.note')} onClick={() => { close(); navigate('/notes'); }} />
+          <Action id="bookmark" icon={Bookmark} label={t('shell.capture.bookmark')} onClick={() => { close(); navigate('/bookmarks'); }} />
         </div>
         {/* Inputs ocultos: abren la cámara del móvil (fallback web/PWA). */}
         <input ref={photoInput} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}

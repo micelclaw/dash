@@ -12,6 +12,7 @@
 
 import { ZoomIn, ZoomOut, Maximize, Pause, Play, Eye, EyeOff, Plus, Minus } from 'lucide-react';
 import { DEFAULT_FOV_3D, FOV_MIN_3D, FOV_MAX_3D } from './three-contracts';
+import { useI18n } from '@/i18n';
 
 interface GraphZoomControlsProps {
   onZoomIn: () => void;
@@ -62,6 +63,7 @@ export function GraphZoomControls({
   is3D, fov, onFovChange,
   egoDegree = 0, egoEnabled = false, onEgoPlus, onEgoMinus,
 }: GraphZoomControlsProps) {
+  const { t } = useI18n();
   const showEgo = !!(onEgoPlus && onEgoMinus);
   // Activo si hay nodo seleccionado (engancha) o si ya estamos en ego (permite ±).
   const egoActive = egoEnabled || egoDegree > 0;
@@ -78,7 +80,7 @@ export function GraphZoomControls({
       {is3D && onFovChange && (
         <div
           style={{ ...PANEL_STYLE, alignItems: 'center', gap: 4, padding: '8px 4px' }}
-          title="Campo de visión (FOV)"
+          title={t('graph.zoom.fov')}
         >
           <input
             type="range"
@@ -87,7 +89,8 @@ export function GraphZoomControls({
             step={1}
             value={fov ?? DEFAULT_FOV_3D}
             onChange={e => onFovChange(Number(e.currentTarget.value))}
-            title="Campo de visión (FOV)"
+            title={t('graph.zoom.fov')}
+            aria-label={t('graph.zoom.fov')}
             style={{
               // Slider vertical (valores altos arriba), compacto junto a la columna de botones.
               writingMode: 'vertical-lr',
@@ -118,8 +121,9 @@ export function GraphZoomControls({
               disabled={!egoActive}
               style={{ ...BTN_STYLE, opacity: egoActive ? 1 : 0.35, cursor: egoActive ? 'pointer' : 'default' }}
               title={egoActive
-                ? 'Mostrar el nodo y su vecindario · + un grado más'
-                : 'Selecciona un nodo primero'}
+                ? t('graph.zoom.egoPlus')
+                : t('graph.zoom.selectNode')}
+              aria-label={egoActive ? t('graph.zoom.egoPlus') : t('graph.zoom.selectNode')}
               onMouseEnter={e => { if (egoActive) { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; } }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
             >
@@ -132,14 +136,15 @@ export function GraphZoomControls({
               color: egoDegree > 0 ? 'var(--amber)' : 'var(--text-dim)',
               fontVariantNumeric: 'tabular-nums',
               userSelect: 'none',
-            }} title="Grado de la ego-red (0 = grafo completo)">
+            }} title={t('graph.zoom.egoDegree')}>
               {egoDegree > 0 ? `G${egoDegree}` : '·'}
             </span>
             <button
               onClick={onEgoMinus}
               disabled={!egoActive}
               style={{ ...BTN_STYLE, opacity: egoActive ? 1 : 0.35, cursor: egoActive ? 'pointer' : 'default' }}
-              title={egoActive ? 'Un grado menos (0 = grafo completo)' : 'Selecciona un nodo primero'}
+              title={egoActive ? t('graph.zoom.egoMinus') : t('graph.zoom.selectNode')}
+              aria-label={egoActive ? t('graph.zoom.egoMinus') : t('graph.zoom.selectNode')}
               onMouseEnter={e => { if (egoActive) { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; } }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
             >
@@ -151,7 +156,8 @@ export function GraphZoomControls({
         <button
           onClick={onZoomIn}
           style={BTN_STYLE}
-          title="Zoom in"
+          title={t('graph.zoom.in')}
+          aria-label={t('graph.zoom.in')}
           onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
         >
@@ -160,7 +166,8 @@ export function GraphZoomControls({
         <button
           onClick={onZoomOut}
           style={BTN_STYLE}
-          title="Zoom out"
+          title={t('graph.zoom.out')}
+          aria-label={t('graph.zoom.out')}
           onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
         >
@@ -172,7 +179,8 @@ export function GraphZoomControls({
             ...BTN_STYLE,
             color: showHulls ? 'var(--amber)' : 'var(--text-dim)',
           }}
-          title={showHulls ? 'Hide clusters' : 'Show clusters'}
+          title={showHulls ? t('graph.zoom.hideClusters') : t('graph.zoom.showClusters')}
+          aria-label={showHulls ? t('graph.zoom.hideClusters') : t('graph.zoom.showClusters')}
           onMouseEnter={e => { if (!showHulls) e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = showHulls ? 'var(--amber)' : 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
         >
@@ -181,7 +189,8 @@ export function GraphZoomControls({
         <button
           onClick={onZoomReset}
           style={BTN_STYLE}
-          title="Reset zoom"
+          title={t('graph.zoom.reset')}
+          aria-label={t('graph.zoom.reset')}
           onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
         >
@@ -196,7 +205,8 @@ export function GraphZoomControls({
             ...BTN_STYLE,
             color: frozen ? 'var(--amber)' : 'var(--text-dim)',
           }}
-          title={frozen ? 'Resume simulation' : 'Freeze simulation'}
+          title={frozen ? t('graph.zoom.resume') : t('graph.zoom.freeze')}
+          aria-label={frozen ? t('graph.zoom.resume') : t('graph.zoom.freeze')}
           onMouseEnter={e => { if (!frozen) e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'var(--surface-hover)'; }}
           onMouseLeave={e => { e.currentTarget.style.color = frozen ? 'var(--amber)' : 'var(--text-dim)'; e.currentTarget.style.background = 'none'; }}
         >

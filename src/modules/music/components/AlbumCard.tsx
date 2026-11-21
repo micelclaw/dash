@@ -16,12 +16,14 @@ import { MediaCard } from '@/components/media';
 import { coverUrl, type AlbumSummary } from '@/services/music.service';
 import { useMusicStore } from '@/stores/music.store';
 import { playAlbumById } from '../lib/playback';
+import { useI18n } from '@/i18n';
 
 /**
  * Album cover card. `width` pins the card for rail usage (~160px);
  * leave unset inside a MediaGrid.
  */
 export function AlbumCard({ album, width }: { album: AlbumSummary; width?: number }) {
+  const { t } = useI18n();
   return (
     <div style={width ? { width, flexShrink: 0 } : undefined}>
       <MediaCard
@@ -31,7 +33,7 @@ export function AlbumCard({ album, width }: { album: AlbumSummary; width?: numbe
             badge={<EntitySource entity={album} domain="music" native />}
         subtitle={album.artist}
         onClick={() => void useMusicStore.getState().openAlbum(album.id)}
-        onPlay={() => void playAlbumById(album.id)}
+        onPlay={() => void playAlbumById(album.id, t)}
       />
     </div>
   );

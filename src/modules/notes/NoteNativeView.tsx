@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 import { api } from '@/services/api';
 import type { NoteAttachment } from '@/types/notes';
 import type { ApiResponse } from '@/types/api';
+import { useI18n } from '@/i18n';
 
 interface EditableUnit { index: number; id: string; value: { tag: string; html: string; attributes: Record<string, string> }; }
 interface EditState { enabled: boolean; local_revision: string; units: EditableUnit[]; }
@@ -17,6 +18,7 @@ const imageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'
 export function NoteNativeView({ noteId, content, attachments, canEdit = false, onConfirmed, provider = 'OneNote' }: {
   noteId: string; content: string; attachments: NoteAttachment[]; canEdit?: boolean; onConfirmed?: () => Promise<void>; provider?: string;
 }) {
+  const { t } = useI18n();
   const [images, setImages] = useState<Record<string, string>>({});
   const [editState, setEditState] = useState<EditState | null>(null);
   const [status, setStatus] = useState('');
@@ -31,9 +33,9 @@ export function NoteNativeView({ noteId, content, attachments, canEdit = false, 
     let active = true;
     if (canEdit) void api.get<ApiResponse<EditState>>(`/notes/${noteId}/editable-units`).then(response => {
       if (active) setEditState(response.data);
-    }).catch(() => { if (active) setStatus('No se pudieron cargar los bloques editables.'); });
+    }).catch(() => { if (active) setStatus(t('notes.native.blocksFailed')); });
     return () => { active = false; };
-  }, [noteId, canEdit, content]);
+  }, [noteId, canEdit, content, t]);
   const safe = useMemo(() => {
     const clean = DOMPurify.sanitize(content, { ALLOWED_TAGS: ['div', 'p', 'span', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ol', 'ul', 'li', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'strong', 'b', 'em', 'i', 'u', 's', 'strike',
@@ -79,49 +81,49 @@ export function NoteNativeView({ noteId, content, attachments, canEdit = false, 
       const ref = file.getAttribute('data-note-resource') || '';
       if (!images[ref]) continue;
       const image = document.createElement('img'); image.setAttribute('data-note-resource', ref);
-      image.setAttribute('alt', file.textContent || 'Imagen adjunta de OneNote'); file.replaceWith(image);
+      image.setAttribute('alt', file.textContent || t('notes.native.imageAlt')); file.replaceWith(image);
     }
     for (const image of document.querySelectorAll('img[data-note-resource]')) {
       const url = images[image.getAttribute('data-note-resource') || ''];
       if (url) image.setAttribute('src', url);
-      else { const placeholder = document.createElement('span'); placeholder.textContent = '[Imagen no disponible todavía]'; image.replaceWith(placeholder); }
+      else { const placeholder = document.createElement('span'); placeholder.textContent = t('notes.native.imagePending'); image.replaceWith(placeholder); }
     }
     for (const element of document.querySelectorAll('[data-note-unit-index]')) {
       const unit = editState?.units.find(item => String(item.index) === element.getAttribute('data-note-unit-index'));
       if (canEdit && editState?.enabled && unit && !busy) {
         element.setAttribute('contenteditable', 'true'); element.setAttribute('role', 'textbox');
-        element.setAttribute('aria-label', `Texto de OneNote ${unit.index + 1}`);
+        element.setAttribute('aria-label', t('notes.native.textLabel', { provider, index: unit.index + 1 }));
         element.setAttribute('tabindex', '0'); element.setAttribute('spellcheck', 'true');
         element.classList.add('onenote-editable-text');
       }
     }
     return document.body.innerHTML;
-  }, [safe, images, editState, canEdit, busy]);
+  }, [safe, images, editState, canEdit, busy, t, provider]);
   async function save(unit: EditableUnit, html: string) {
     if (busy) return;
     const authority = editAuthority.current;
     if (!authority?.enabled || html === unit.value.html) { editAuthority.current = null; setFrozen(null); setEditing(false); return; }
-    draft.current = { unit, html }; setBusy(true); setStatus('Guardando en OneNote…');
+    draft.current = { unit, html }; setBusy(true); setStatus(t('notes.native.saving', { provider }));
     try {
       await api.post(`/notes/${noteId}/sync-edit`, { expected_local_revision: authority.local_revision,
         operations: [{ op: 'set_unit', unit_id: unit.id, value: { ...unit.value, html } }] }, { timeout: 150_000 });
       const state = await api.get<ApiResponse<{ state: string }>>(`/notes/${noteId}/sync-state`);
       if (state.data.state !== 'synced') {
         setEditState(previous => previous ? { ...previous, enabled: false } : previous);
-        setStatus('El cambio sigue pendiente o tiene un conflicto. No se ha confirmado en OneNote.');
+        setStatus(t('notes.native.pending', { provider }));
         return;
       }
       await onConfirmed?.();
-      draft.current = null; editAuthority.current = null; setFrozen(null); setEditing(false); setStatus('Guardado en OneNote.');
+      draft.current = null; editAuthority.current = null; setFrozen(null); setEditing(false); setStatus(t('notes.native.saved', { provider }));
     } catch {
       setEditState(previous => previous ? { ...previous, enabled: false } : previous);
-      setStatus('No se pudo confirmar el guardado. Tu texto sigue aquí; recarga el estado antes de volver a guardar.');
+      setStatus(t('notes.native.saveFailed'));
     } finally { setBusy(false); }
   }
   return <>
-    {canEdit && <p className="text-xs text-[var(--text-dim)]">Haz clic dentro de un párrafo o una medida para editarlo. Se guarda al salir del bloque. Las imágenes, los dibujos y el espacio en blanco no son zonas de escritura.</p>}
+    {canEdit && <p className="text-xs text-[var(--text-dim)]">{t('notes.native.editHelp')}</p>}
     {status && <p role="status" className="text-xs text-[var(--text-dim)]">{status}</p>}
-    <section aria-label={`Contenido de ${provider}`} data-note-native-reader={provider.toLowerCase()}
+    <section aria-label={t('notes.native.content', { provider })} data-note-native-reader={provider.toLowerCase()}
     onFocusCapture={event => {
       if (!(event.target as HTMLElement).closest('[contenteditable="true"]')) return;
       editAuthority.current ??= editState;

@@ -1,28 +1,23 @@
 import { useEffect } from 'react';
-import { useWebSocket } from './use-websocket';
 import { useChatStore } from '@/stores/chat.store';
+import { useAuthStore } from '@/stores/auth.store';
+import { useChatWorkspaceStore } from '@/stores/chat-workspace.store';
+import { useWebSocketStore } from '@/stores/websocket.store';
 import { normalizeToolCallRecords } from '@/lib/tool-call-record';
 
-/** Receives committed ledger rows. Incremental diagnostics are independent of
- * the active response and must not end its stream. Mounted once by Shell. */
+/** Every committed row is applied in receive order, before a later access/reset frame. */
 export function useChatLedgerSubscription(): void {
-  const ledgerMsgEvent = useWebSocket('chat.ledger_message');
+  const client = useWebSocketStore(s => s.client);
+  const generation = useAuthStore(s => s.sessionGeneration);
   useEffect(() => {
-    if (!ledgerMsgEvent) return;
-    const data = ledgerMsgEvent.data as {
-      id: string; conversation_id: string | null; session_id: string; from_agent: string;
-      text: string; tool_calls?: Array<Record<string, unknown>> | null;
-      thinking?: string | null; created_at: string; incremental?: boolean;
-    };
-    if (!data.id || !data.conversation_id) return;
-    const store = useChatStore.getState();
-    store.upsertLedgerMessage({
-      id: data.id, conversation_id: data.conversation_id, role: 'assistant', content: data.text,
-      agent: data.from_agent, timestamp: data.created_at,
-      tool_calls: normalizeToolCallRecords(data.tool_calls), thinking: data.thinking ?? undefined,
+    if (!client) return;
+    return client.on('chat.ledger_message', event => {
+      if (useAuthStore.getState().sessionGeneration !== generation) return;
+      const data = event.data as { id: string; conversation_id: string | null; from_agent: string; text: string; tool_calls?: Array<Record<string, unknown>> | null; thinking?: string | null; created_at: string; incremental?: boolean };
+      if (!data.id || !data.conversation_id || useChatWorkspaceStore.getState().byConversation[data.conversation_id]?.revoked) return;
+      const store = useChatStore.getState();
+      store.upsertLedgerMessage({ id: data.id, conversation_id: data.conversation_id, role: 'assistant', content: data.text, agent: data.from_agent, timestamp: data.created_at, tool_calls: normalizeToolCallRecords(data.tool_calls), thinking: data.thinking ?? undefined });
+      if (data.incremental !== true && store.streamingMessage?.conversationId === data.conversation_id) store.setStreamingMessage(null);
     });
-    if (data.incremental !== true && store.streamingMessage?.conversationId === data.conversation_id) {
-      store.setStreamingMessage(null);
-    }
-  }, [ledgerMsgEvent]);
+  }, [client, generation]);
 }

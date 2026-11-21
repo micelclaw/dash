@@ -32,6 +32,7 @@ import { useSortable, SortableTh } from '@/modules/finance/sortable';
 import { RegistrarPagoDialog } from './RegistrarPagoDialog';
 import { useFacturacionNav } from './navigation';
 import { useEscapeClose } from '../use-escape-close';
+import { useI18n } from '@/i18n';
 
 // ─── Etiqueta de tipo de documento ───────────────────────────────────────
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -53,26 +54,27 @@ function StatusBadge({ status, docType }: { status: DocStatus; docType?: DocType
 // Sin 'quote' ni 'bill': los presupuestos tienen su pestaña "Quotes" y las
 // facturas recibidas la suya "Received". Aquí solo documentos de VENTA emitidos.
 const TYPE_FILTERS: { id: '' | DocType; label: string }[] = [
-  { id: '', label: 'All' },
-  { id: 'invoice', label: 'Invoices' },
-  { id: 'receipt', label: 'Recibos' },
-  { id: 'credit_note', label: 'Credit notes' },
+  { id: '', label: 'finance.billing.all' },
+  { id: 'invoice', label: 'finance.billing.invoices' },
+  { id: 'receipt', label: 'finance.billing.receipts' },
+  { id: 'credit_note', label: 'finance.billing.creditNotes' },
 ];
 
 const STATUS_FILTERS: { id: '' | DocStatus; label: string }[] = [
-  { id: '', label: 'Any status' },
-  { id: 'draft', label: 'Draft' },
-  { id: 'sent', label: 'Sent' },
-  { id: 'accepted', label: 'Accepted' },
-  { id: 'declined', label: 'Rejected' },
-  { id: 'partial', label: 'Partial payment' },
-  { id: 'paid', label: 'Paid' },
-  { id: 'overdue', label: 'Overdue' },
-  { id: 'cancelled', label: 'Voided' },
-  { id: 'converted', label: 'Converted' },
+  { id: '', label: 'finance.billing.anyStatus' },
+  { id: 'draft', label: 'finance.billing.status.draft' },
+  { id: 'sent', label: 'finance.billing.status.sent' },
+  { id: 'accepted', label: 'finance.billing.status.accepted' },
+  { id: 'declined', label: 'finance.billing.status.declined' },
+  { id: 'partial', label: 'finance.billing.status.partial' },
+  { id: 'paid', label: 'finance.billing.status.paid' },
+  { id: 'overdue', label: 'finance.billing.status.overdue' },
+  { id: 'cancelled', label: 'finance.billing.status.cancelled' },
+  { id: 'converted', label: 'finance.billing.status.converted' },
 ];
 
 export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } = {}) {
+  const { t } = useI18n();
   const {
     documents,
     contacts,
@@ -140,24 +142,24 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         {!lockedType && (
           <select value={type} onChange={(e) => setType(e.target.value as '' | DocType)} style={selStyle}>
-            {TYPE_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            {TYPE_FILTERS.map((f) => <option key={f.id} value={f.id}>{t(f.label)}</option>)}
           </select>
         )}
         <select value={status} onChange={(e) => setStatus(e.target.value as '' | DocStatus)} style={selStyle}>
-          {STATUS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+          {STATUS_FILTERS.map((f) => <option key={f.id} value={f.id}>{t(f.label)}</option>)}
         </select>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{visibleDocs.length} documento{visibleDocs.length === 1 ? '' : 's'}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{visibleDocs.length} {t('finance.billing.documents')}</span>
         {lockedType === 'quote' ? (
           <button onClick={openNewQuote} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Plus size={15} /> Quote
+            <Plus size={15} /> {t('finance.billing.quote')}
           </button>
         ) : lockedType === 'bill' ? (
           <button onClick={openNewBill} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Plus size={15} /> Factura recibida
+            <Plus size={15} /> {t('finance.billing.receivedInvoice')}
           </button>
         ) : (
           <button onClick={() => openInvoice('')} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Plus size={15} /> Invoice
+            <Plus size={15} /> {t('finance.billing.invoice')}
           </button>
         )}
       </div>
@@ -166,17 +168,17 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
             <tr>
-              <SortableTh label={lockedType === 'bill' ? 'Nº proveedor' : 'Number'} col="number" state={sort} />
-              <SortableTh label={lockedType === 'bill' ? 'Supplier' : 'Customer'} col="client" state={sort} />
-              <SortableTh label={lockedType === 'bill' ? 'Received' : 'Issued'} col="issue" state={sort} />
-              <SortableTh label="Due" col="due" state={sort} />
-              <SortableTh label="Total" col="total" state={sort} align="right" />
-              <SortableTh label="Status" col="status" state={sort} align="right" />
+              <SortableTh label={t(lockedType === 'bill' ? 'finance.billing.supplierNumber' : 'finance.billing.number')} col="number" state={sort} />
+              <SortableTh label={t(lockedType === 'bill' ? 'finance.billing.supplier' : 'finance.billing.customer')} col="client" state={sort} />
+              <SortableTh label={t(lockedType === 'bill' ? 'finance.billing.received' : 'finance.billing.issued')} col="issue" state={sort} />
+              <SortableTh label={t('finance.billing.due')} col="due" state={sort} />
+              <SortableTh label={t('finance.billing.total')} col="total" state={sort} align="right" />
+              <SortableTh label={t('finance.status')} col="status" state={sort} align="right" />
             </tr>
           </thead>
           <tbody>
             {visibleDocs.length === 0 && (
-              <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={6}>Sin documentos para este filtro. Crea uno con {lockedType === 'quote' ? '“+ Presupuesto”' : lockedType === 'bill' ? '“+ Factura recibida”' : '“+ Factura”'}.</td></tr>
+              <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={6}>{t('finance.billing.emptyFilter', { action: `+ ${t(lockedType === 'quote' ? 'finance.billing.quote' : lockedType === 'bill' ? 'finance.billing.receivedInvoice' : 'finance.billing.invoice')}` })}</td></tr>
             )}
             {sort.sorted.map((doc) => (
               <tr
@@ -190,14 +192,14 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
                   <span
                     role="button"
                     tabIndex={0}
-                    title="Open in the editor"
+                    title={t('finance.billing.openEditor')}
                     onClick={(e) => { e.stopPropagation(); openEdit(doc.id); }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openEdit(doc.id); } }}
                     style={{ color: 'var(--mod-finance)', cursor: 'pointer', fontFamily: 'inherit' }}
                     onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
                     onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
                   >
-                    {doc.number ?? <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>— draft</span>}
+                    {doc.number ?? <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>— {t('finance.billing.status.draft').toLocaleLowerCase()}</span>}
                   </span>
                   {doc.external_ref?.attachment && <Paperclip size={12} style={{ marginLeft: 6, verticalAlign: 'middle', color: 'var(--text-muted)' }} />}
                   {doc.type !== 'invoice' && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'inherit' }}>{DOC_TYPE_LABEL[doc.type]}</span>}
@@ -208,7 +210,7 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
                       <span
                         role="button"
                         tabIndex={0}
-                        title="Open the customer record"
+                        title={t('finance.billing.openCustomer')}
                         onClick={(e) => { e.stopPropagation(); openContact(doc.contact_id); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openContact(doc.contact_id); } }}
                         style={{ cursor: 'pointer' }}

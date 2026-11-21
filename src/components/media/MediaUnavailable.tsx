@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useI18n } from '@/i18n';
 
 interface MediaUnavailableProps {
   icon: LucideIcon;
@@ -57,6 +58,14 @@ export function MediaUnavailable({
   onStart,
   onRetry,
 }: MediaUnavailableProps) {
+  const { t } = useI18n();
+  const translatedMediaNoun = mediaNoun === 'movies and series'
+    ? t('media.noun.video')
+    : mediaNoun === 'music'
+      ? t('media.noun.music')
+      : mediaNoun === 'audiobooks'
+        ? t('media.noun.audiobooks')
+        : mediaNoun;
   // Elapsed-seconds ticker, alive only while starting.
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef<number>(0);
@@ -71,6 +80,8 @@ export function MediaUnavailable({
   if (starting) {
     return (
       <div
+        role="status"
+        aria-live="polite"
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           height: '100%', gap: 14, textAlign: 'center', padding: 32, color: 'var(--text-dim)',
@@ -78,10 +89,10 @@ export function MediaUnavailable({
       >
         <Loader2 size={40} style={{ animation: 'mu-spin 1s linear infinite', color: 'var(--amber)' }} />
         <div style={{ fontSize: '1.0625rem', fontWeight: 500, color: 'var(--text)' }}>
-          Starting {serviceName}…
+          {t('media.starting', { service: serviceName })}
         </div>
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-          Your {mediaNoun} will appear as soon as it’s ready · {elapsed}s
+          {t('media.readyIn', { media: translatedMediaNoun, seconds: elapsed })}
         </div>
         <style>{`@keyframes mu-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -92,9 +103,9 @@ export function MediaUnavailable({
     return (
       <EmptyState
         icon={icon}
-        title={`${serviceName} is not installed`}
-        description={`${serviceName} serves your ${mediaNoun}. Ask an administrator to install it from the Servarr module — it’ll appear here automatically once installed.`}
-        actions={[{ label: 'Check again', onClick: onRetry, variant: 'secondary' }]}
+        title={t('media.notInstalled', { service: serviceName })}
+        description={t('media.installHelp', { service: serviceName, media: translatedMediaNoun })}
+        actions={[{ label: t('media.checkAgain'), onClick: onRetry, variant: 'secondary' }]}
       />
     );
   }
@@ -103,11 +114,11 @@ export function MediaUnavailable({
   return (
     <EmptyState
       icon={icon}
-      title={`${serviceName} is not running`}
-      description={startError ?? `${serviceName} serves your ${mediaNoun}. Start it to continue.`}
+      title={t('media.notRunning', { service: serviceName })}
+      description={startError ?? t('media.startHelp', { service: serviceName, media: translatedMediaNoun })}
       actions={[
-        { label: `Start ${serviceName}`, onClick: onStart, variant: 'primary' },
-        { label: 'Check again', onClick: onRetry, variant: 'secondary' },
+        { label: t('media.startService', { service: serviceName }), onClick: onStart, variant: 'primary' },
+        { label: t('media.checkAgain'), onClick: onRetry, variant: 'secondary' },
       ]}
     />
   );

@@ -33,7 +33,7 @@ export const AGENT_FILE_META: Record<string, AgentFileMeta> = {
   'SOUL.md': { icon: Heart, color: '#ec4899', label: 'Personalidad' },
   'USER.md': { icon: User, color: '#3b82f6', label: 'Perfil del usuario' },
   'TOOLS.md': { icon: Wrench, color: '#14b8a6', label: 'Herramientas' },
-  'AGENTS.md': { icon: Network, color: '#f97316', label: 'Jerarquía' },
+  'AGENTS.md': { icon: Network, color: '#f97316', label: 'Instrucciones y skills' },
   'HEARTBEAT.md': { icon: HeartPulse, color: '#22c55e', label: 'Latido' },
   'MEMORY.md': { icon: Brain, color: '#d4a017', label: 'Memoria' },
   'INFRASTRUCTURE.md': { icon: Server, color: '#64748b', label: 'Infraestructura' },

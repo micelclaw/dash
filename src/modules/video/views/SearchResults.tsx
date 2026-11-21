@@ -15,6 +15,7 @@ import { MediaGrid } from '@/components/media';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useVideoStore } from '@/stores/video.store';
 import { PosterCard } from '../components/PosterCard';
+import { useI18n } from '@/i18n';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -29,12 +30,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 /** Library search overlay — movies and series matching the toolbar query. */
 export function SearchResults() {
+  const { t } = useI18n();
   const results = useVideoStore((s) => s.searchResults);
   const loading = useVideoStore((s) => s.loadingSearch);
 
   if (!results) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Searching…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('video.searching')}</div>
     ) : null;
   }
 
@@ -42,8 +44,8 @@ export function SearchResults() {
     return (
       <EmptyState
         icon={SearchX}
-        title="No results"
-        description="Nothing in your library matches that search. Try the Requests tab to discover new titles."
+        title={t('video.noResults')}
+        description={t('video.searchNoResults')}
       />
     );
   }
@@ -55,7 +57,7 @@ export function SearchResults() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 16 }}>
       {movies.length > 0 && (
-        <Section title="Movies">
+        <Section title={t('video.movieSection')}>
           <MediaGrid>
             {movies.map((item) => (
               <PosterCard key={item.id} item={item} />
@@ -64,7 +66,7 @@ export function SearchResults() {
         </Section>
       )}
       {series.length > 0 && (
-        <Section title="Series">
+        <Section title={t('video.seriesSection')}>
           <MediaGrid>
             {series.map((item) => (
               <PosterCard key={item.id} item={item} />
@@ -73,7 +75,7 @@ export function SearchResults() {
         </Section>
       )}
       {other.length > 0 && (
-        <Section title="Other">
+        <Section title={t('video.other')}>
           <MediaGrid>
             {other.map((item) => (
               <PosterCard key={item.id} item={item} />

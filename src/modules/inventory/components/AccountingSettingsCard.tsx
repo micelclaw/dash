@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useI18n } from '@/i18n';
 import { Landmark } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -30,6 +31,7 @@ const titleStyle: CSSProperties = {
  * asientos en el mayor real de Finanzas. Un único interruptor para los 3 flujos.
  */
 export function AccountingSettingsCard() {
+  const { t } = useI18n();
   const [enabled, setEnabled] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -48,10 +50,10 @@ export function AccountingSettingsCard() {
     setSaving(true);
     try {
       await api.patch('/settings', { inventory: { post_to_finance: next } });
-      toast.success(next ? 'Inventory accounting enabled' : 'Inventory accounting disabled');
+      toast.success(t(next ? 'inventory.accounting.enabled' : 'inventory.accounting.disabled'));
     } catch {
       setEnabled(!next);
-      toast.error('Could not update setting');
+      toast.error(t('inventory.accounting.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -63,23 +65,22 @@ export function AccountingSettingsCard() {
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={titleStyle}><Landmark size={12} /> Accounting (Finance)</div>
+          <div style={titleStyle}><Landmark size={12} /> {t('inventory.accounting.title')}</div>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text)', marginTop: 6 }}>
-            Post asset accounting to the real ledger
+            {t('inventory.accounting.posting')}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2, maxWidth: 560 }}>
-            When on, depreciation, disposals/sales and capital purchases create balanced
-            double-entry journal entries in Finance. Mark a purchase line as a capital good
-            (🏭) in the bill editor to capitalize it.
+            {t('inventory.accounting.description')}
           </div>
         </div>
         {/* Switch */}
         <button
           role="switch"
           aria-checked={enabled}
+          aria-label={t(enabled ? 'inventory.accounting.disable' : 'inventory.accounting.enable')}
           disabled={saving}
           onClick={() => void toggle()}
-          title={enabled ? 'Disable Finance posting' : 'Enable Finance posting'}
+          title={t(enabled ? 'inventory.accounting.disable' : 'inventory.accounting.enable')}
           style={{
             position: 'relative', width: 42, height: 24, flexShrink: 0, cursor: saving ? 'default' : 'pointer',
             borderRadius: 12, border: 'none', padding: 0,

@@ -15,6 +15,7 @@ import QRCode from 'qrcode';
 import { toast } from 'sonner';
 import { X, Printer } from 'lucide-react';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 const primaryBtn: CSSProperties = {
   background: 'var(--amber)', color: '#06060a', fontWeight: 600, border: 'none',
@@ -36,6 +37,7 @@ export function LabelModal({ target, ids, onClose }: {
   ids: string[];
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [previewUri, setPreviewUri] = useState('');
   const [busy, setBusy] = useState(false);
   const origin = window.location.origin;
@@ -67,11 +69,11 @@ export function LabelModal({ target, ids, onClose }: {
         { target, ids, base_url: origin },
         { timeout: 120_000 },
       );
-      toast.success(`${res.data.count} label${res.data.count === 1 ? '' : 's'} ready — saved to /Inventory/labels/`);
+      toast.success(t('inventory.labels.ready', { count: res.data.count }));
       window.open(`/api/v1/files/${res.data.file_id}/download`);
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not generate labels');
+      toast.error(err instanceof Error ? err.message : t('inventory.labels.generateFailed'));
     } finally {
       setBusy(false);
     }
@@ -88,32 +90,31 @@ export function LabelModal({ target, ids, onClose }: {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            🏷 Print labels
+            🏷 {t('inventory.labels.title')}
           </h3>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 2, display: 'flex' }}>
+          <button onClick={onClose} aria-label={t('inventory.close')} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 2, display: 'flex' }}>
             <X size={16} />
           </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
           {previewUri ? (
-            <img src={previewUri} alt="QR preview" style={{ width: 168, height: 168, borderRadius: 'var(--radius-sm)', background: '#fff', padding: 6, boxSizing: 'border-box' }} />
+            <img src={previewUri} alt={t('inventory.labels.preview')} style={{ width: 168, height: 168, borderRadius: 'var(--radius-sm)', background: '#fff', padding: 6, boxSizing: 'border-box' }} />
           ) : (
             <div style={{ width: 168, height: 168, borderRadius: 'var(--radius-sm)', background: 'var(--surface)' }} />
           )}
           <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 600 }}>
-            {ids.length} {target === 'locations' ? 'location' : 'item'}{ids.length === 1 ? '' : 's'} → {ids.length} label{ids.length === 1 ? '' : 's'}
+            {t(target === 'locations' ? 'inventory.labels.locationCount' : 'inventory.labels.itemCount', { count: ids.length })}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
-            Each QR opens the {target === 'locations' ? 'location' : 'item'} when scanned. Generates an A4 PDF you can print
-            (needs the Office service running).
+            {t('inventory.labels.qrExplanation', { target: t(target === 'locations' ? 'inventory.labels.location' : 'inventory.labels.item') })}
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-          <button style={secondaryBtn} onClick={onClose} disabled={busy}>Cancel</button>
+          <button style={secondaryBtn} onClick={onClose} disabled={busy}>{t('inventory.cancel')}</button>
           <button style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void generate()}>
-            <Printer size={14} /> {busy ? 'Generating…' : 'Generate PDF'}
+            <Printer size={14} /> {busy ? t('inventory.labels.generating') : t('inventory.labels.generatePdf')}
           </button>
         </div>
       </div>

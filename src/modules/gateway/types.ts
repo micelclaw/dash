@@ -12,7 +12,31 @@
 
 // ─── Gateway Status ─────────────────────────────────────────────────
 
+export type GatewayAvailability = 'unknown' | 'available' | 'stopped' | 'disconnected' | 'configuration_required' | 'pairing_required' | 'auth_required';
+export interface GatewayConfiguration {
+  state: 'valid' | 'invalid' | 'missing' | 'unknown';
+  checked_at: string;
+  last_valid_at?: string;
+  error?: string;
+}
+export interface GatewayOperation {
+  id: string;
+  request_id?: string;
+  action: 'start' | 'recover' | 'stop' | 'restart';
+  state: 'running' | 'succeeded' | 'failed';
+  started_at: string;
+  completed_at?: string;
+  message: string;
+  availability?: GatewayAvailability;
+}
+
 export interface GatewayStatus {
+  availability?: GatewayAvailability;
+  checked_at?: string;
+  stale?: boolean;
+  message?: string;
+  next_action?: string;
+  last_known?: { running?: boolean; reachable?: boolean; checked_at: string };
   running: boolean | undefined;
   version?: string;
   port?: number;
@@ -44,7 +68,9 @@ export interface HealthCheck {
 }
 
 export interface GatewayHealth {
-  status: 'healthy' | 'degraded' | 'down';
+  status: 'healthy' | 'degraded' | 'down' | 'unknown' | 'loading';
+  checked_at?: string;
+  stale?: boolean;
   checks: HealthCheck[];
   error?: string;
 }

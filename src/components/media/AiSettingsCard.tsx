@@ -12,6 +12,7 @@
 
 import { Sparkles } from 'lucide-react';
 import { AI_MEDIA_ENABLED } from './flags';
+import { useI18n } from '@/i18n';
 
 /**
  * Reserved affordance for the transversal AI phase: a settings card for the
@@ -19,6 +20,7 @@ import { AI_MEDIA_ENABLED } from './flags';
  * nothing while AI_MEDIA_ENABLED is false.
  */
 export function AiSettingsCard() {
+  const { t } = useI18n();
   if (!AI_MEDIA_ENABLED) return null;
 
   return (
@@ -37,7 +39,7 @@ export function AiSettingsCard() {
       }}
     >
       <Sparkles size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-      AI media features
+      {t('media.ai.features')}
     </div>
   );
 }

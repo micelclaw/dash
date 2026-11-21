@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import { ConnectButton } from '@/components/shared/ConnectButton';
+import { useI18n } from '@/i18n';
 
 interface ContactsFiltersProps {
   search: string;
@@ -25,6 +26,7 @@ interface ContactsFiltersProps {
 export function ContactsFilters({
   search, onSearchChange, selectedTag, onTagChange, availableTags,
 }: ContactsFiltersProps) {
+  const { t } = useI18n();
   const [localSearch, setLocalSearch] = useState(search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -51,7 +53,7 @@ export function ContactsFilters({
         <input
           value={localSearch}
           onChange={e => setLocalSearch(e.target.value)}
-          placeholder="Search contacts..."
+          placeholder={t('contacts.search')}
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
             color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',

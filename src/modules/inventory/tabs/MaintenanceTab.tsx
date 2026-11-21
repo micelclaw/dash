@@ -21,6 +21,7 @@ import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { daysUntil, fmtMeter, fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryEvent, InventoryItem } from '@/modules/inventory/types';
+import { useI18n } from '@/i18n';
 
 const RED = '#ef4444';
 
@@ -84,15 +85,11 @@ function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-function fmtDate(date: string | null): string {
+function fmtDate(date: string | null, locale: string): string {
   if (!date) return '—';
   const t = new Date(date);
   if (Number.isNaN(t.getTime())) return '—';
-  return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function typeLabel(type: string): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  return t.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function dueColor(days: number | null): string {
@@ -100,13 +97,6 @@ function dueColor(days: number | null): string {
   if (days < 0) return RED;
   if (days < 14) return 'var(--amber)';
   return 'var(--text-dim)';
-}
-
-function dueText(days: number | null): string {
-  if (days === null) return '';
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return 'due today';
-  return `in ${days}d`;
 }
 
 function todayIso(): string {
@@ -249,6 +239,10 @@ interface ItemChain {
 }
 
 export function MaintenanceTab() {
+  const { t: tr, locale } = useI18n();
+  const typeName = (type: string) => tr(type === 'repair' ? 'inventory.maintenance.repair' : 'inventory.maintenance.maintenanceType');
+  const dateLabel = (date: string | null) => fmtDate(date, locale);
+  const dueLabel = (days: number | null) => days === null ? '' : days < 0 ? tr('inventory.maintenance.overdueDays', { count: Math.abs(days) }) : days === 0 ? tr('inventory.maintenance.dueToday') : tr('inventory.maintenance.inDays', { count: days });
   const items = useInventoryStore(s => s.items);
   const upcomingEvents = useInventoryStore(s => s.upcomingEvents);
   const fetchUpcoming = useInventoryStore(s => s.fetchUpcoming);
@@ -392,14 +386,14 @@ export function MaintenanceTab() {
       const unit = itemById.get(completing.item_id)?.meter_unit;
       await completeMaintenance(completing.id, body);
       if (recMeter !== null && recMeter > 0 && Number.isFinite(reading)) {
-        toast.success(`Done — next at ${fmtMeter(reading + recMeter, unit)}`);
+        toast.success(tr('inventory.maintenance.doneNextAt', { reading: fmtMeter(reading + recMeter, unit) }));
       } else {
-        toast.success(hadRecurrence ? 'Done — next one scheduled' : 'Maintenance completed');
+        toast.success(hadRecurrence ? tr('inventory.maintenance.doneNextScheduled') : tr('inventory.maintenance.completed'));
       }
       setCompleting(null);
       await loadEvents();
     } catch (err) {
-      toast.error(errMessage(err, 'Could not complete maintenance'));
+      toast.error(errMessage(err, tr('inventory.maintenance.completeFailed')));
     } finally {
       setCompleteBusy(false);
     }
@@ -420,20 +414,20 @@ export function MaintenanceTab() {
 
   const handleSchedule = async () => {
     if (!schedItemId) {
-      toast.error('Item is required');
+      toast.error(tr('inventory.maintenance.itemRequired'));
       return;
     }
     if (!schedByDate && !schedByMeter) {
-      toast.error('Pick at least one basis: date or meter');
+      toast.error(tr('inventory.maintenance.basisRequired'));
       return;
     }
     if (schedByDate && !schedNextDue) {
-      toast.error('Due date is required');
+      toast.error(tr('inventory.maintenance.dueDateRequired'));
       return;
     }
     const dueMeter = parseFloat(schedDueMeter);
     if (schedByMeter && !(Number.isFinite(dueMeter) && dueMeter > 0)) {
-      toast.error('Due meter value is required');
+      toast.error(tr('inventory.maintenance.dueMeterRequired'));
       return;
     }
     setSchedBusy(true);
@@ -454,11 +448,11 @@ export function MaintenanceTab() {
       }
       if (schedNotes.trim()) body.notes = schedNotes.trim();
       await createEvent(body);
-      toast.success('Maintenance scheduled');
+      toast.success(tr('inventory.maintenance.scheduled'));
       setShowSchedule(false);
       await loadEvents();
     } catch (err) {
-      toast.error(errMessage(err, 'Could not schedule maintenance'));
+      toast.error(errMessage(err, tr('inventory.maintenance.scheduleFailed')));
     } finally {
       setSchedBusy(false);
     }
@@ -481,9 +475,9 @@ export function MaintenanceTab() {
         <div style={{ flex: 1, minHeight: 0 }}>
           <EmptyState
             icon={Wrench}
-            title="No maintenance scheduled"
-            description="Schedule ITV, boiler service or any recurring care — completing one reschedules the next automatically."
-            actions={[{ label: 'Schedule maintenance', onClick: openSchedule, variant: 'primary' }]}
+            title={tr('inventory.maintenance.noScheduled')}
+            description={tr('inventory.maintenance.noScheduledDescription')}
+            actions={[{ label: tr('inventory.maintenance.schedule'), onClick: openSchedule, variant: 'primary' }]}
           />
         </div>
       ) : (
@@ -518,16 +512,16 @@ export function MaintenanceTab() {
             }
           >
             <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={sectionHeader}>Upcoming</span>
+              <span style={sectionHeader}>{tr('inventory.maintenance.upcoming')}</span>
               <button onClick={openSchedule} style={secondaryBtn}>
                 <Plus size={13} />
-                Schedule maintenance
+                {tr('inventory.maintenance.schedule')}
               </button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 12px' }}>
               {upcomingSorted.length === 0 ? (
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>
-                  Nothing due. Schedule the next one above.
+                  {tr('inventory.maintenance.nothingDue')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -559,49 +553,49 @@ export function MaintenanceTab() {
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
                             }}
-                            title={`${typeLabel(ev.type)} · ${item?.name ?? 'Unknown item'}`}
+                            title={`${typeName(ev.type)} · ${item?.name ?? tr('inventory.maintenance.unknownItem')}`}
                           >
-                            {typeLabel(ev.type)} · {item?.name ?? 'Unknown item'}
+                            {typeName(ev.type)} · {item?.name ?? tr('inventory.maintenance.unknownItem')}
                             {ev.plan_id ? (
                               <span
-                                title="Order auto-generated by a meter maintenance plan"
+                                title={tr('inventory.maintenance.autoOrder')}
                                 style={{ marginLeft: 6, fontSize: '0.625rem', fontWeight: 600, padding: '1px 5px', borderRadius: 999, background: 'color-mix(in srgb, var(--mod-inventory) 18%, transparent)', color: 'var(--mod-inventory)', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
                               >
-                                ⚙ Auto
+                                ⚙ {tr('inventory.maintenance.auto')}
                               </span>
                             ) : null}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
                             {ev.next_due ? (
                               <span style={{ color: dueColor(days) }}>
-                                {fmtDate(ev.next_due)}
-                                {dueText(days) ? ` · ${dueText(days)}` : ''}
+                                {dateLabel(ev.next_due)}
+                                {dueLabel(days) ? ` · ${dueLabel(days)}` : ''}
                               </span>
                             ) : null}
                             {meter ? (
                               <>
                                 {ev.next_due ? ' · ' : ''}
-                                at {fmtMeter(meter.due, meter.unit)}
+                                {tr('inventory.maintenance.dueAt', { unit: meter.unit ?? '' }).replace(' *', '')} {fmtMeter(meter.due, meter.unit)}
                                 {meter.remaining !== null ? (
                                   <span style={{ color: meterColor }}>
                                     {' · '}
                                     {meter.overdue
-                                      ? `overdue by ${fmtMeter(Math.abs(meter.remaining), meter.unit)}`
-                                      : `in ${fmtMeter(meter.remaining, meter.unit)}`}
+                                      ? tr('inventory.maintenance.overdueBy', { value: fmtMeter(Math.abs(meter.remaining), meter.unit) })
+                                      : tr('inventory.maintenance.dueIn', { value: fmtMeter(meter.remaining, meter.unit) })}
                                   </span>
                                 ) : null}
                               </>
                             ) : null}
                             {ev.recurrence_months ? (
-                              <span style={{ color: 'var(--text-dim)' }}> · every {ev.recurrence_months}mo</span>
+                              <span style={{ color: 'var(--text-dim)' }}> · {tr('inventory.maintenance.everyMonths', { count: ev.recurrence_months })}</span>
                             ) : null}
                             {ev.recurrence_meter ? (
-                              <span style={{ color: 'var(--text-dim)' }}> · every {fmtMeter(ev.recurrence_meter, meter?.unit ?? item?.meter_unit)}</span>
+                              <span style={{ color: 'var(--text-dim)' }}> · {tr('inventory.maintenance.everyMeter', { count: fmtMeter(ev.recurrence_meter, meter?.unit ?? item?.meter_unit) })}</span>
                             ) : null}
                           </div>
                         </div>
                         <button onClick={() => openComplete(ev)} style={primaryBtnSm}>
-                          Complete
+                          {tr('inventory.maintenance.complete')}
                         </button>
                       </div>
                     );
@@ -614,12 +608,12 @@ export function MaintenanceTab() {
           {/* ---- Right: per-item chains ---- */}
           <div style={isMobile ? { width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' } : { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px 8px' }}>
-              <span style={sectionHeader}>Chains · last / next</span>
+              <span style={sectionHeader}>{tr('inventory.maintenance.chains')}</span>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 12px' }}>
               {chains.length === 0 ? (
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>
-                  No maintenance history yet.
+                  {tr('inventory.maintenance.noHistory')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -660,16 +654,16 @@ export function MaintenanceTab() {
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
                             {chain.last ? (
                               <>
-                                last {chain.last.type} {fmtDate(chain.last.date)} ({fmtMoney(chain.last.cost, chain.currency)})
+                                {tr('inventory.maintenance.last')} {typeName(chain.last.type)} {dateLabel(chain.last.date)} ({fmtMoney(chain.last.cost, chain.currency)})
                                 {chain.last.meter_value ? <> @ {fmtMeter(chain.last.meter_value, unit)}</> : null}
                               </>
                             ) : (
-                              'no history'
+                              tr('inventory.maintenance.noHistoryShort')
                             )}
                             {' '}
                             {chain.next ? (
                               <span style={{ color: nextColor }}>
-                                → next{chain.next.next_due ? ` ${fmtDate(chain.next.next_due)}` : ''}
+                                → {tr('inventory.maintenance.next')}{chain.next.next_due ? ` ${dateLabel(chain.next.next_due)}` : ''}
                                 {nextMeter ? ` @ ${fmtMeter(nextMeter.due, unit)}` : ''}
                               </span>
                             ) : (
@@ -678,7 +672,7 @@ export function MaintenanceTab() {
                           </div>
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', flexShrink: 0, textAlign: 'right' }}>
-                          total spent: <span style={{ color: 'var(--text)' }}>{fmtMoney(chain.totalSpent, chain.currency)}</span>
+                          {tr('inventory.maintenance.totalSpent')} <span style={{ color: 'var(--text)' }}>{fmtMoney(chain.totalSpent, chain.currency)}</span>
                         </div>
                       </div>
                     );
@@ -699,21 +693,21 @@ export function MaintenanceTab() {
           flexShrink: 0,
         }}
       >
-        Each due date will appear in your Inventory calendar with reminders.
+        {tr('inventory.maintenance.calendarReminder')}
       </div>
 
       {/* ---- Complete modal ---- */}
       {completing && (
-        <Modal title={`Complete ${completing.type}`} onClose={() => setCompleting(null)}>
+        <Modal title={`${tr('inventory.maintenance.complete')} · ${typeName(completing.type)}`} onClose={() => setCompleting(null)}>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            {typeLabel(completing.type)} · {itemById.get(completing.item_id)?.name ?? 'Unknown item'}
+            {typeName(completing.type)} · {itemById.get(completing.item_id)?.name ?? tr('inventory.maintenance.unknownItem')}
           </div>
           <div>
-            <label style={fieldLabel}>Date</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.date')}</label>
             <input type="date" value={completeDate} onChange={e => setCompleteDate(e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <label style={fieldLabel}>Cost</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.cost')}</label>
             <input
               type="number"
               min="0"
@@ -727,7 +721,7 @@ export function MaintenanceTab() {
           {showCompleteMeter ? (
             <div>
               <label style={fieldLabel}>
-                Meter reading{completingItem?.meter_unit ? ` (${completingItem.meter_unit})` : ''}
+                {tr('inventory.maintenance.meterReading')}{completingItem?.meter_unit ? ` (${completingItem.meter_unit})` : ''}
               </label>
               <input
                 type="number"
@@ -741,10 +735,10 @@ export function MaintenanceTab() {
             </div>
           ) : null}
           <div>
-            <label style={fieldLabel}>Notes</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.notes')}</label>
             <textarea
               rows={3}
-              placeholder="What was done?"
+              placeholder={tr('inventory.maintenance.whatDone')}
               value={completeNotes}
               onChange={e => setCompleteNotes(e.target.value)}
               style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
@@ -752,21 +746,21 @@ export function MaintenanceTab() {
           </div>
           {completing.recurrence_months || completing.recurrence_meter ? (
             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              Recurring
-              {completing.recurrence_months ? ` every ${completing.recurrence_months}mo` : ''}
+              {tr('inventory.maintenance.recurring')}
+              {completing.recurrence_months ? ` ${tr('inventory.maintenance.everyMonths', { count: completing.recurrence_months })}` : ''}
               {completing.recurrence_months && completing.recurrence_meter ? ' /' : ''}
               {completing.recurrence_meter
-                ? ` every ${fmtMeter(completing.recurrence_meter, completingItem?.meter_unit)}`
+                ? ` ${tr('inventory.maintenance.everyMeter', { count: fmtMeter(completing.recurrence_meter, completingItem?.meter_unit) })}`
                 : ''}
-              {' '}— the next one will be scheduled automatically.
+              {' '}{tr('inventory.maintenance.nextScheduledAutomatically')}
             </div>
           ) : null}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 2 }}>
             <button onClick={() => setCompleting(null)} style={secondaryBtn}>
-              Cancel
+              {tr('inventory.cancel')}
             </button>
             <button onClick={handleComplete} disabled={completeBusy} style={{ ...primaryBtn, opacity: completeBusy ? 0.6 : 1 }}>
-              {completeBusy ? 'Completing…' : 'Complete'}
+              {completeBusy ? tr('inventory.maintenance.savingComplete') : tr('inventory.maintenance.done')}
             </button>
           </div>
         </Modal>
@@ -774,9 +768,9 @@ export function MaintenanceTab() {
 
       {/* ---- Schedule modal ---- */}
       {showSchedule && (
-        <Modal title="Schedule maintenance" onClose={() => setShowSchedule(false)}>
+        <Modal title={tr('inventory.maintenance.schedule')} onClose={() => setShowSchedule(false)}>
           <div>
-            <label style={fieldLabel}>Item *</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.item')} *</label>
             <select
               value={schedItemId}
               onChange={e => {
@@ -786,7 +780,7 @@ export function MaintenanceTab() {
               }}
               style={inputStyle}
             >
-              <option value="">Select an item…</option>
+              <option value="">{tr('inventory.maintenance.selectItem')}</option>
               {items.map(item => (
                 <option key={item.id} value={item.id}>
                   {item.name}
@@ -795,21 +789,21 @@ export function MaintenanceTab() {
             </select>
           </div>
           <div>
-            <label style={fieldLabel}>Type</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.type')}</label>
             <select
               value={schedType}
               onChange={e => setSchedType(e.target.value as 'maintenance' | 'repair')}
               style={inputStyle}
             >
-              <option value="maintenance">Maintenance</option>
-              <option value="repair">Repair</option>
+              <option value="maintenance">{tr('inventory.maintenance.maintenanceType')}</option>
+              <option value="repair">{tr('inventory.maintenance.repair')}</option>
             </select>
           </div>
           <div>
-            <label style={fieldLabel}>Due basis *</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.dueBasis')}</label>
             <div style={{ display: 'flex', gap: 6 }}>
               <button type="button" onClick={() => setSchedByDate(v => !v)} style={basisBtn(schedByDate)}>
-                By date
+                {tr('inventory.maintenance.byDate')}
               </button>
               <button
                 type="button"
@@ -817,33 +811,33 @@ export function MaintenanceTab() {
                 onClick={() => schedHasMeter && setSchedByMeter(v => !v)}
                 style={basisBtn(schedByMeter, !schedHasMeter)}
               >
-                By meter
+                {tr('inventory.maintenance.byMeter')}
               </button>
             </div>
             {schedItemId && !schedHasMeter ? (
               <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                Add a meter to this item first (in its drawer)
+                {tr('inventory.maintenance.addMeterFirst')}
               </div>
             ) : null}
             {schedByDate && schedByMeter ? (
               <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                With both, whichever comes first triggers it.
+                {tr('inventory.maintenance.bothTrigger')}
               </div>
             ) : null}
           </div>
           {schedByDate && (
             <>
               <div>
-                <label style={fieldLabel}>Due date *</label>
+                <label style={fieldLabel}>{tr('inventory.maintenance.dueDate')}</label>
                 <input type="date" value={schedNextDue} onChange={e => setSchedNextDue(e.target.value)} style={inputStyle} />
               </div>
               <div>
-                <label style={fieldLabel}>Repeat every (months)</label>
+                <label style={fieldLabel}>{tr('inventory.maintenance.repeatMonths')}</label>
                 <input
                   type="number"
                   min="1"
                   step="1"
-                  placeholder="e.g. 12 for yearly"
+                  placeholder={tr('inventory.maintenance.yearlyPlaceholder')}
                   value={schedRecurrence}
                   onChange={e => setSchedRecurrence(e.target.value)}
                   style={inputStyle}
@@ -854,24 +848,24 @@ export function MaintenanceTab() {
           {schedByMeter && schedHasMeter && (
             <>
               <div>
-                <label style={fieldLabel}>Due at ({schedItem?.meter_unit}) *</label>
+                <label style={fieldLabel}>{tr('inventory.maintenance.dueAt', { unit: schedItem?.meter_unit ?? '' })}</label>
                 <input
                   type="number"
                   min="0"
                   step="any"
-                  placeholder="e.g. 90000"
+                  placeholder={tr('inventory.maintenance.dueMeterPlaceholder')}
                   value={schedDueMeter}
                   onChange={e => setSchedDueMeter(e.target.value)}
                   style={inputStyle}
                 />
               </div>
               <div>
-                <label style={fieldLabel}>Repeat every ({schedItem?.meter_unit})</label>
+                <label style={fieldLabel}>{tr('inventory.maintenance.repeatMeter', { unit: schedItem?.meter_unit ?? '' })}</label>
                 <input
                   type="number"
                   min="0"
                   step="any"
-                  placeholder="e.g. 15000"
+                  placeholder={tr('inventory.maintenance.repeatMeterPlaceholder')}
                   value={schedRecurrenceMeter}
                   onChange={e => setSchedRecurrenceMeter(e.target.value)}
                   style={inputStyle}
@@ -880,10 +874,10 @@ export function MaintenanceTab() {
             </>
           )}
           <div>
-            <label style={fieldLabel}>Notes</label>
+            <label style={fieldLabel}>{tr('inventory.maintenance.notes')}</label>
             <textarea
               rows={3}
-              placeholder="ITV, boiler service, filter change…"
+              placeholder={tr('inventory.maintenance.notesExamples')}
               value={schedNotes}
               onChange={e => setSchedNotes(e.target.value)}
               style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
@@ -891,10 +885,10 @@ export function MaintenanceTab() {
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 2 }}>
             <button onClick={() => setShowSchedule(false)} style={secondaryBtn}>
-              Cancel
+              {tr('inventory.cancel')}
             </button>
             <button onClick={handleSchedule} disabled={schedBusy} style={{ ...primaryBtn, opacity: schedBusy ? 0.6 : 1 }}>
-              {schedBusy ? 'Scheduling…' : 'Schedule'}
+              {schedBusy ? tr('inventory.maintenance.scheduling') : tr('inventory.maintenance.scheduleAction')}
             </button>
           </div>
         </Modal>

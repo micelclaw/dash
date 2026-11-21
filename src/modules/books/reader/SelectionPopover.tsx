@@ -21,6 +21,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, StickyNote, Trash2 } from 'lucide-react';
 import { HIGHLIGHT_COLORS } from './reader-prefs';
 import type { BookAnnotation } from '@/services/books.service';
+import { useI18n } from '@/i18n';
 
 export type SelectionPopoverState =
   | { kind: 'create'; x: number; y: number; cfi: string; text: string }
@@ -41,6 +42,7 @@ export function SelectionPopover({
   onDelete,
   onClose,
 }: SelectionPopoverProps) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -81,28 +83,34 @@ export function SelectionPopover({
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-1">
               <div className="flex gap-1.5">
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c.value}
-                    title={noteOpen ? `${c.name} (used on save)` : `Highlight ${c.name.toLowerCase()}`}
-                    aria-label={`Highlight ${c.name.toLowerCase()}`}
-                    disabled={busy}
-                    onClick={() => {
-                      setColor(c.value);
-                      // Without a note open, a color tap saves immediately.
-                      if (!noteOpen) onHighlight(c.value);
-                    }}
-                    className="h-6 w-6 rounded-full border-2 transition-transform hover:scale-110"
-                    style={{
-                      background: c.value,
-                      borderColor: noteOpen && color === c.value ? 'var(--text)' : 'transparent',
-                    }}
-                  />
-                ))}
+                {HIGHLIGHT_COLORS.map((c) => {
+                  const colorKey = c.value === '#facc15' ? 'books.highlightYellow'
+                    : c.value === '#4ade80' ? 'books.highlightGreen'
+                      : c.value === '#60a5fa' ? 'books.highlightBlue' : 'books.highlightPink';
+                  const colorName = t(colorKey);
+                  return (
+                    <button
+                      key={c.value}
+                      title={noteOpen ? t('books.highlightColorUsedOnSave', { color: colorName }) : t('books.highlightColorLabel', { color: colorName })}
+                      aria-label={t('books.highlightColorLabel', { color: colorName })}
+                      disabled={busy}
+                      onClick={() => {
+                        setColor(c.value);
+                        // Without a note open, a color tap saves immediately.
+                        if (!noteOpen) onHighlight(c.value);
+                      }}
+                      className="h-6 w-6 rounded-full border-2 transition-transform hover:scale-110"
+                      style={{
+                        background: c.value,
+                        borderColor: noteOpen && color === c.value ? 'var(--text)' : 'transparent',
+                      }}
+                    />
+                  );
+                })}
               </div>
               <button
-                title="Add note"
-                aria-label="Add note"
+                title={t('books.addNote')}
+                aria-label={t('books.addNote')}
                 disabled={busy}
                 onClick={() => setNoteOpen((v) => !v)}
                 className="rounded-md p-1.5 hover:bg-[var(--surface-hover,rgba(127,127,127,0.12))]"
@@ -117,7 +125,7 @@ export function SelectionPopover({
                   autoFocus
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Write a note…"
+                  placeholder={t('books.writeNote')}
                   rows={3}
                   className="w-full resize-none rounded-md border p-2 text-xs outline-none"
                   style={{
@@ -133,7 +141,7 @@ export function SelectionPopover({
                   style={{ background: 'var(--accent, #3b82f6)' }}
                 >
                   {busy ? <Loader2 size={13} className="animate-spin" /> : null}
-                  Save highlight
+                  {t('books.saveHighlight')}
                 </button>
               </>
             ) : null}
@@ -146,7 +154,7 @@ export function SelectionPopover({
                 style={{ background: state.annotation.color }}
               />
               <p className="truncate text-xs" style={{ color: 'var(--text-dim)' }}>
-                {state.annotation.selected_text || 'Highlight'}
+                {state.annotation.selected_text || t('books.saveHighlight')}
               </p>
             </div>
             {state.annotation.note ? (
@@ -158,7 +166,7 @@ export function SelectionPopover({
               </p>
             ) : (
               <p className="text-xs italic" style={{ color: 'var(--text-dim)' }}>
-                No note
+                {t('books.noNote')}
               </p>
             )}
             <button
@@ -168,7 +176,7 @@ export function SelectionPopover({
               style={{ color: '#ef4444', borderColor: 'var(--border)' }}
             >
               {busy ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-              Delete highlight
+              {t('books.deleteHighlight')}
             </button>
           </div>
         )}

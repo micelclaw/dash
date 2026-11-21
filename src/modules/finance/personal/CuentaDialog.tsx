@@ -19,33 +19,34 @@ import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { useFinancePersonalStore, type FinanceAccount } from '@/stores/finance-personal.store';
 import { useEscapeClose } from '../use-escape-close';
+import { useI18n } from '@/i18n';
 
 type WalletType = 'asset' | 'liability';
 
-const TYPES: { id: WalletType; label: string }[] = [
-  { id: 'asset', label: 'Banco / Efectivo' },
-  { id: 'liability', label: 'Card / Loan' },
+const TYPES: { id: WalletType; message: string }[] = [
+  { id: 'asset', message: 'finance.account.type.asset' },
+  { id: 'liability', message: 'finance.account.type.liability' },
 ];
 
 // Tupla no vacía: garantiza al tipado que siempre hay un primer subtipo por defecto.
 const SUBTYPES: Record<WalletType, [{ id: string; label: string }, ...{ id: string; label: string }[]]> = {
   asset: [
-    { id: 'bank', label: 'Bank account' },
-    { id: 'cash', label: 'Efectivo' },
-    { id: 'savings', label: 'Savings' },
-    { id: 'other', label: 'Otro' },
+    { id: 'bank', label: 'finance.account.subtype.bank' },
+    { id: 'cash', label: 'finance.account.subtype.cash' },
+    { id: 'savings', label: 'finance.account.subtype.savings' },
+    { id: 'other', label: 'finance.account.subtype.other' },
   ],
   liability: [
-    { id: 'credit_card', label: 'Credit card' },
-    { id: 'loan', label: 'Loan' },
-    { id: 'other', label: 'Otro' },
+    { id: 'credit_card', label: 'finance.account.subtype.creditCard' },
+    { id: 'loan', label: 'finance.account.subtype.loan' },
+    { id: 'other', label: 'finance.account.subtype.other' },
   ],
 };
 
-const CURRENCIES: { id: string; label: string }[] = [
-  { id: 'EUR', label: '€ Euro' },
-  { id: 'USD', label: '$ Dollar' },
-  { id: 'GBP', label: '£ Libra' },
+const CURRENCIES: { id: string; message: string }[] = [
+  { id: 'EUR', message: 'finance.account.currency.eur' },
+  { id: 'USD', message: 'finance.account.currency.usd' },
+  { id: 'GBP', message: 'finance.account.currency.gbp' },
 ];
 
 export function CuentaDialog({
@@ -59,6 +60,7 @@ export function CuentaDialog({
   onClose: () => void;
   onSaved?: (a: FinanceAccount) => void;
 }) {
+  const { t } = useI18n();
   const { createAccount, updateAccount } = useFinancePersonalStore();
   const isEdit = !!account;
 
@@ -102,21 +104,21 @@ export function CuentaDialog({
 
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { toast.error('Enter a name'); return; }
+    if (!trimmed) { toast.error(t('finance.account.enterName')); return; }
     setSaving(true);
     try {
       let result: FinanceAccount;
       if (isEdit && account) {
         result = await updateAccount(account.id, { name: trimmed, type, subtype, currency, is_active: isActive });
-        toast.success('Account updated');
+        toast.success(t('finance.account.updated'));
       } else {
         result = await createAccount({ name: trimmed, type, subtype, currency });
-        toast.success('Account created');
+        toast.success(t('finance.account.created'));
       }
       onSaved?.(result);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
+      toast.error(e instanceof Error ? e.message : t('finance.account.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -130,58 +132,58 @@ export function CuentaDialog({
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 400, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '8vh' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 440, maxWidth: '92vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="finance-account-title" onClick={(e) => e.stopPropagation()} style={{ width: 440, maxWidth: '92vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{isEdit ? 'Editar cuenta' : 'Nueva cuenta'}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
+          <h2 id="finance-account-title" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{isEdit ? t('finance.account.edit') : t('finance.account.new')}</h2>
+          <button onClick={onClose} aria-label={t('finance.close')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Name</label>
-            <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Salary account" style={fieldStyle} />
+            <label style={labelStyle}>{t('finance.account.name')}</label>
+            <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('finance.account.exampleName')} style={fieldStyle} />
           </div>
 
           <div>
-            <label style={labelStyle}>Type</label>
+            <label style={labelStyle}>{t('finance.account.type')}</label>
             {/* Segmented control */}
             <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)' }}>
-              {TYPES.map((t) => (
-                <button key={t.id} onClick={() => onChangeType(t.id)} style={{
+              {TYPES.map((typeOption) => (
+                <button key={typeOption.id} onClick={() => onChangeType(typeOption.id)} style={{
                   flex: 1, padding: '7px 0', borderRadius: 'var(--radius-sm, 4px)', border: 'none', cursor: 'pointer', fontSize: 13,
-                  background: type === t.id ? 'var(--mod-finance)' : 'transparent',
-                  color: type === t.id ? '#0a0a0a' : 'var(--text-dim)', fontWeight: type === t.id ? 600 : 500,
-                }}>{t.label}</button>
+                  background: type === typeOption.id ? 'var(--mod-finance)' : 'transparent',
+                  color: type === typeOption.id ? '#0a0a0a' : 'var(--text-dim)', fontWeight: type === typeOption.id ? 600 : 500,
+                }}>{t(typeOption.message)}</button>
               ))}
             </div>
           </div>
 
           <div>
-            <label style={labelStyle}>Subtype</label>
+            <label style={labelStyle}>{t('finance.account.subtype')}</label>
             <select value={subtype} onChange={(e) => setSubtype(e.target.value)} style={fieldStyle}>
-              {SUBTYPES[type].map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              {SUBTYPES[type].map((s) => <option key={s.id} value={s.id}>{t(s.label)}</option>)}
             </select>
           </div>
 
           <div>
-            <label style={labelStyle}>Currency</label>
+            <label style={labelStyle}>{t('finance.account.currency')}</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={fieldStyle}>
-              {CURRENCIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+              {CURRENCIES.map((c) => <option key={c.id} value={c.id}>{t(c.message)}</option>)}
             </select>
           </div>
 
           {isEdit && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} style={{ accentColor: 'var(--mod-finance)', cursor: 'pointer' }} />
-              Cuenta activa
+              {t('finance.account.active')}
             </label>
           )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.cancel')}</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : 'Save'}
+            {saving ? t('finance.saving') : t('finance.save')}
           </button>
         </div>
       </div>

@@ -30,6 +30,7 @@ export interface AdminUser {
   password_change_disabled?: boolean;   // Fase 2: bloqueo de cambio self-service
   deactivate_at?: string | null;        // Fase 2: desactivación programada (ISO)
   agents_provisioned?: number;          // UA2: agentes de sistema vivos (viaja en GET /admin/users)
+  agents_preparation?:'pending'|'preparing'|'ready'|'error';
   agents_expected?: number;             // UA2: total esperado; provisioned < expected ⇒ badge "Provisionando…"
   created_at: string;
   updated_at: string;

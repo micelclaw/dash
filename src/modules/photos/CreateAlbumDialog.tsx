@@ -10,7 +10,8 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
+import { useI18n } from '@/i18n';
 
 interface CreateAlbumDialogProps {
   open: boolean;
@@ -19,6 +20,9 @@ interface CreateAlbumDialogProps {
 }
 
 export function CreateAlbumDialog({ open, onClose, onConfirm }: CreateAlbumDialogProps) {
+  const { t } = useI18n();
+  const nameId = useId();
+  const descriptionId = useId();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
@@ -70,31 +74,33 @@ export function CreateAlbumDialog({ open, onClose, onConfirm }: CreateAlbumDialo
         }}
       >
         <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>
-          New Album
+          {t('photos.newAlbum')}
         </h3>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
           {/* Name */}
           <div>
-            <label style={labelStyle}>Title *</label>
+            <label htmlFor={nameId} style={labelStyle}>{t('photos.albumTitle')}</label>
             <input
+              id={nameId}
               ref={inputRef}
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-              placeholder="Album name"
+              placeholder={t('photos.albumName')}
               style={inputStyle}
             />
           </div>
 
           {/* Description */}
           <div>
-            <label style={labelStyle}>Description</label>
+            <label htmlFor={descriptionId} style={labelStyle}>{t('photos.description')}</label>
             <input
+              id={descriptionId}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-              placeholder="Place, occasion..."
+              placeholder={t('photos.descriptionPlaceholder')}
               style={inputStyle}
             />
           </div>
@@ -114,7 +120,7 @@ export function CreateAlbumDialog({ open, onClose, onConfirm }: CreateAlbumDialo
               color: 'var(--text-dim)',
             }}
           >
-            Cancel
+            {t('photos.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -134,7 +140,7 @@ export function CreateAlbumDialog({ open, onClose, onConfirm }: CreateAlbumDialo
               opacity: hoveredBtn === 'create' && name.trim() ? 0.9 : 1,
             }}
           >
-            Create
+            {t('photos.create')}
           </button>
         </div>
       </div>

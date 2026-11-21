@@ -11,6 +11,7 @@
  */
 
 import type { Editor } from '@tiptap/react';
+import { useI18n } from '@/i18n';
 import {
   Bold, Italic, Underline, Strikethrough,
   Heading1, Heading2, Heading3, Heading4,
@@ -42,7 +43,7 @@ interface NoteEditorToolbarProps {
 interface ToolbarButton {
   icon: React.ComponentType<{ size?: number }>;
   label: string;
-  action: (editor: Editor) => void;
+  action: (editor: Editor, translate: (key: string) => string) => void;
   isActive?: (editor: Editor) => boolean;
   separator?: boolean;
   /** Ocultar en estos formatos (p.ej. align/color no existen en markdown). */
@@ -88,8 +89,8 @@ const BUTTONS: ToolbarButton[] = [
   // Insert
   {
     icon: Link2, label: 'Link',
-    action: e => {
-      const url = window.prompt('URL:');
+    action: (e, translate) => {
+      const url = window.prompt(translate('notes.toolbar.url'));
       if (url) e.chain().focus().setLink({ href: url }).run();
     },
     isActive: e => e.isActive('link'),
@@ -98,16 +99,16 @@ const BUTTONS: ToolbarButton[] = [
     icon: ImageIcon, label: 'Insertar imagen', special: 'pickImage',
     // Fallback si el editor no cablea onPickImage (p.ej. consumidores sin
     // subida): prompt de URL, el comportamiento antiguo.
-    action: e => {
-      const url = window.prompt('URL de la imagen:');
+    action: (e, translate) => {
+      const url = window.prompt(translate('notes.toolbar.imageUrl'));
       if (url) e.chain().focus().setImage({ src: url }).run();
     },
   },
   { icon: Table, label: 'Insert table', action: e => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   {
     icon: YoutubeIcon, label: 'YouTube', hiddenFor: ['markdown', 'plain'],
-    action: e => {
-      const url = window.prompt('URL de YouTube:');
+    action: (e, translate) => {
+      const url = window.prompt(translate('notes.toolbar.youtubeUrl'));
       if (url) e.chain().focus().setYoutubeVideo({ src: url }).run();
     },
   },
@@ -137,7 +138,20 @@ const BUTTONS: ToolbarButton[] = [
   { icon: Trash2, label: 'Delete table', tableContext: true, action: e => e.chain().focus().deleteTable().run() },
 ];
 
+const LABEL_KEYS: Record<string, string> = {
+  Bold: 'notes.toolbar.bold', Italic: 'notes.toolbar.italic', Underline: 'notes.toolbar.underline',
+  Strikethrough: 'notes.toolbar.strike', Highlight: 'notes.toolbar.highlight', Subscript: 'notes.toolbar.subscript',
+  Superscript: 'notes.toolbar.superscript', 'Bullet list': 'notes.toolbar.bullets', 'Ordered list': 'notes.toolbar.ordered',
+  'Task list': 'notes.toolbar.tasks', Blockquote: 'notes.toolbar.quote', 'Horizontal rule': 'notes.toolbar.rule',
+  'Code block': 'notes.toolbar.code', 'Details (collapsible)': 'notes.toolbar.details', Link: 'notes.toolbar.link',
+  'Insertar imagen': 'notes.toolbar.image', 'Insert table': 'notes.toolbar.table', YouTube: 'notes.toolbar.youtube',
+  'Align left': 'notes.toolbar.alignLeft', 'Align center': 'notes.toolbar.alignCenter', 'Align right': 'notes.toolbar.alignRight',
+  'Text color': 'notes.toolbar.color', 'Add row below': 'notes.toolbar.addRow', 'Add column after': 'notes.toolbar.addColumn',
+  'Delete row': 'notes.toolbar.deleteRow', 'Delete table': 'notes.toolbar.deleteTable',
+};
+
 export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleToc, onPickImage, inlineOnly = false }: NoteEditorToolbarProps) {
+  const { t } = useI18n();
   if (!editor) return null;
   const inTable = editor.isActive('table');
 
@@ -166,6 +180,9 @@ export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleTo
 
         const Icon = btn.icon;
         const active = btn.isActive?.(editor) ?? false;
+        const label = /^Heading [1-4]$/.test(btn.label)
+          ? t('notes.toolbar.heading', { level: Number(btn.label.slice(-1)) })
+          : t(LABEL_KEYS[btn.label] ?? btn.label);
 
         return (
           <button
@@ -179,12 +196,13 @@ export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleTo
               // explorador en PC) si el editor lo cableó; si no, cae al prompt.
               if (btn.special === 'pickImage' && onPickImage) { onPickImage(); return; }
               try {
-                btn.action(editor);
+                btn.action(editor, t);
               } catch (err) {
                 console.warn(`[note-toolbar] "${btn.label}" no disponible en este editor`, err);
               }
             }}
-            title={btn.label}
+            title={label}
+            aria-label={label}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -214,7 +232,8 @@ export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleTo
       {onToggleToc && (
         <button
           onClick={onToggleToc}
-          title="Tabla de contenidos"
+          title={t('notes.toolbar.toc')}
+          aria-label={t('notes.toolbar.toc')}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 28, height: 28, marginLeft: 'auto',

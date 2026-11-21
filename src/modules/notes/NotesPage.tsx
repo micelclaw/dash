@@ -22,8 +22,10 @@ import { useNotes } from './hooks/use-notes';
 import { NotesList } from './NotesList';
 import { NoteEditor } from './NoteEditor';
 import type { NoteFilters,Note } from '@/types/notes';
+import { useI18n } from '@/i18n';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -83,7 +85,7 @@ export function Component() {
   const handleDelete = useCallback(async () => {
     if (!deleteDialogId||deletePending) return;
     setDeletePending(true);
-    let accepted=false;
+    let accepted: boolean;
     try{accepted=await deleteNote(deleteDialogId);}finally{setDeletePending(false);}
     if(!accepted)return;
     if (selectedNoteId === deleteDialogId) {
@@ -128,9 +130,9 @@ export function Component() {
   ) : (
     <EmptyState
       icon={StickyNote}
-      title="Select a note"
-      description="Choose a note from the list or create a new one"
-      actions={[{ label: '+ New Note', onClick: handleCreateNote, variant: 'primary' }]}
+      title={t('notes.select.title')}
+      description={t('notes.select.description')}
+      actions={[{ label: t('notes.newAction'), onClick: handleCreateNote, variant: 'primary' }]}
     />
   );
 
@@ -152,9 +154,9 @@ export function Component() {
         open={deleteDialogId !== null}
         onClose={() => setDeleteDialogId(null)}
         onConfirm={handleDelete}
-        title={deleteConnected ? '¿Enviar nota a la papelera?' : 'Delete note?'}
-        description={deleteConnected ? 'Se retirará de Micelclaw y se enviará a la papelera del proveedor. No se restaurará automáticamente desde aquí.' : 'This note will be moved to trash. You can restore it from there.'}
-        confirmLabel={deleteConnected ? 'Enviar a papelera' : 'Delete'}
+        title={t(deleteConnected ? 'notes.deleteConnected.title' : 'notes.delete.title')}
+        description={t(deleteConnected ? 'notes.deleteConnected.description' : 'notes.delete.description')}
+        confirmLabel={t(deleteConnected ? 'notes.sendToTrash' : 'notes.delete')}
         variant="danger"
       />
     </>

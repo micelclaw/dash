@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface CopyBlockProps {
   code: string;
@@ -19,6 +20,7 @@ interface CopyBlockProps {
 }
 
 export function CopyBlock({ code, label }: CopyBlockProps) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -59,7 +61,8 @@ export function CopyBlock({ code, label }: CopyBlockProps) {
             cursor: 'pointer', color: copied ? '#22c55e' : 'var(--text-muted)',
             transition: 'color 0.15s',
           }}
-          title="Copiar"
+          title={copied ? t('dns.copied') : t('dns.copy')}
+          aria-label={copied ? t('dns.copied') : t('dns.copy')}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
         </button>

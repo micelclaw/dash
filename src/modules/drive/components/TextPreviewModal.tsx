@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { X, Download, FileText, AlertCircle, Code, BookOpen } from 'lucide-react';
 import { downloadFile } from '@/lib/file-download';
+import { useI18n } from '@/i18n';
 import { api } from '@/services/api';
 import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
@@ -102,6 +103,7 @@ interface TextPreviewModalProps {
  * <pre>. Truncated extracts get a visible indicator + Download CTA.
  */
 export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
+  const { t, locale } = useI18n();
   const [content, setContent] = useState<FileContentPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +153,7 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Preview: ${file.filename}`}
+      aria-label={t('driveTextPreview.dialogTitle', { filename: file.filename })}
         onClick={e => e.stopPropagation()}
         style={{
           display: 'flex', flexDirection: 'column',
@@ -185,7 +187,7 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
           {isMd && content && (
             <button
               onClick={() => setRawView(v => !v)}
-              title={rawView ? 'Show rendered markdown' : 'Show raw source'}
+              title={rawView ? t('driveTextPreview.showRendered') : t('driveTextPreview.showRaw')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '4px 10px', border: '1px solid var(--border)',
@@ -195,13 +197,13 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
               }}
             >
               {rawView ? <BookOpen size={13} /> : <Code size={13} />}
-              {rawView ? 'Rendered' : 'Raw'}
+              {rawView ? t('driveTextPreview.rendered') : t('driveTextPreview.raw')}
             </button>
           )}
 
           <button
             onClick={() => { void downloadFile(file.id, file.filename); }}
-            title="Download file"
+            title={t('driveTextPreview.downloadFile')}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               padding: '4px 10px', border: '1px solid var(--border)',
@@ -210,13 +212,13 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
               fontFamily: 'var(--font-sans)', cursor: 'pointer',
             }}
           >
-            <Download size={13} /> Download
+            <Download size={13} /> {t('driveTextPreview.download')}
           </button>
 
           <button
             onClick={onClose}
-            title="Close (Esc)"
-            aria-label="Close preview"
+            title={t('driveTextPreview.closeEsc')}
+            aria-label={t('driveTextPreview.close')}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 26, height: 26, border: 'none', borderRadius: 'var(--radius-sm)',
@@ -236,8 +238,10 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
             fontSize: '0.75rem', color: 'var(--amber)',
           }}>
             <AlertCircle size={13} style={{ flexShrink: 0 }} />
-            Preview truncated — showing {content.returned_length_chars.toLocaleString()} of{' '}
-            {content.full_length_chars.toLocaleString()} characters. Download the file for the full content.
+          {t('driveTextPreview.truncated', {
+            shown: content.returned_length_chars.toLocaleString(locale),
+            total: content.full_length_chars.toLocaleString(locale),
+          })}
           </div>
         )}
 
@@ -266,7 +270,7 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
               background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
               color: 'var(--error)', fontSize: '0.8125rem',
             }}>
-              <AlertCircle size={14} /> {error}
+              <AlertCircle size={14} /> {error === 'Could not load the file content.' ? t('driveTextPreview.loadError') : error}
             </div>
           )}
 

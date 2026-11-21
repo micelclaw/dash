@@ -11,6 +11,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { X, Copy, Check, Save, Loader2 } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 import { formatRelativeTime } from '../../../shared/crypto-formatters';
@@ -42,6 +43,7 @@ function picoToXmr(p: number): string {
 }
 
 export function TxDetailModal({ tx, onClose }: Props) {
+  const { t, locale } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [copied, setCopied] = useState(false);
@@ -64,13 +66,14 @@ export function TxDetailModal({ tx, onClose }: Props) {
   }, [call, tx.txid, note]);
 
   const isIn = tx.type === 'in' || tx.type === 'pool';
-  const dateStr = tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleString() : 'Pending';
+  const dateStr = tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleString(locale) : t('crypto.wallet.pending');
+  const typeLabel = tx.type === 'in' ? t('crypto.received') : tx.type === 'out' ? t('crypto.sent') : tx.type === 'pending' || tx.type === 'pool' ? t('crypto.wallet.pending') : tx.type;
 
   return (
     <div className="txd-overlay" onClick={onClose}>
       <div className="txd-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="txd-header">
-          <span className="txd-header-title">Transaction Details</span>
+          <span className="txd-header-title">{t('crypto.wallet.txDetails')}</span>
           <button className="txd-close" onClick={onClose}><X size={14} /></button>
         </div>
 
@@ -82,7 +85,7 @@ export function TxDetailModal({ tx, onClose }: Props) {
 
           {/* Hash */}
           <div className="txd-row">
-            <span className="txd-label">TX Hash</span>
+            <span className="txd-label">{t('crypto.wallet.txHash')}</span>
             <div className="txd-hash-row">
               <span className="txd-mono">{tx.txid}</span>
               <button className="txd-copy" onClick={copyHash}>
@@ -94,35 +97,35 @@ export function TxDetailModal({ tx, onClose }: Props) {
           {/* Grid info */}
           <div className="txd-grid">
             <div className="txd-cell">
-              <span className="txd-label">Type</span>
-              <span className="txd-value">{tx.type}</span>
+              <span className="txd-label">{t('crypto.wallet.type')}</span>
+              <span className="txd-value">{typeLabel}</span>
             </div>
             <div className="txd-cell">
-              <span className="txd-label">Date</span>
+              <span className="txd-label">{t('crypto.wallet.date')}</span>
               <span className="txd-value">{dateStr}</span>
             </div>
             <div className="txd-cell">
-              <span className="txd-label">Height</span>
-              <span className="txd-value">{tx.height > 0 ? tx.height.toLocaleString() : 'Mempool'}</span>
+              <span className="txd-label">{t('crypto.wallet.height')}</span>
+              <span className="txd-value">{tx.height > 0 ? tx.height.toLocaleString(locale) : t('crypto.wallet.mempool')}</span>
             </div>
             <div className="txd-cell">
-              <span className="txd-label">Confirmations</span>
-              <span className="txd-value">{tx.confirmations.toLocaleString()}</span>
+              <span className="txd-label">{t('crypto.wallet.confirmationsLabel')}</span>
+              <span className="txd-value">{tx.confirmations.toLocaleString(locale)}</span>
             </div>
             <div className="txd-cell">
-              <span className="txd-label">Fee</span>
+              <span className="txd-label">{t('crypto.fee')}</span>
               <span className="txd-value">{picoToXmr(tx.fee)} XMR</span>
             </div>
             <div className="txd-cell">
-              <span className="txd-label">Time</span>
-              <span className="txd-value">{tx.timestamp ? formatRelativeTime(tx.timestamp) : '-'}</span>
+              <span className="txd-label">{t('crypto.wallet.time')}</span>
+              <span className="txd-value">{tx.timestamp ? formatRelativeTime(tx.timestamp, locale) : '-'}</span>
             </div>
           </div>
 
           {/* Payment ID */}
           {tx.payment_id && tx.payment_id !== '0000000000000000' && (
             <div className="txd-row">
-              <span className="txd-label">Payment ID</span>
+              <span className="txd-label">{t('crypto.wallet.paymentId')}</span>
               <span className="txd-mono txd-small">{tx.payment_id}</span>
             </div>
           )}
@@ -130,7 +133,7 @@ export function TxDetailModal({ tx, onClose }: Props) {
           {/* Address */}
           {tx.address && (
             <div className="txd-row">
-              <span className="txd-label">Address</span>
+              <span className="txd-label">{t('crypto.wallet.address')}</span>
               <span className="txd-mono txd-small">{tx.address}</span>
             </div>
           )}
@@ -138,7 +141,7 @@ export function TxDetailModal({ tx, onClose }: Props) {
           {/* Destinations */}
           {tx.destinations && tx.destinations.length > 0 && (
             <div className="txd-row">
-              <span className="txd-label">Destinations</span>
+              <span className="txd-label">{t('crypto.wallet.destinations')}</span>
               <div className="txd-dests">
                 {tx.destinations.map((d, i) => (
                   <div key={i} className="txd-dest">
@@ -152,16 +155,16 @@ export function TxDetailModal({ tx, onClose }: Props) {
 
           {/* Note */}
           <div className="txd-row">
-            <span className="txd-label">Note</span>
+            <span className="txd-label">{t('crypto.wallet.note')}</span>
             <div className="txd-note-row">
               <input
                 className="txd-input"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Add a note..."
+                placeholder={t('crypto.wallet.addNote')}
                 onKeyDown={(e) => e.key === 'Enter' && saveNote()}
               />
-              <button className="txd-save-btn" onClick={saveNote} disabled={savingNote} title="Save note">
+              <button className="txd-save-btn" onClick={saveNote} disabled={savingNote} title={t('crypto.wallet.saveNote')}>
                 {savingNote ? <Loader2 size={12} className="spin" /> : noteSaved ? <Check size={12} style={{ color: '#22c55e' }} /> : <Save size={12} />}
               </button>
             </div>

@@ -11,6 +11,7 @@ import { getProviderIcon } from '@/config/provider-icons';
 import { describeCredentialError } from '../lib/credential-errors';
 import { OmniRouteSetupWizard } from './OmniRouteSetupWizard';
 import type { CatalogModel } from '../types';
+import { useI18n } from '@/i18n';
 
 export type ProviderType =
   | 'custom'
@@ -122,6 +123,7 @@ export function ModelSetupWizard({ model, providerType, providerModels, onClose,
 // ─── Custom provider form (custom-api-*) ────────────────────────────
 
 function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps) {
+  const { t } = useI18n();
   // For custom providers we need: provider id, base URL, API key, API format.
   // When model is null, this is standalone mode (no pre-selected catalog model).
   // When model is set, the provider ID comes from model.provider.
@@ -152,10 +154,10 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
           },
         },
       });
-      toast.success(`Custom provider ${providerId} configured`);
+      toast.success(t('gateway.modelSetup.providerConfigured', { provider: providerId }));
     } catch (err) {
       // El provider NO se guardó → modal abierto para reintentar.
-      toast.error(describeCredentialError(err, 'Failed to configure custom provider'));
+      toast.error(describeCredentialError(err, t('gateway.modelSetup.saveFailed')));
       setSaving(false);
       return;
     }
@@ -166,9 +168,9 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
     if (model && !model.configured) {
       try {
         await gwService.addModel(model.key);
-        toast.success(`${model.name || model.key} added`);
+        toast.success(t('gateway.modelSetup.modelAdded', { model: model.name || model.key }));
       } catch (err) {
-        toast.error(`Key saved, but the model could not be added: ${describeCredentialError(err, 'unknown error')}`);
+        toast.error(t('gateway.modelSetup.partialAddFailed', { error: describeCredentialError(err, 'unknown error') }));
       }
     }
 
@@ -178,35 +180,35 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
   };
 
   return (
-    <ModalShell title="Set up custom provider" onClose={onClose}>
+    <ModalShell title={t('gateway.modelSetup.customTitle')} onClose={onClose}>
       <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
-        Configure an OpenAI-compatible API endpoint. Works with self-hosted LLMs (LiteLLM, vLLM, Ollama-compat) and providers like DeepSeek that expose an OpenAI-style API.
+        {t('gateway.modelSetup.customDescription')}
       </p>
       {model && (
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 12 }}>
-          Adding: <strong style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{model.name || model.key}</strong>
+          {t('gateway.modelSetup.addingModel')} <strong style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{model.name || model.key}</strong>
         </p>
       )}
 
-      <Field label="Provider ID">
+      <Field label={t('gateway.modelSetup.providerId')}>
         <input
           value={providerId}
           onChange={(e) => setProviderId(e.target.value)}
-          placeholder="custom-api-mycompany-com"
+          placeholder={t('gateway.modelSetup.providerIdPlaceholder')}
           style={inputStyle}
         />
       </Field>
 
-      <Field label="API Base URL">
+      <Field label={t('gateway.modelSetup.baseUrl')}>
         <input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="https://api.example.com/v1"
+          placeholder={t('gateway.modelSetup.baseUrlPlaceholder')}
           style={inputStyle}
         />
       </Field>
 
-      <Field label="API Key">
+      <Field label={t('gateway.modelSetup.apiKey')}>
         <div style={{ position: 'relative' }}>
           <input
             type={showKey ? 'text' : 'password'}
@@ -236,22 +238,22 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
         </div>
       </Field>
 
-      <Field label="API Format">
+      <Field label={t('gateway.modelSetup.apiFormat')}>
         <select
           value={apiFormat}
           onChange={(e) => setApiFormat(e.target.value)}
           style={inputStyle}
         >
-          <option value="openai-completions">OpenAI Completions (most compatible)</option>
-          <option value="anthropic-messages">Anthropic Messages</option>
+          <option value="openai-completions">{t('gateway.modelSetup.openaiFormat')}</option>
+          <option value="anthropic-messages">{t('gateway.modelSetup.anthropicFormat')}</option>
           <option value="ollama">Ollama</option>
-          <option value="google-generative-ai">Google Generative AI</option>
+          <option value="google-generative-ai">{t('gateway.modelSetup.googleApi')}</option>
         </select>
       </Field>
 
       <ButtonRow
-        cancelLabel="Cancel"
-        confirmLabel={saving ? 'Saving...' : 'Save & Add'}
+        cancelLabel={t('gateway.modelSetup.cancel')}
+        confirmLabel={saving ? t('gateway.modelSetup.saving') : t('gateway.modelSetup.saveAdd')}
         onCancel={onClose}
         onConfirm={handleSave}
         confirmDisabled={!canSave || saving}
@@ -269,6 +271,7 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
   const [baseUrl, setBaseUrl] = useState(defaults.baseUrl);
   const [apiKey, setApiKey] = useState(defaults.apiKey);
   const [showKey, setShowKey] = useState(false);
@@ -283,7 +286,7 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
     try {
       new URL(baseUrl);
     } catch {
-      toast.error('Invalid Base URL — please enter a valid URL');
+      toast.error(t('gateway.modelSetup.invalidBaseUrl'));
       return;
     }
 
@@ -303,20 +306,20 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
       try {
         const result = await gwService.discoverProviderModels(defaults.providerId);
         if (result.models.length > 0) {
-          toast.success(`${defaults.label} configured — ${result.models.length} model${result.models.length !== 1 ? 's' : ''} found`);
+          toast.success(t('gateway.modelSetup.configuredModels', { provider: defaults.label, count: result.models.length }));
         } else {
-          toast.success(`${defaults.label} configured`);
-          toast.warning(`Could not reach ${defaults.label} at ${baseUrl} — check that the server is running and the URL is correct`, { duration: 8000 });
+          toast.success(t('gateway.modelSetup.configured', { provider: defaults.label }));
+          toast.warning(t('gateway.modelSetup.unreachable', { provider: defaults.label, url: baseUrl }), { duration: 8000 });
         }
       } catch {
-        toast.success(`${defaults.label} configured`);
-        toast.warning(`Could not reach ${defaults.label} at ${baseUrl} — check that the server is running and the URL is correct`, { duration: 8000 });
+        toast.success(t('gateway.modelSetup.configured', { provider: defaults.label }));
+        toast.warning(t('gateway.modelSetup.unreachable', { provider: defaults.label, url: baseUrl }), { duration: 8000 });
       }
 
       onSuccess();
       onClose();
     } catch (err) {
-      toast.error(describeCredentialError(err, `Failed to configure ${defaults.label}`));
+      toast.error(describeCredentialError(err, t('gateway.modelSetup.configureFailed', { provider: defaults.label })));
     } finally {
       setSaving(false);
     }
@@ -324,7 +327,7 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
 
   return (
     <ModalShell
-      title={`Set up ${defaults.label}`}
+      title={t('gateway.modelSetup.fixedTitle', { provider: defaults.label })}
       titleIcon={(() => {
         const Icon = getProviderIcon(defaults.providerId);
         return Icon ? <Icon size={26} style={{ color: 'var(--amber)' }} /> : null;
@@ -332,10 +335,10 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
       onClose={onClose}
     >
       <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
-        Configure the connection to your {defaults.label} instance.
+        {t('gateway.modelSetup.fixedDescription', { provider: defaults.label })}
       </p>
 
-      <Field label="Base URL">
+      <Field label={t('gateway.modelSetup.baseUrlLabel')}>
         <input
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
@@ -345,13 +348,13 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
         />
       </Field>
 
-      <Field label={defaults.apiKeyRequired ? 'API Key' : 'API Key (optional)'}>
+      <Field label={defaults.apiKeyRequired ? t('gateway.modelSetup.apiKey') : t('gateway.modelSetup.apiKeyOptional')}>
         <div style={{ position: 'relative' }}>
           <input
             type={showKey ? 'text' : 'password'}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={defaults.apiKeyPlaceholder}
+            placeholder={defaults.providerId === 'ollama' ? t('gateway.modelSetup.ollamaKeyPlaceholder') : defaults.apiKeyPlaceholder}
             style={{ ...inputStyle, paddingRight: 36 }}
           />
           <button
@@ -374,12 +377,12 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
         borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
         marginBottom: 16, lineHeight: 1.4,
       }}>
-        Provider ID: <code style={{ fontFamily: 'var(--font-mono)' }}>{defaults.providerId}</code> · API type: <code style={{ fontFamily: 'var(--font-mono)' }}>{defaults.apiType}</code>
+        {t('gateway.modelSetup.providerIdLabel')} <code style={{ fontFamily: 'var(--font-mono)' }}>{defaults.providerId}</code> · {t('gateway.modelSetup.apiTypeLabel')} <code style={{ fontFamily: 'var(--font-mono)' }}>{defaults.apiType}</code>
       </p>
 
       <ButtonRow
-        cancelLabel="Cancel"
-        confirmLabel={saving ? 'Saving...' : 'Save'}
+        cancelLabel={t('gateway.modelSetup.cancel')}
+        confirmLabel={saving ? t('gateway.modelSetup.saving') : t('gateway.providerStatus.save')}
         onCancel={onClose}
         onConfirm={handleSave}
         confirmDisabled={!canSave || saving}

@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Clock, GitBranch, FileText, ChevronDown, ChevronRight, Calendar, Users, MessageSquare, SquareKanban } from 'lucide-react';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 interface TimelineItem {
   id: string;
@@ -51,6 +52,7 @@ interface ContextSummary {
 }
 
 export function ContextSignals() {
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [temporal, setTemporal] = useState<TemporalSignal | null>(null);
@@ -83,9 +85,9 @@ export function ContextSignals() {
   };
 
   const panels = [
-    { id: 'temporal', label: 'Temporal', icon: Clock, color: 'text-cyan-400', border: 'border-l-cyan-400' },
-    { id: 'relational', label: 'Relational', icon: GitBranch, color: 'text-purple-400', border: 'border-l-purple-400' },
-    { id: 'summary', label: 'Summary', icon: FileText, color: 'text-emerald-400', border: 'border-l-emerald-400' },
+    { id: 'temporal', icon: Clock, color: 'text-cyan-400', border: 'border-l-cyan-400' },
+    { id: 'relational', icon: GitBranch, color: 'text-purple-400', border: 'border-l-purple-400' },
+    { id: 'summary', icon: FileText, color: 'text-emerald-400', border: 'border-l-emerald-400' },
   ];
 
   const navigateItem = (item: TimelineItem) => {
@@ -100,7 +102,7 @@ export function ContextSignals() {
 
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString(locale === 'es' ? 'es-ES' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
   };
 
   const renderTimelineItem = (item: TimelineItem, detail: 'full' | 'medium' | 'compact' | 'minimal') => {
@@ -118,7 +120,7 @@ export function ContextSignals() {
           </button>
           {detail === 'full' && (
             <div className="text-[10px] text-[var(--text-muted)]">
-              {item.active && endsIn !== null && `Termina en ${endsIn} min`}
+              {item.active && endsIn !== null && t('shell.context.endsIn', { minutes: endsIn })}
               {item.active && endsIn !== null && item.board && ' · '}
               {item.board && <span className="text-[var(--text-dim)]">{item.board}</span>}
               {!item.active && item.ends_at && <span> · {formatTime(item.starts_at)} - {formatTime(item.ends_at)}</span>}
@@ -126,7 +128,7 @@ export function ContextSignals() {
           )}
           {detail === 'medium' && (
             <div className="text-[10px] text-[var(--text-muted)]">
-              {item.minutes_until > 0 ? `en ${item.minutes_until} min` : formatTime(item.starts_at)}
+              {item.minutes_until > 0 ? t('shell.context.inMinutes', { minutes: item.minutes_until }) : formatTime(item.starts_at)}
               {item.board && ` · ${item.board}`}
             </div>
           )}
@@ -141,7 +143,7 @@ export function ContextSignals() {
   };
 
   const renderTemporal = () => {
-    if (!temporal) return <div className="text-[11px] text-[var(--text-muted)] py-2">No temporal data</div>;
+    if (!temporal) return <div className="text-[11px] text-[var(--text-muted)] py-2">{t('shell.context.noTemporalData')}</div>;
 
     const tl = temporal.timeline;
     const hasTimeline = tl && (tl.now?.length > 0 || tl.next_hour?.length > 0 || tl.today?.length > 0 || tl.tomorrow?.length > 0);
@@ -157,7 +159,7 @@ export function ContextSignals() {
         {/* Now — full detail */}
         {tl?.now?.length > 0 && (
           <div className="space-y-1">
-            <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wide">Ahora</div>
+            <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wide">{t('shell.context.now')}</div>
             {tl.now.map(item => renderTimelineItem(item, 'full'))}
           </div>
         )}
@@ -165,7 +167,7 @@ export function ContextSignals() {
         {/* Next hour — medium detail */}
         {tl?.next_hour?.length > 0 && (
           <div className="space-y-1">
-            <div className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Proxima hora</div>
+            <div className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wide">{t('shell.context.nextHour')}</div>
             {tl.next_hour.slice(0, 3).map(item => renderTimelineItem(item, 'medium'))}
           </div>
         )}
@@ -173,7 +175,7 @@ export function ContextSignals() {
         {/* Today (1-8h) — compact */}
         {tl?.today?.length > 0 && (
           <div className="space-y-1">
-            <div className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Hoy</div>
+            <div className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wide">{t('shell.context.today')}</div>
             {tl.today.slice(0, 4).map(item => renderTimelineItem(item, 'compact'))}
           </div>
         )}
@@ -181,7 +183,7 @@ export function ContextSignals() {
         {/* Tomorrow — minimal */}
         {tl?.tomorrow?.length > 0 && (
           <div className="space-y-0.5">
-            <div className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wide">Mañana</div>
+            <div className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wide">{t('shell.context.tomorrow')}</div>
             {tl.tomorrow.slice(0, 3).map(item => (
               <div key={`${item.source}-${item.id}`} className="flex items-center gap-2 text-[10px] text-[var(--text-dim)]">
                 <ItemIcon source={item.source} className="text-[var(--text-muted)] flex-shrink-0" />
@@ -202,7 +204,7 @@ export function ContextSignals() {
                   onClick={() => navigate(`/calendar?id=${temporal.current_event!.id}`)}
                   className="text-[var(--text)] hover:text-[var(--accent)] hover:underline text-left"
                 >
-                  Now: {temporal.current_event.title}
+                  {t('shell.context.now')}: {temporal.current_event.title}
                 </button>
               </div>
             )}
@@ -213,13 +215,13 @@ export function ContextSignals() {
                   onClick={() => navigate(`/calendar?id=${temporal.next_event!.id}`)}
                   className="text-[var(--text)] hover:text-[var(--accent)] hover:underline text-left"
                 >
-                  Next: {temporal.next_event.title}
-                  <span className="text-[var(--text-muted)] ml-1">in {temporal.next_event.minutes_until}min</span>
+                  {t('shell.context.next')}: {temporal.next_event.title}
+                  <span className="text-[var(--text-muted)] ml-1">{t('shell.context.in', { minutes: temporal.next_event.minutes_until })}</span>
                 </button>
               </div>
             )}
             {!temporal.current_event && !temporal.next_event && (
-              <div className="text-[11px] text-[var(--text-muted)]">Sin eventos proximos</div>
+              <div className="text-[11px] text-[var(--text-muted)]">{t('shell.context.noUpcomingEvents')}</div>
             )}
           </>
         )}
@@ -229,21 +231,22 @@ export function ContextSignals() {
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.round(diff / 60000);
-    if (mins < 60) return `${mins}m`;
+    const formatter = new Intl.RelativeTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { numeric: 'auto', style: 'short' });
+    const mins = Math.max(1, Math.round(diff / 60000));
+    if (mins < 60) return formatter.format(-mins, 'minute');
     const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.round(hours / 24)}d`;
+    if (hours < 24) return formatter.format(-hours, 'hour');
+    return formatter.format(-Math.round(hours / 24), 'day');
   };
 
   const renderRelational = () => {
-    if (!relational) return <div className="text-[11px] text-[var(--text-muted)] py-2">No relational data</div>;
+    if (!relational) return <div className="text-[11px] text-[var(--text-muted)] py-2">{t('shell.context.noRelationalData')}</div>;
     const contacts = relational.hot_contacts ?? [];
     const entities = relational.hot_entities ?? [];
     const threads = relational.active_threads ?? [];
     const recentFiles = relational.recent_files ?? [];
     if (contacts.length === 0 && entities.length === 0 && threads.length === 0 && recentFiles.length === 0) {
-      return <div className="text-[11px] text-[var(--text-muted)] py-2">No active relationships</div>;
+      return <div className="text-[11px] text-[var(--text-muted)] py-2">{t('shell.context.noRelationships')}</div>;
     }
     return (
       <div className="space-y-1.5">
@@ -280,14 +283,14 @@ export function ContextSignals() {
             >
               {e.name}
             </button>
-            <span className="text-[var(--text-muted)]">{e.type} · {e.mention_count} mentions</span>
+            <span className="text-[var(--text-muted)]">{e.type} · {t('shell.context.mentions', { count: e.mention_count })}</span>
           </div>
         ))}
-        {threads.slice(0, 3).map((t, i) => (
+        {threads.slice(0, 3).map((thread, i) => (
           <div key={i} className="flex items-center gap-2 text-[11px]">
             <MessageSquare size={10} className="text-[var(--text-muted)] flex-shrink-0" />
-            <span className="text-[var(--text)]">{t.channel}</span>
-            <span className="text-[var(--text-muted)]">{t.platform} · {t.message_count} msgs</span>
+            <span className="text-[var(--text)]">{thread.channel}</span>
+            <span className="text-[var(--text-muted)]">{thread.platform} · {t('shell.context.messages', { count: thread.message_count })}</span>
           </div>
         ))}
       </div>
@@ -308,12 +311,12 @@ export function ContextSignals() {
             >
               {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               <Icon size={12} className={panel.color} />
-              <span className={isOpen ? panel.color : ''}>{panel.label}</span>
+              <span className={isOpen ? panel.color : ''}>{t(`shell.context.${panel.id}`)}</span>
             </button>
             {isOpen && (
               <div className={`px-3 py-2 border-b border-[var(--border)] border-l-2 ${panel.border}`}>
                 {isLoading ? (
-                  <div className="text-[11px] text-[var(--text-muted)] py-2">Loading...</div>
+                  <div className="text-[11px] text-[var(--text-muted)] py-2">{t('shell.context.loading')}</div>
                 ) : panel.id === 'temporal' ? (
                   renderTemporal()
                 ) : panel.id === 'relational' ? (
@@ -323,7 +326,7 @@ export function ContextSignals() {
                     {summary.summary}
                   </div>
                 ) : (
-                  <div className="text-[11px] text-[var(--text-muted)] py-2">No summary available</div>
+                  <div className="text-[11px] text-[var(--text-muted)] py-2">{t('shell.context.noSummary')}</div>
                 )}
               </div>
             )}

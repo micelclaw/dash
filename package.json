@@ -9,6 +9,7 @@
     "build": "tsc -b && NODE_OPTIONS='--max-old-space-size=8192' vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test:i18n": "node --test src/i18n/*.test.mjs",
     "e2e": "cd ../tests/dash && playwright test",
     "e2e:ui": "cd ../tests/dash && playwright test --ui",
     "e2e:headed": "cd ../tests/dash && playwright test --headed",

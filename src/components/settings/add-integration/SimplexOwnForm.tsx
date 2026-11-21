@@ -19,7 +19,7 @@
  *   explain → deploy → profile → connect (dirección + auto-aceptar + pegar enlace) → ready
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Loader2, Check, Container, Copy, UserPlus, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import * as messagingCli from '@/services/messaging-cli.service';
 import { QrImage } from '@/components/shared/QrImage';
 import { QrScanButton } from '@/components/shared/QrScanButton';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 type Step = 'explain' | 'deploy' | 'profile' | 'connect' | 'ready';
 
@@ -40,6 +41,9 @@ const CALLOUT: React.CSSProperties = {
 };
 
 export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [step, setStep] = useState<Step>('explain');
   const [apiUrl, setApiUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -66,10 +70,10 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
         setApiUrl(status.url);
         setStep('profile');
       } else {
-        toast.error('SimpleX arrancó pero la API no está sana — reintenta.');
+        toast.error(t('settings.forms.connectionFailed'));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo desplegar SimpleX');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.simplexOwn.deployFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -83,7 +87,7 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
       setAddress(res.address);
       setStep('connect');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el perfil');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.simplexOwn.profileFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -94,10 +98,10 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
     setSubmitting(true);
     try {
       await messagingCli.connectSimplexLink(link.trim());
-      toast.success('Conectando… aparecerá en tus contactos en unos segundos.');
+      toast.success(t('settings.simplexOwn.connecting'));
       setLink('');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo conectar con ese enlace');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.simplexOwn.linkFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -117,7 +121,7 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
     } catch (err) {
       // Un solo connector por usuario → 409 = "ya existe" → seguir al selector.
       if (err instanceof ApiError && err.status === 409) { onComplete(); return; }
-      toast.error(err instanceof Error ? err.message : 'No se pudo crear el canal');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.matrix.createChannelFailed', { service: 'SimpleX' }));
     } finally {
       setSubmitting(false);
     }
@@ -129,21 +133,19 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Crea una identidad SimpleX <strong>nueva y separada</strong> que vive en tu servidor.
+          {t('settings.simplexOwn.explain')}
         </p>
         <div style={{ ...CALLOUT, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#fbbf24' }}>
           <Info size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            <strong>NO son los chats de tu teléfono.</strong> Es una cuenta aparte. Para hablar con
-            alguien: comparte tu dirección (para que te añadan) o pega su enlace de invitación.
-            ¿Quieres tus chats reales del móvil? Usa la tarjeta «SimpleX · tu móvil».
+            {t('settings.simplexOwn.warning')}
           </span>
         </div>
         <FormActions
           onBack={onCancel}
           saving={false}
           onConfirm={() => setStep(apiUrl ? 'profile' : 'deploy')}
-          submitLabel="Continuar"
+          submitLabel={t('settings.matrix.continue')}
         />
       </div>
     );
@@ -153,19 +155,19 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Preparando el servicio SimpleX en tu servidor (solo la primera vez).
+          {t('settings.simplexOwn.prepare')}
         </p>
         <Button onClick={handleDeploy} disabled={submitting} className="w-full">
           {submitting
-            ? <><Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> Desplegando…</>
-            : <><Container size={14} style={{ marginRight: 6 }} /> Desplegar SimpleX</>}
+            ? <><Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> {t('settings.simplexOwn.deploying')}</>
+            : <><Container size={14} style={{ marginRight: 6 }} /> {t('settings.simplexOwn.deploy')}</>}
         </Button>
         {submitting && (
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Construyendo e iniciando el contenedor… puede tardar un minuto la primera vez.
+            {t('settings.simplexOwn.startingContainer')}
           </p>
         )}
-        <Button variant="outline" onClick={onCancel} className="w-full">Cancelar</Button>
+        <Button variant="outline" onClick={onCancel} className="w-full">{t('settings.matrix.close')}</Button>
       </div>
     );
   }
@@ -173,10 +175,10 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
   if (step === 'profile') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="Nombre para mostrar" hint="Es como te verán tus contactos en SimpleX.">
+        <Field label={t('settings.simplexOwn.displayName')} hint={t('settings.simplexOwn.displayNameHint')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Víctor (MicelclawOS)" />
         </Field>
-        <FormActions onBack={onCancel} saving={submitting} onConfirm={handleSaveProfile} submitLabel="Continuar" />
+        <FormActions onBack={onCancel} saving={submitting} onConfirm={handleSaveProfile} submitLabel={t('settings.matrix.continue')} />
       </div>
     );
   }
@@ -184,12 +186,12 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
   if (step === 'connect') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="Tu dirección SimpleX" hint="Compártela (o deja que escaneen el QR) para que te añadan.">
+        <Field label={t('settings.simplexOwn.address')} hint={t('settings.simplexOwn.addressHint')}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <Input readOnly value={address ?? ''} placeholder="(sin dirección)"
+            <Input readOnly aria-label={t('settings.simplexOwn.address')} value={address ?? ''} placeholder={t('settings.simplexOwn.noAddress')}
               style={{ fontFamily: 'monospace', fontSize: '0.6875rem' }} />
-            <Button variant="ghost" size="sm" disabled={!address}
-              onClick={() => { if (address) { void navigator.clipboard.writeText(address); toast.success('Dirección copiada'); } }}>
+            <Button variant="ghost" size="sm" aria-label={t('settings.simplexOwn.copyAddress')} disabled={!address}
+              onClick={() => { if (address) { void navigator.clipboard.writeText(address); toast.success(t('settings.simplexOwn.addressCopied')); } }}>
               <Copy size={13} />
             </Button>
           </div>
@@ -201,20 +203,20 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
         )}
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.6875rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
           <Checkbox checked={autoAccept} onCheckedChange={(v) => void toggleAutoAccept(v === true)} />
-          <span>Aceptar automáticamente a quien me añada</span>
+          <span>{t('settings.simplexOwn.autoAccept')}</span>
         </label>
         <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
-        <Field label="¿Tienes el enlace de invitación de alguien?" hint="Pega su enlace simplex:/… o escanea su QR con la cámara.">
+        <Field label={t('settings.simplexOwn.invitationQuestion')} hint={t('settings.simplexOwn.invitationHint')}>
           <div style={{ display: 'flex', gap: 6 }}>
             <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="simplex:/invitation#…"
               style={{ fontFamily: 'monospace', fontSize: '0.6875rem' }} />
-            <QrScanButton onScan={(t) => setLink(t.trim())} title="Escanear el QR de invitación" />
-            <Button variant="outline" size="sm" disabled={submitting || !link.trim()} onClick={handleConnectLink} title="Conectar con el enlace">
+            <QrScanButton onScan={(t) => setLink(t.trim())} title={t('settings.simplexOwn.scanInvite')} />
+            <Button variant="outline" size="sm" aria-label={t('settings.simplexOwn.connectLink')} disabled={submitting || !link.trim()} onClick={handleConnectLink} title={t('settings.simplexOwn.connectLink')}>
               <UserPlus size={13} />
             </Button>
           </div>
         </Field>
-        <FormActions onBack={() => setStep('profile')} saving={submitting} onConfirm={() => setStep('ready')} submitLabel="Continuar" />
+        <FormActions onBack={() => setStep('profile')} saving={submitting} onConfirm={() => setStep('ready')} submitLabel={t('settings.matrix.continue')} />
       </div>
     );
   }
@@ -224,9 +226,9 @@ export function SimplexOwnForm({ onComplete, onCancel }: { onComplete: () => voi
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ ...CALLOUT, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
         <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-        <span>Perfil listo. Elige qué chats sincronizar.</span>
+        <span>{t('settings.simplexOwn.profileReady')}</span>
       </div>
-      <FormActions onBack={() => setStep('connect')} saving={submitting} onConfirm={handleFinish} submitLabel="Elegir chats" />
+      <FormActions onBack={() => setStep('connect')} saving={submitting} onConfirm={handleFinish} submitLabel={t('settings.simplexOwn.chooseChats')} />
     </div>
   );
 }

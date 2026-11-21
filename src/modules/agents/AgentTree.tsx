@@ -15,6 +15,7 @@ import { ChevronLeft, ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer2 } fro
 import { AgentTreeNode } from './AgentTreeNode';
 import { AgentDetail } from './AgentDetail';
 import type { ManagedAgent } from './types';
+import { useI18n } from '@/i18n';
 
 interface AgentTreeProps {
   agents: ManagedAgent[];
@@ -260,6 +261,7 @@ function buildChildCountMap(agents: ManagedAgent[]): Map<string, number> {
 // ─── Main component ───────────────────────────────────────────────
 
 export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChanged, onBrowseFiles }: AgentTreeProps) {
+  const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(0.85);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -459,7 +461,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
           }}
         >
           <ChevronLeft size={16} />
-          Back to tree
+          {t('agents.treeBack')}
         </button>
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <AgentDetail
@@ -520,12 +522,12 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
             pointerEvents: 'auto',
             userSelect: 'none',
           }}>
-            <ZoomBtn title="Alejar" onClick={() => setZoomCentered(z => z - ZOOM_STEP * 2)} disabled={zoom <= MIN_ZOOM + 0.001}>
+            <ZoomBtn title={t('agents.zoomOut')} onClick={() => setZoomCentered(z => z - ZOOM_STEP * 2)} disabled={zoom <= MIN_ZOOM + 0.001}>
               <ZoomOut size={14} />
             </ZoomBtn>
             <button
               onClick={() => setZoomCentered(() => 1)}
-              title="Restablecer al 100%"
+              title={t('agents.zoomReset')} aria-label={t('agents.zoomReset')}
               style={{
                 minWidth: 46, textAlign: 'center',
                 background: 'transparent', border: 'none', color: 'var(--text)',
@@ -535,14 +537,14 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
             >
               {Math.round(zoom * 100)}%
             </button>
-            <ZoomBtn title="Acercar" onClick={() => setZoomCentered(z => z + ZOOM_STEP * 2)} disabled={zoom >= MAX_ZOOM - 0.001}>
+            <ZoomBtn title={t('agents.zoomIn')} onClick={() => setZoomCentered(z => z + ZOOM_STEP * 2)} disabled={zoom >= MAX_ZOOM - 0.001}>
               <ZoomIn size={14} />
             </ZoomBtn>
             <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
-            <ZoomBtn title="Ajustar a la vista" onClick={fitToView}>
+            <ZoomBtn title={t('agents.zoomFit')} onClick={fitToView}>
               <Maximize2 size={13} />
             </ZoomBtn>
-            <ZoomBtn title="Restablecer al 100%" onClick={() => setZoomCentered(() => 1)}>
+            <ZoomBtn title={t('agents.zoomReset')} aria-label={t('agents.zoomReset')} onClick={() => setZoomCentered(() => 1)}>
               <RotateCcw size={13} />
             </ZoomBtn>
           </div>
@@ -554,7 +556,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
             pointerEvents: 'auto', userSelect: 'none',
           }}>
             <MousePointer2 size={11} />
-            Rueda para zoom · arrastra el fondo para mover
+            {t('agents.treeGestureHint')}
           </span>
         </div>
 
@@ -666,6 +668,7 @@ function ZoomBtn({ onClick, title, disabled, children }: {
     <button
       onClick={onClick}
       title={title}
+      aria-label={title}
       disabled={disabled}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',

@@ -19,6 +19,7 @@ import type { Notification } from '@/types/notifications';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useDigestStore } from '@/stores/digest.store';
 import { useSecurityStore } from '@/stores/security.store';
+import { useI18n, type Locale } from '@/i18n';
 
 const TYPE_ICONS: Record<Notification['type'], LucideIcon> = {
   sync: RefreshCw,
@@ -48,15 +49,16 @@ const TYPE_COLORS: Record<Notification['type'], string> = {
   messages: 'var(--mod-chat)',
 };
 
-function timeAgo(ts: string): string {
+function timeAgo(ts: string, locale: Locale, now: string): string {
   const diff = Date.now() - new Date(ts).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1) return now;
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  if (mins < 60) return relative.format(-mins, 'minute');
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return relative.format(-hours, 'hour');
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return Number.isFinite(days) ? relative.format(-days, 'day') : ts;
 }
 
 interface NotificationItemProps {
@@ -73,14 +75,15 @@ function ResolveButton({
   disabled: boolean;
   onClick: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useI18n();
   const color = kind === 'approve' ? 'var(--success)' : 'var(--error)';
   const Glyph = busy ? Loader2 : kind === 'approve' ? Check : X;
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      title={kind === 'approve' ? 'Aprobar' : 'Denegar'}
-      aria-label={kind === 'approve' ? 'Aprobar' : 'Denegar'}
+      title={t(kind === 'approve' ? 'shell.notifications.approve' : 'shell.notifications.reject')}
+      aria-label={t(kind === 'approve' ? 'shell.notifications.approve' : 'shell.notifications.reject')}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -106,6 +109,7 @@ function ResolveButton({
 }
 
 export function NotificationItem({ notification, onClose }: NotificationItemProps) {
+  const { locale, t } = useI18n();
   const navigate = useNavigate();
   const markAsRead = useNotificationStore((s) => s.markAsRead);
 
@@ -165,13 +169,13 @@ export function NotificationItem({ notification, onClose }: NotificationItemProp
       if (code === 'CREDENTIAL_REQUIRED' || code === 'PIN_REQUIRED') {
         // Salvaguarda: el servidor manda. Si exige credencial pese a `actionable`,
         // no insistimos aquí — se resuelve donde se puede introducir el PIN.
-        toast.info('Esta aprobación pide tu PIN', { description: 'Ábrela para confirmarla.' });
+        toast.info(t('shell.notifications.pinRequired'), { description: t('shell.notifications.openToConfirm') });
         navigate('/approvals');
         onClose();
         return;
       }
-      toast.error(decision === 'approve' ? 'No se pudo aprobar' : 'No se pudo denegar', {
-        description: 'Inténtalo desde la página de aprobaciones.',
+      toast.error(t(decision === 'approve' ? 'shell.notifications.approveFailed' : 'shell.notifications.rejectFailed'), {
+        description: t('shell.notifications.tryApprovals'),
       });
     }
   };
@@ -203,7 +207,7 @@ export function NotificationItem({ notification, onClose }: NotificationItemProp
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-            {timeAgo(notification.timestamp)}
+            {timeAgo(notification.timestamp, locale, t('shell.notifications.now'))}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {approvalRef && (

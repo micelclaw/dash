@@ -14,16 +14,17 @@ import {
   Activity, RefreshCw, ArrowUpRight, ArrowDownLeft, AlertTriangle,
   MessageSquare, Coins, Receipt, Layers, ShieldCheck, Wrench, Clock,
 } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { useAgentLiveInfo } from './hooks/use-agent-live-info';
 import { formatRelativeTime } from './shared/format';
 import type { ManagedAgent } from './types';
 
 const TYPE_LABELS: Record<string, string> = {
-  webchat: 'Chat',
-  delegation: 'Delegación',
-  council: 'Consejo',
-  heartbeat: 'Latido',
-  cron: 'Programado',
+  webchat: 'agents.activity.typeChat',
+  delegation: 'agents.activity.typeDelegation',
+  council: 'agents.activity.typeCouncil',
+  heartbeat: 'agents.activity.typeHeartbeat',
+  cron: 'agents.activity.typeScheduled',
 };
 
 interface AgentActivityProps {
@@ -31,6 +32,7 @@ interface AgentActivityProps {
 }
 
 export function AgentActivity({ agent }: AgentActivityProps) {
+  const { locale, t } = useI18n();
   const { info, loading, error, refetch } = useAgentLiveInfo(agent.id);
 
   return (
@@ -44,12 +46,12 @@ export function AgentActivity({ agent }: AgentActivityProps) {
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
           <Activity size={14} style={{ color: 'var(--mod-agents, var(--amber))' }} />
-          Actividad en vivo
+          {t('agents.activity.live')}
         </h4>
         <button
           onClick={refetch}
           disabled={loading}
-          title="Actualizar"
+          title={t('agents.activity.refresh')}
           style={{
             display: 'flex', alignItems: 'center', gap: 4,
             background: 'transparent', border: '1px solid var(--border)',
@@ -59,7 +61,7 @@ export function AgentActivity({ agent }: AgentActivityProps) {
           }}
         >
           <RefreshCw size={11} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} />
-          Actualizar
+          {t('agents.activity.refresh')}
         </button>
       </div>
 
@@ -77,20 +79,20 @@ export function AgentActivity({ agent }: AgentActivityProps) {
 
       {/* Stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        <StatTile icon={<MessageSquare size={13} />} label="Mensajes hoy"
+        <StatTile icon={<MessageSquare size={13} />} label={t('agents.activity.messagesToday')}
           value={info ? String(info.today.messages) : null} loading={loading} />
-        <StatTile icon={<Coins size={13} />} label="Tokens hoy"
-          value={info ? info.today.tokens.toLocaleString('es-ES') : null} loading={loading} />
-        <StatTile icon={<Receipt size={13} />} label="Coste hoy"
+        <StatTile icon={<Coins size={13} />} label={t('agents.activity.tokensToday')}
+          value={info ? info.today.tokens.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US') : null} loading={loading} />
+        <StatTile icon={<Receipt size={13} />} label={t('agents.activity.costToday')}
           value={info ? (info.today.cost_usd > 0 ? `$${info.today.cost_usd.toFixed(info.today.cost_usd < 0.01 ? 5 : 2)}` : '—') : null}
           loading={loading} />
-        <StatTile icon={<Layers size={13} />} label="Sesiones"
-          value={info ? info.session_tokens.toLocaleString('es-ES') : null} loading={loading}
-          hint="Tokens de sesión vigentes (≈ conversaciones no borradas)" />
+        <StatTile icon={<Layers size={13} />} label={t('agents.activity.sessions')}
+          value={info ? info.session_tokens.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US') : null} loading={loading}
+          hint={t('agents.activity.sessionHint')} />
       </div>
 
       {/* Última actividad */}
-      <Section title="Última actividad" icon={<Clock size={12} />}>
+      <Section title={t('agents.activity.lastActivity')} icon={<Clock size={12} />}>
         {loading && !info ? (
           <SkeletonLine />
         ) : info?.last_activity ? (
@@ -104,23 +106,23 @@ export function AgentActivity({ agent }: AgentActivityProps) {
                 {info.last_activity.from_agent} → {info.last_activity.to_agent ?? '—'}
               </span>
               <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                {formatRelativeTime(info.last_activity.created_at)}
+                {formatRelativeTime(info.last_activity.created_at, locale)}
               </span>
             </div>
             <div style={{
               fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.4,
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
             }}>
-              {info.last_activity.preview || <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>(sin texto)</span>}
+              {info.last_activity.preview || <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>{t('agents.activity.noText')}</span>}
             </div>
           </div>
         ) : (
-          <EmptyHint>Sin actividad registrada</EmptyHint>
+          <EmptyHint>{t('agents.activity.noActivity')}</EmptyHint>
         )}
       </Section>
 
       {/* Tools hoy */}
-      <Section title="Tools usadas hoy" icon={<Wrench size={12} />}>
+      <Section title={t('agents.activity.toolsToday')} icon={<Wrench size={12} />}>
         {loading && !info ? (
           <SkeletonChips n={4} />
         ) : info && info.tools_today.length > 0 ? (
@@ -133,12 +135,12 @@ export function AgentActivity({ agent }: AgentActivityProps) {
             ))}
           </div>
         ) : (
-          <EmptyHint>Sin tools hoy</EmptyHint>
+          <EmptyHint>{t('agents.activity.noTools')}</EmptyHint>
         )}
       </Section>
 
       {/* Delegaciones recientes */}
-      <Section title="Delegaciones recientes" icon={<ArrowUpRight size={12} />}>
+      <Section title={t('agents.activity.recentDelegations')} icon={<ArrowUpRight size={12} />}>
         {loading && !info ? (
           <><SkeletonLine /><SkeletonLine /></>
         ) : info && info.recent_delegations.length > 0 ? (
@@ -152,7 +154,7 @@ export function AgentActivity({ agent }: AgentActivityProps) {
                 <span style={{
                   flexShrink: 0, marginTop: 1,
                   color: d.direction === 'outgoing' ? 'var(--amber)' : 'var(--success)',
-                }} title={d.direction === 'outgoing' ? 'Delegó a' : 'Recibió de'}>
+                }} title={d.direction === 'outgoing' ? t('agents.activity.delegatedTo') : t('agents.activity.receivedFrom')}>
                   {d.direction === 'outgoing' ? <ArrowUpRight size={13} /> : <ArrowDownLeft size={13} />}
                 </span>
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -164,7 +166,7 @@ export function AgentActivity({ agent }: AgentActivityProps) {
                       <span style={{ ...miniTag, color: 'var(--amber)', borderColor: 'var(--amber-dim)' }}>briefing</span>
                     )}
                     <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                      {formatRelativeTime(d.created_at)}
+                      {formatRelativeTime(d.created_at, locale)}
                     </span>
                   </div>
                   <div style={{
@@ -178,12 +180,12 @@ export function AgentActivity({ agent }: AgentActivityProps) {
             ))}
           </div>
         ) : (
-          <EmptyHint>Sin delegaciones</EmptyHint>
+          <EmptyHint>{t('agents.activity.noDelegations')}</EmptyHint>
         )}
       </Section>
 
       {/* Scopes activos */}
-      <Section title="Scopes activos" icon={<ShieldCheck size={12} />}>
+      <Section title={t('agents.activity.activeScopes')} icon={<ShieldCheck size={12} />}>
         {loading && !info ? (
           <SkeletonChips n={6} />
         ) : info && info.active_scopes.length > 0 ? (
@@ -193,7 +195,7 @@ export function AgentActivity({ agent }: AgentActivityProps) {
             ))}
           </div>
         ) : (
-          <EmptyHint>Sin scopes asignados</EmptyHint>
+          <EmptyHint>{t('agents.activity.noScopes')}</EmptyHint>
         )}
       </Section>
 
@@ -207,19 +209,19 @@ export function AgentActivity({ agent }: AgentActivityProps) {
           color: 'var(--warning)', fontSize: '0.75rem',
         }}>
           <AlertTriangle size={14} />
-          {info.stuck_yields.length} sesión{info.stuck_yields.length !== 1 ? 'es' : ''} bloqueada{info.stuck_yields.length !== 1 ? 's' : ''} (stuck-yield) sin resolver
+          {t(info.stuck_yields.length === 1 ? 'agents.activity.stuckOne' : 'agents.activity.stuckMany', { count: info.stuck_yields.length })}
         </div>
       )}
 
       {/* Eventos críticos */}
       {info && info.critical_events.length > 0 && (
-        <Section title="Eventos sin procesar" icon={<AlertTriangle size={12} />}>
+        <Section title={t('agents.activity.pendingEvents')} icon={<AlertTriangle size={12} />}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {info.critical_events.map((e, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.6875rem' }}>
                 <SeverityDot severity={e.severity} />
                 <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{e.type}</span>
-                <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatRelativeTime(e.created_at)}</span>
+                <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatRelativeTime(e.created_at, locale)}</span>
               </div>
             ))}
           </div>
@@ -284,12 +286,14 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
 }
 
 function TypeBadge({ type }: { type: string }) {
+  const { t } = useI18n();
+  const typeKey = Object.prototype.hasOwnProperty.call(TYPE_LABELS, type) ? TYPE_LABELS[type] : undefined;
   return (
     <span style={{
       ...miniTag, color: 'var(--text-dim)',
       background: 'var(--surface-hover)', borderColor: 'var(--border)',
     }}>
-      {TYPE_LABELS[type] ?? type}
+      {typeKey ? t(typeKey) : type}
     </span>
   );
 }

@@ -130,7 +130,7 @@ export interface DecisionModelEntry {
   label?: string;
   availability?: boolean;
   incompatible_reason?: 'credential-missing' | 'connection-mode' | null;
-  pluginId?: string;
+  plugin_id?: string;
 }
 
 export interface AgentDecisionModelState {
@@ -138,6 +138,23 @@ export interface AgentDecisionModelState {
   model: string | null;
   global_model: string | null;
   effective_model: string | null;
+  assistance?: DecisionAssistanceState;
+}
+
+export interface DecisionAssistanceState {
+  configured: boolean;
+  eligible: boolean;
+  runtime_supported: boolean | null;
+  effective: boolean | null;
+  reason: 'disabled' | 'decision-model-missing' | 'runtime-capability-unknown' | 'unsupported-runtime' | null;
+  native_tool_available: boolean | null;
+  may_send_context_to_provider: boolean;
+  grants_actions: false;
+}
+
+export const DECISION_MODELS_CHANGED = 'micelclaw:decision-models-changed';
+export function notifyDecisionModelsChanged(agentId?: string) {
+  window.dispatchEvent(new CustomEvent(DECISION_MODELS_CHANGED, { detail: { agentId } }));
 }
 
 export async function listDecisionModels(): Promise<{ models: DecisionModelEntry[]; default_model: string | null }> {
@@ -152,6 +169,7 @@ export async function getAgentDecisionModel(agentId: string): Promise<AgentDecis
 
 export async function updateAgentDecisionModel(agentId: string, body: { mode: AgentDecisionModelState['mode']; model?: string }): Promise<AgentDecisionModelState> {
   const res = await api.patch<{ data: AgentDecisionModelState }>(`/managed-agents/${agentId}/decision-model`, body, { timeout: 240_000 });
+  notifyDecisionModelsChanged(agentId);
   return res.data;
 }
 

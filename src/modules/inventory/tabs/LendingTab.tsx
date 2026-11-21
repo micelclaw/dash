@@ -18,17 +18,18 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { daysSince, daysUntil, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryEvent, InventoryItem } from '@/modules/inventory/types';
+import { useI18n } from '@/i18n';
 
 interface ContactLite {
   id: string;
   display_name: string;
 }
 
-function fmtDate(date: string | null): string {
+function fmtDate(date: string | null, locale: string): string {
   if (!date) return '—';
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** Semáforo: verde <30d fuera, naranja 30-90d, rojo >90d o vencido. */
@@ -78,6 +79,7 @@ function LoanPhoto({ item }: { item: InventoryItem }) {
 }
 
 export function LendingTab() {
+  const { t: tr, locale } = useI18n();
   const { alerts, items, fetchAlerts, returnItem, selectItem } = useInventoryStore();
 
   const [contactNames, setContactNames] = useState<Map<string, string>>(new Map());
@@ -100,7 +102,7 @@ export function LendingTab() {
       setHistory(merged);
       setHistoryLoaded(true);
     } catch {
-      toast.error('Could not load lending history');
+      toast.error(tr('inventory.lending.loadFailed'));
     }
   };
 
@@ -127,12 +129,12 @@ export function LendingTab() {
     setReturnBusy(true);
     try {
       await returnItem(id, returnNotes.trim() ? { notes: returnNotes.trim() } : undefined);
-      toast.success('Welcome back!');
+      toast.success(tr('inventory.lending.returnedToast'));
       setReturningId(null);
       setReturnNotes('');
       void loadHistory();
     } catch {
-      toast.error('Could not mark item as returned');
+      toast.error(tr('inventory.lending.returnFailed'));
     } finally {
       setReturnBusy(false);
     }
@@ -141,21 +143,21 @@ export function LendingTab() {
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 860 }}>
       <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-        Active loans ({loans.length})
+        {tr('inventory.lending.activeLoans', { count: loans.length })}
       </h2>
 
       {loans.length === 0 ? (
         <div style={{ minHeight: 220 }}>
           <EmptyState
             icon={HandHeart}
-            title="Nothing lent right now"
-            description="Lend items from their drawer and track who has what."
+            title={tr('inventory.lending.emptyTitle')}
+            description={tr('inventory.lending.emptyDescription')}
           />
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {loans.map(item => {
-            const contactName = (item.lent_to_contact_id && contactNames.get(item.lent_to_contact_id)) || 'contact';
+            const contactName = (item.lent_to_contact_id && contactNames.get(item.lent_to_contact_id)) || tr('finance.billing.contact.contact');
             const out = daysSince(item.lent_at);
             const overdue = item.lent_until !== null && (daysUntil(item.lent_until) ?? 0) < 0;
             return (
@@ -215,7 +217,7 @@ export function LendingTab() {
                         color: 'var(--text-dim)',
                       }}
                     >
-                      {out !== null && <span>{out} days out</span>}
+                      {out !== null && <span>{tr('inventory.lending.daysOut', { count: out })}</span>}
                       {item.lent_until && (
                         <span
                           style={{
@@ -226,7 +228,7 @@ export function LendingTab() {
                           }}
                         >
                           {overdue && <AlertTriangle size={12} />}
-                          due {fmtDate(item.lent_until)}
+                          {tr('inventory.lending.due', { date: fmtDate(item.lent_until, locale) })}
                         </span>
                       )}
                     </div>
@@ -247,14 +249,14 @@ export function LendingTab() {
                         cursor: 'pointer',
                       }}
                     >
-                      Returned
+                      {tr('inventory.lending.returned')}
                     </button>
                     <button
                       disabled
                       // El tooltip prometía «flows» (MicelFlow), retirado el 2026-06-30 y
                       // sustituido por n8n: apuntaba a un destino que ya no existe. Queda
                       // honesto hasta que se decida por dónde sale el aviso (INV3).
-                      title="Agent reminder — not wired up yet"
+                      title={tr('inventory.lending.reminderTitle')}
                       style={{
                         background: 'transparent',
                         border: 'none',
@@ -266,7 +268,7 @@ export function LendingTab() {
                         opacity: 0.6,
                       }}
                     >
-                      Remind
+                      {tr('inventory.lending.remind')}
                     </button>
                   </div>
                 </div>
@@ -284,7 +286,7 @@ export function LendingTab() {
                     <input
                       value={returnNotes}
                       onChange={e => setReturnNotes(e.target.value)}
-                      placeholder="Notes (optional)"
+                      placeholder={tr('inventory.lending.notesPlaceholder')}
                       autoFocus
                       style={{
                         flex: 1,
@@ -312,7 +314,7 @@ export function LendingTab() {
                         opacity: returnBusy ? 0.7 : 1,
                       }}
                     >
-                      {returnBusy ? 'Saving…' : 'Confirm return'}
+                      {returnBusy ? tr('inventory.lending.saving') : tr('inventory.lending.confirmReturn')}
                     </button>
                     <button
                       onClick={() => {
@@ -329,7 +331,7 @@ export function LendingTab() {
                         cursor: 'pointer',
                       }}
                     >
-                      Cancel
+                      {tr('inventory.cancel')}
                     </button>
                   </div>
                 )}
@@ -358,12 +360,12 @@ export function LendingTab() {
           }}
         >
           {historyOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          History
+          {tr('inventory.lending.history')}
         </button>
         {historyOpen && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
             {historyLoaded && history.length === 0 && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>No lending history yet.</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{tr('inventory.lending.noHistory')}</span>
             )}
             {history.map(ev => {
               const isLent = ev.type === 'lent';
@@ -371,14 +373,14 @@ export function LendingTab() {
               const contactName = ev.contact_id ? contactNames.get(ev.contact_id) : undefined;
               return (
                 <div key={ev.id} style={{ fontSize: '0.75rem', color: 'var(--text-dim)', padding: '2px 0' }}>
-                  {fmtDate(ev.date)} ·{' '}
+                  {fmtDate(ev.date, locale)} ·{' '}
                   {itemName ? (
                     <span style={{ color: 'var(--text)' }}>{itemName}</span>
                   ) : (
-                    <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>(deleted item)</span>
+                    <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>{tr('inventory.lending.deletedItem')}</span>
                   )}{' '}
                   <span style={{ color: isLent ? '#fb923c' : '#4ade80' }}>{isLent ? '→' : '←'}</span>{' '}
-                  {isLent ? (contactName ? `lent to ${contactName}` : 'lent') : 'returned'}
+                  {isLent ? (contactName ? tr('inventory.lending.lentTo', { name: contactName }) : tr('inventory.lending.lent')) : tr('inventory.lending.returnedEvent')}
                 </div>
               );
             })}
@@ -387,7 +389,7 @@ export function LendingTab() {
       </div>
 
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>
-        Lending with a date creates a return reminder in your Inventory calendar.
+        {tr('inventory.lending.calendarReminder')}
       </p>
     </div>
   );

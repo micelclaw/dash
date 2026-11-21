@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { X, Search, Loader2, Rss } from 'lucide-react';
 import { api } from '@/services/api';
 import { useFeedsStore } from '@/stores/feeds.store';
+import { useI18n } from '@/i18n';
 
 interface DiscoveredFeed {
   feed_url: string;
@@ -24,6 +25,7 @@ interface DiscoveredFeed {
 }
 
 export function AddFeedDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [url, setUrl] = useState('');
   const [discovering, setDiscovering] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
@@ -42,9 +44,9 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
     try {
       const res = await api.post<{ data: DiscoveredFeed[] }>('/feeds/discover', { url: url.trim() });
       setDiscovered(res.data);
-      if (res.data.length === 0) setError('No feeds found at this URL');
+      if (res.data.length === 0) setError(t('feeds.noFeedsFound'));
     } catch (err: any) {
-      setError(err.message || 'Discovery failed');
+      setError(err.message || t('feeds.discoveryFailed'));
     } finally {
       setDiscovering(false);
     }
@@ -57,7 +59,7 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
       await subscribe(feedUrl, category || undefined);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Subscribe failed');
+      setError(err.message || t('feeds.subscribeFailed'));
     } finally {
       setSubscribing(false);
     }
@@ -71,8 +73,8 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-          <h3 className="text-sm font-medium text-[var(--text)]">Add Feed</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)]">
+          <h3 className="text-sm font-medium text-[var(--text)]">{t('feeds.addTitle')}</h3>
+          <button onClick={onClose} aria-label={t('feeds.closeDialog')} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)]">
             <X size={16} />
           </button>
         </div>
@@ -86,12 +88,13 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
               value={url}
               onChange={e => setUrl(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleDiscover()}
-              placeholder="Enter website or feed URL..."
+              placeholder={t('feeds.urlPlaceholder')}
               className="flex-1 px-3 py-2 text-sm bg-[var(--surface)] border border-[var(--border)] rounded text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--amber)]"
               autoFocus
             />
             <button
               onClick={handleDiscover}
+              aria-label={t('feeds.discoverFeeds')}
               disabled={discovering || !url.trim()}
               className="px-3 py-2 text-sm bg-[var(--amber)] text-black rounded font-medium hover:bg-[var(--amber-hover)] disabled:opacity-50"
             >
@@ -105,7 +108,7 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
             onChange={e => setCategory(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-[var(--surface)] border border-[var(--border)] rounded text-[var(--text)] focus:outline-none focus:border-[var(--amber)]"
           >
-            <option value="">No category</option>
+            <option value="">{t('feeds.noCategory')}</option>
             {categories.map(c => (
               <option key={c.id} value={c.name}>{c.name}</option>
             ))}
@@ -119,7 +122,7 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
           {/* Discovered feeds */}
           {discovered && discovered.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs text-[var(--text-dim)]">{discovered.length} feed(s) found:</p>
+              <p className="text-xs text-[var(--text-dim)]">{t('feeds.found', { count: discovered.length })}</p>
               {discovered.map((feed, i) => (
                 <div
                   key={i}
@@ -132,7 +135,7 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
                     <p className="text-xs text-[var(--text-dim)] truncate">{feed.feed_url}</p>
                   </div>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface)] text-[var(--text-dim)] uppercase">
-                    {feed.content_type}
+                    {t(`feeds.${feed.content_type}`)}
                   </span>
                 </div>
               ))}
@@ -146,7 +149,7 @@ export function AddFeedDialog({ onClose }: { onClose: () => void }) {
               disabled={subscribing || !url.trim()}
               className="w-full py-2 text-sm bg-[var(--surface)] border border-[var(--border)] rounded text-[var(--text-dim)] hover:border-[var(--amber)] hover:text-[var(--text)] disabled:opacity-50"
             >
-              {subscribing ? 'Subscribing...' : 'Subscribe directly (skip discovery)'}
+              {subscribing ? t('feeds.subscribing') : t('feeds.subscribeDirect')}
             </button>
           )}
         </div>

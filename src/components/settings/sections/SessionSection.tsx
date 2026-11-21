@@ -11,6 +11,7 @@ import { describeError } from '@/lib/api-errors';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import { SectionShell } from '../shared/SectionShell';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { InitialModelPreference } from './InitialModelPreference';
 
 // Duration string validator. Backend accepts shorthand like 7d, 24h, 30m, 1w.
 // Empty string is also valid (means "no limit"), but only for max_disk_bytes,
@@ -199,6 +200,7 @@ export function SessionSection() {
       onSave={handleSave}
       appliesAt="next-session"
     >
+      <InitialModelPreference />
       <SettingsBlock
         title="Session Reset"
         expanded={sections.reset!}

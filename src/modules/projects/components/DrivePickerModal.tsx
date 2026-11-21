@@ -26,8 +26,14 @@ import { api } from '@/services/api';
 import { FileThumbnail } from '@/components/shared/FileThumbnail';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 const RAIZ = '/drive/';
+const KNOWN_TITLE_KEYS: Record<string, string> = {
+  'Elegir portada del Drive': 'drive.picker.title.cover',
+  'Adjuntar del Drive': 'drive.picker.title.attach',
+  'Elegir del Drive': 'drive.picker.title.default',
+};
 
 function tamano(bytes: number): string {
   if (!bytes) return '';
@@ -40,7 +46,7 @@ export function DrivePickerModal({
   onClose,
   onPick,
   soloImagenes = false,
-  titulo = 'Elegir del Drive',
+  titulo,
 }: {
   onClose: () => void;
   onPick: (files: FileRecord[]) => void;
@@ -48,6 +54,8 @@ export function DrivePickerModal({
   soloImagenes?: boolean;
   titulo?: string;
 }) {
+  const { t } = useI18n();
+  const dialogTitle = titulo ? (KNOWN_TITLE_KEYS[titulo] ? t(KNOWN_TITLE_KEYS[titulo]!) : titulo) : t('drive.picker.title.default');
   const [ruta, setRuta] = useState(RAIZ);
   const [items, setItems] = useState<FileRecord[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -102,12 +110,12 @@ export function DrivePickerModal({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={titulo}
+        aria-label={dialogTitle}
         style={{ width: 560, maxWidth: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 8px)', overflow: 'hidden' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{titulo}</span>
-          <button onClick={onClose} aria-label="Cerrar" style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex' }}>
+          <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{dialogTitle}</span>
+          <button onClick={onClose} aria-label={t('drive.picker.close')} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex' }}>
             <X size={16} />
           </button>
         </div>
@@ -117,11 +125,12 @@ export function DrivePickerModal({
           <input
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar en el Drive…"
+            placeholder={t('drive.picker.search.placeholder')}
+            aria-label={t('drive.picker.search.label')}
             style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-sans)' }}
           />
           {!busqueda && ruta !== RAIZ && (
-            <button onClick={subir} title="Subir un nivel" style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex' }}>
+            <button onClick={subir} title={t('drive.picker.up')} aria-label={t('drive.picker.up')} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex' }}>
               <ArrowUp size={14} />
             </button>
           )}
@@ -135,10 +144,10 @@ export function DrivePickerModal({
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
           {cargando ? (
-            <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>Cargando…</div>
+            <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>{t('drive.picker.loading')}</div>
           ) : items.length === 0 ? (
             <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>
-              {busqueda ? 'Nada coincide.' : soloImagenes ? 'No hay imágenes en esta carpeta.' : 'Carpeta vacía.'}
+              {busqueda ? t('drive.picker.empty.search') : soloImagenes ? t('drive.picker.empty.images') : t('drive.picker.empty.folder')}
             </div>
           ) : (
             items.map((f) => {
@@ -147,6 +156,7 @@ export function DrivePickerModal({
                 <button
                   key={f.id}
                   onClick={() => (f.is_directory ? (setBusqueda(''), setRuta(`${f.filepath.replace(/\/$/, '')}/`)) : alternar(f))}
+                  aria-pressed={!f.is_directory && marcado}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                     padding: '6px 8px', borderRadius: 'var(--radius-sm, 6px)', cursor: 'pointer',
@@ -175,14 +185,14 @@ export function DrivePickerModal({
         {!soloImagenes && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
             <button onClick={onClose} style={{ padding: '5px 12px', borderRadius: 6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 12 }}>
-              Cancelar
+              {t('drive.picker.cancel')}
             </button>
             <button
               onClick={() => onPick(items.filter((f) => elegidos.has(f.id)))}
               disabled={elegidos.size === 0}
               style={{ padding: '5px 12px', borderRadius: 6, background: elegidos.size ? 'var(--amber)' : 'var(--border)', border: 'none', color: elegidos.size ? '#06060a' : 'var(--text-dim)', cursor: elegidos.size ? 'pointer' : 'default', fontSize: 12, fontWeight: 500 }}
             >
-              Elegir{elegidos.size > 0 ? ` (${elegidos.size})` : ''}
+              {t('drive.picker.choose')}{elegidos.size > 0 ? ` (${elegidos.size})` : ''}
             </button>
           </div>
         )}

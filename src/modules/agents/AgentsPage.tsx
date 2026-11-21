@@ -219,7 +219,7 @@ export function Component() {
               onClick={() => setShowImportModal(true)}
               onMouseEnter={() => setImportBtnHover(true)}
               onMouseLeave={() => setImportBtnHover(false)}
-              title="Import a .claw-agent package"
+              title="Import a Claws or legacy Agentar package"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 background: importBtnHover ? 'var(--surface-hover)' : 'transparent',

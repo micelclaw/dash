@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { ArrowRightLeft, HandHeart, RefreshCw, Trash2, Undo2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -37,6 +38,7 @@ interface ActionsSectionProps {
 
 /** Botonera de acciones del item + mini-paneles Lend / Move / Status. */
 export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }: ActionsSectionProps) {
+  const { t } = useI18n();
   const {
     items,
     locations,
@@ -104,14 +106,14 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
         notes: lendNotes.trim() || undefined,
       });
       await refreshAfter();
-      toast.success(`Lent to ${lendContact.display_name}`);
+      toast.success(t('inventory.drawer.lentTo', { name: lendContact.display_name }));
       setPanel(null);
       setLendContact(null);
       setContactSearch('');
       setLentUntil('');
       setLendNotes('');
     } catch {
-      toast.error('Failed to lend item');
+      toast.error(t('inventory.drawer.lendFailed'));
     }
   };
 
@@ -119,9 +121,9 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
     try {
       await returnItem(itemId);
       await refreshAfter();
-      toast.success('Item returned');
+      toast.success(t('inventory.drawer.itemReturned'));
     } catch {
-      toast.error('Failed to return item');
+      toast.error(t('inventory.drawer.returnFailed'));
     }
   };
 
@@ -130,10 +132,10 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
     try {
       await recordMove({ item_id: itemId, type: 'transfer', to_location_id: toLocationId });
       await refreshAfter();
-      toast.success('Item moved');
+      toast.success(t('inventory.drawer.itemMoved'));
       setPanel(null);
     } catch {
-      toast.error('Failed to move item');
+      toast.error(t('inventory.drawer.moveFailed'));
     }
   };
 
@@ -142,12 +144,12 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
     try {
       await setStatus(itemId, status);
       await refreshAfter();
-      toast.success(`Status set to ${SYSTEM_STATUS_LABELS[status] ?? status}`);
+      toast.success(t('inventory.drawer.statusSetTo', { status: SYSTEM_STATUS_LABELS[status] ?? status }));
       setPanel(null);
       setNewStatusOpen(false);
       setNewStatusDraft('');
     } catch {
-      toast.error('Failed to update status');
+      toast.error(t('inventory.drawer.statusFailed'));
     }
   };
 
@@ -161,9 +163,9 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
     try {
       await uploadItemFile(itemId, file, 'doc');
       await refreshItem();
-      toast.success('Document uploaded');
+      toast.success(t('inventory.drawer.documentUploaded'));
     } catch {
-      toast.error('Failed to upload document');
+      toast.error(t('inventory.drawer.uploadFailed'));
     }
   };
 
@@ -176,9 +178,9 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
     }
     try {
       await deleteItem(itemId);
-      toast.success('Item deleted');
+      toast.success(t('inventory.drawer.itemDeleted'));
     } catch {
-      toast.error('Failed to delete item');
+      toast.error(t('inventory.drawer.deleteFailed'));
     }
   };
 
@@ -190,18 +192,18 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <span style={sectionLabel}>Actions</span>
+      <span style={sectionLabel}>{t('inventory.drawer.actions')}</span>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <button style={btnSecondary} onClick={() => setPanel(panel === 'lend' ? null : 'lend')}>
-          <HandHeart size={14} /> Lend
+          <HandHeart size={14} /> {t('inventory.drawer.lend')}
         </button>
         {isLent && (
           <button style={btnSecondary} onClick={() => void handleReturn()}>
-            <Undo2 size={14} /> Return
+            <Undo2 size={14} /> {t('inventory.drawer.return')}
           </button>
         )}
         <button style={btnSecondary} onClick={() => setPanel(panel === 'move' ? null : 'move')}>
-          <ArrowRightLeft size={14} /> Move
+          <ArrowRightLeft size={14} /> {t('inventory.drawer.move')}
         </button>
         <button
           style={btnSecondary}
@@ -211,10 +213,10 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
             setNewStatusDraft('');
           }}
         >
-          <RefreshCw size={14} /> Status
+          <RefreshCw size={14} /> {t('inventory.status')}
         </button>
         <label style={{ ...btnSecondary }}>
-          <Upload size={14} /> Upload doc
+          <Upload size={14} /> {t('inventory.drawer.uploadDoc')}
           <input
             type="file"
             style={{ display: 'none' }}
@@ -225,8 +227,8 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
             }}
           />
         </label>
-        <button style={btnSecondary} onClick={onShowLabel} title="Print a QR label for this item">
-          🏷 Label
+        <button style={btnSecondary} onClick={onShowLabel} title={t('inventory.drawer.printLabel')}>
+          🏷 {t('inventory.drawer.label')}
         </button>
         <button
           style={{
@@ -237,7 +239,7 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
           }}
           onClick={() => void handleDelete()}
         >
-          <Trash2 size={14} /> {deleteArmed ? 'Click again to delete' : 'Delete'}
+          <Trash2 size={14} /> {deleteArmed ? t('inventory.drawer.clickAgainDelete') : t('inventory.delete')}
         </button>
       </div>
 
@@ -247,11 +249,11 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
           {lendContact ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', color: 'var(--text)' }}>
               <span>
-                To: <strong>{lendContact.display_name}</strong>
+                {t('inventory.drawer.to')} <strong>{lendContact.display_name}</strong>
               </span>
               <button
                 onClick={() => setLendContact(null)}
-                aria-label="Clear contact"
+                aria-label={t('inventory.drawer.clearContact')}
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 0, display: 'flex' }}
               >
                 <X size={12} />
@@ -262,7 +264,7 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
               <input
                 value={contactSearch}
                 onChange={e => setContactSearch(e.target.value)}
-                placeholder="Search contact…"
+                placeholder={t('inventory.drawer.searchContact')}
                 style={inputStyle}
                 autoFocus
               />
@@ -304,16 +306,16 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
             value={lentUntil}
             onChange={e => setLentUntil(e.target.value)}
             style={inputStyle}
-            aria-label="Lent until (optional)"
+            aria-label={t('inventory.drawer.lentUntil')}
           />
           <input
             value={lendNotes}
             onChange={e => setLendNotes(e.target.value)}
-            placeholder="Notes (optional)"
+            placeholder={t('inventory.drawer.lendNotes')}
             style={inputStyle}
           />
           <button style={{ ...btnPrimary, opacity: lendContact ? 1 : 0.5 }} disabled={!lendContact} onClick={() => void handleLend()}>
-            Lend item
+            {t('inventory.drawer.lendItem')}
           </button>
         </div>
       )}
@@ -325,10 +327,10 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
             defaultValue=""
             onChange={e => void handleMove(e.target.value)}
             style={inputStyle}
-            aria-label="Move to location"
+            aria-label={t('inventory.drawer.moveTo')}
           >
             <option value="" disabled>
-              Move to…
+              {t('inventory.drawer.moveTo')}
             </option>
             {locations
               .filter(l => l.id !== item.location_id)
@@ -355,10 +357,10 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
               void handleStatus(e.target.value);
             }}
             style={inputStyle}
-            aria-label="Set status"
+            aria-label={t('inventory.drawer.setStatus')}
           >
             <option value="" disabled>
-              Set status…
+              {t('inventory.drawer.setStatus')}
             </option>
             {statuses
               .filter(s => s !== item.status)
@@ -374,7 +376,7 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
                   {s}
                 </option>
               ))}
-            <option value="__new__">+ New status…</option>
+            <option value="__new__">{t('inventory.drawer.newStatus')}</option>
           </select>
           {newStatusOpen && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -387,10 +389,10 @@ export function ActionsSection({ item, refreshItem, refreshAfter, onShowLabel }:
                 placeholder="e.g. for-sale"
                 autoFocus
                 style={inputStyle}
-                aria-label="New status name"
+                aria-label={t('inventory.drawer.newStatusName')}
               />
               <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                Custom states become columns on the Inventory board.
+                {t('inventory.drawer.customStatusHelp')}
               </span>
             </div>
           )}

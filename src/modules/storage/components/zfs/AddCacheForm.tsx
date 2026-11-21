@@ -16,10 +16,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Zap } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, ZFS_COPY } from '../ZfsHelp';
+import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, Field, WarnBox, DiskPickList, useAvailableDisks } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function AddCacheForm({ pool, onClose }: { pool: string; onClose: () => void }) {
+  const { t } = useI18n();
   const demo = useStorageStore((s) => s.zfs_demo);
   const addCache = useStorageStore((s) => s.zfsAddCache);
   const [kind, setKind] = useState<'cache' | 'log' | 'special'>('cache');
@@ -31,32 +33,31 @@ export function AddCacheForm({ pool, onClose }: { pool: string; onClose: () => v
   const toggle = (id: string) => setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
 
   const KINDS = [
-    { id: 'cache' as const, label: 'Caché de lectura (L2ARC)', desc: 'Acelera leer datos frecuentes. Lo más seguro: se puede quitar sin riesgo.' },
-    { id: 'log' as const, label: 'Log de escritura (SLOG)', desc: 'Acelera escrituras síncronas. Conviene ponerlo en espejo (2 SSD).' },
-    { id: 'special' as const, label: 'Metadatos (special)', desc: 'Acelera todo guardando metadatos en SSD. PERMANENTE: si lo pierdes sin espejo, pierdes el pool.' },
+    { id: 'cache' as const, labelKey: 'storage.cache.read', descKey: 'storage.cache.readDesc' },
+    { id: 'log' as const, labelKey: 'storage.cache.log', descKey: 'storage.cache.logDesc' },
+    { id: 'special' as const, labelKey: 'storage.cache.special', descKey: 'storage.cache.specialDesc' },
   ];
   const current = KINDS.find((k) => k.id === kind)!;
+  const currentLabel = t(current.labelKey);
   const needsMirrorWarn = (kind === 'log' || kind === 'special') && picked.length < 2;
 
   const submit = async () => {
     setBusy(true);
     try {
       await addCache(pool, kind, picked);
-      toast.success(`Caché añadida a "${pool}"${demo ? ' (demo)' : ''}`);
+      toast.success(t('storage.cache.added', { pool, demo: demo ? t('storage.common.demoSuffix') : '' }));
       onClose();
     } catch (e) {
-      toast.error(`No se pudo añadir la caché: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('storage.cache.addError', { error: e instanceof Error ? e.message : String(e) }));
     } finally { setBusy(false); }
   };
 
   return (
-    <ZfsModal title={`Añadir caché SSD a "${pool}"`} icon={<Zap size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton primary disabled={busy || picked.length === 0} onClick={submit}>{busy ? 'Añadiendo…' : 'Añadir caché'}</ZfsButton></>}>
-      <SectionIntro>{ZFS_COPY.cache}</SectionIntro>
+    <ZfsModal title={t('storage.cache.title', { pool })} icon={<Zap size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton primary disabled={busy || picked.length === 0} onClick={submit}>{busy ? t('storage.cache.adding') : t('storage.cache.add')}</ZfsButton></>}>
+      <SectionIntro>{t('storage.help.cache')}</SectionIntro>
       <div>
-        <Field hint="Cada tipo de caché acelera algo distinto. Empieza por la de lectura (L2ARC), que es la más segura.">
-          Tipo de caché
-        </Field>
+        <Field hint={t('storage.cache.typeHint')}>{t('storage.cache.type')}</Field>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {KINDS.map((k) => {
             const sel = kind === k.id;
@@ -69,24 +70,21 @@ export function AddCacheForm({ pool, onClose }: { pool: string; onClose: () => v
               }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input type="radio" name="cachekind" checked={sel} onChange={() => setKind(k.id)} />
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{k.label}</span>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{t(k.labelKey)}</span>
                 </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5, paddingLeft: 24 }}>{k.desc}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5, paddingLeft: 24 }}>{t(k.descKey)}</span>
               </label>
             );
           })}
         </div>
       </div>
       <div>
-        <Field hint="Elige los SSD que quieres dedicar a esta caché. No se borrarán los datos del pool; estos SSD se reservan para la caché.">
-          Discos SSD para «{current.label}»
-        </Field>
+        <Field hint={t('storage.cache.diskHint')}>{t('storage.cache.chooseDisks', { kind: currentLabel })}</Field>
         <DiskPickList disks={available} picked={picked} onToggle={toggle} />
       </div>
       {needsMirrorWarn && (
         <WarnBox>
-          Para «{current.label}» se recomienda usar 2 SSD en espejo: si el dispositivo falla sin redundancia, puedes
-          perder escrituras recientes{kind === 'special' ? ' o incluso todo el pool' : ''}.
+          {t('storage.cache.mirrorWarning', { kind: currentLabel, special: kind === 'special' ? t('storage.cache.specialDataWarning') : '' })}
         </WarnBox>
       )}
     </ZfsModal>

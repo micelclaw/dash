@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 interface AddCalendarModalProps {
   open: boolean;
@@ -35,6 +36,7 @@ const PRESET_COLORS = [
 ];
 
 export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCalendarModalProps) {
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [source, setSource] = useState<'local' | 'caldav'>('local');
@@ -67,11 +69,11 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
         source,
         connector_id: source === 'caldav' ? connectorId : undefined,
       });
-      toast.success(`Calendar "${name.trim()}" created`);
+      toast.success(t('calendar.createSuccess', { name: name.trim() }));
       onCreated?.();
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to create calendar');
+      toast.error(err?.message || t('calendar.createFailed'));
     } finally {
       setCreating(false);
     }
@@ -117,7 +119,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
           padding: '14px 16px', borderBottom: '1px solid var(--border)',
         }}>
           <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            New Calendar
+            {t('calendar.newCalendar')}
           </h3>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -132,13 +134,13 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
           {/* Name */}
           <div>
             <label style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)', marginBottom: 4, display: 'block' }}>
-              Name
+              {t('calendar.name')}
             </label>
             <input
               style={inputStyle}
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g., Gym, Project X, Family"
+              placeholder={t('calendar.calendarNameExample')}
               autoFocus
               onKeyDown={e => { if (e.key === 'Enter' && name.trim()) handleCreate(); }}
             />
@@ -147,7 +149,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
           {/* Color */}
           <div>
             <label style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)', marginBottom: 6, display: 'block' }}>
-              Color
+              {t('calendar.color')}
             </label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {PRESET_COLORS.map(c => (
@@ -184,7 +186,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
                   onChange={() => setSource('local')}
                   style={{ accentColor: 'var(--amber)' }}
                 />
-                Local (Micelclaw OS only)
+                {t('calendar.localOnly')}
               </label>
 
               {caldavConnectors.map(conn => (
@@ -225,7 +227,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
             padding: '6px 14px', background: 'none', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)', color: 'var(--text-dim)', cursor: 'pointer',
             fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
-          }}>Cancel</button>
+          }}>{t('calendar.cancel')}</button>
           <button
             onClick={handleCreate}
             disabled={creating || !name.trim()}
@@ -239,7 +241,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
             }}
           >
             {creating && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-            Create
+            {t('calendar.create')}
           </button>
         </div>
       </div>

@@ -23,6 +23,7 @@ import { useSidebarStore } from '@/stores/sidebar.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAppAccessStore } from '@/stores/app-access.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
+import { isOfficeChildModule } from '@/modules/office/office-navigation';
 import { DEFAULT_APP_KEYS } from '@/config/app-catalog';
 import { MODULES } from '@/config/modules';
 import { lucideLookup } from '@/config/lucide-lookup';
@@ -168,7 +169,7 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
   // Navegan a la ruta catch-all /app/<app_name> (AppModuleHost). Ya vienen
   // pre-filtrados por el backend (instalada+activa+cargada+concedida).
   const dynConfigs = useMemo<ModuleConfig[]>(
-    () => dynamicModules.map((d) => ({
+    () => dynamicModules.filter(d => !isOfficeChildModule(d)).map((d) => ({
       id: d.id,
       label: d.label,
       icon: lucideLookup(d.icon),
@@ -419,7 +420,7 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
             {/* Grouped items */}
             {groups.map((group) => (
               <SortableContext key={group.name} items={group.modules.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-                <SidebarGroup label={group.name} collapsed={collapsed}>
+                <SidebarGroup label={group.name} collapsed={collapsed} modules={group.modules}>
                   {group.modules.map((mod) => (
                     <SortableSidebarItem
                       key={mod.id}

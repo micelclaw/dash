@@ -18,6 +18,7 @@ import { Copy, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
+import { useI18n } from '@/i18n';
 
 // Guarda contra valores nulos/undefined/NaN: formatFileSize(undefined)
 // devuelve "NaN undefined". Si el byte-count no es un número finito,
@@ -58,6 +59,7 @@ const card: React.CSSProperties = {
 };
 
 export function FileDuplicatesCard() {
+  const { t, locale } = useI18n();
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -79,13 +81,13 @@ export function FileDuplicatesCard() {
     setDeleting(fileId);
     try {
       await api.delete(`/files/${fileId}`);
-      toast.success('Archivo eliminado');
+      toast.success(t('storage.files.deleted'));
       setGroups(prev => prev.map(g => ({
         ...g,
         files: (Array.isArray(g.files) ? g.files : []).filter(f => f.id !== fileId),
       })).filter(g => (Array.isArray(g.files) ? g.files.length : 0) > 1));
     } catch {
-      toast.error('No se pudo eliminar el archivo');
+      toast.error(t('storage.files.deleteError'));
     }
     setDeleting(null);
   };
@@ -107,14 +109,15 @@ export function FileDuplicatesCard() {
           fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)',
         }}>
           <Copy size={14} />
-          Archivos duplicados
+          {t('storage.files.duplicates')}
           <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--warning, #f59e0b)' }}>
-            {safeSize(totalWaste)} recuperables
+            {safeSize(totalWaste)} {t('storage.files.recoverable')}
           </span>
         </h3>
         <button
           onClick={load}
-          title="Recargar"
+          aria-label={t('storage.files.reload')}
+          title={t('storage.files.reload')}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 6,
             background: 'transparent', border: 'none', borderRadius: 'var(--radius-sm)',
@@ -136,7 +139,7 @@ export function FileDuplicatesCard() {
               background: 'var(--bg, var(--card))', padding: 12,
             }}>
               <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginBottom: 8 }}>
-                {files.length} copias · {safeSize(group.total_bytes)} cada una
+                {t('storage.files.copyEach', { count: files.length.toLocaleString(locale), size: safeSize(group.total_bytes) })}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {files.map((file, i) => (
@@ -151,7 +154,8 @@ export function FileDuplicatesCard() {
                       <button
                         onClick={() => handleDelete(file.id)}
                         disabled={deleting === file.id}
-                        title="Eliminar esta copia"
+                        aria-label={t('storage.files.removeCopy')}
+                        title={t('storage.files.removeCopy')}
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 4,
                           background: 'transparent', border: 'none', borderRadius: 'var(--radius-sm)',

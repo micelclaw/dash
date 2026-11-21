@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { api } from '@/services/api';
 import type { VFSMount, VFSNode } from './hooks/use-vfs';
+import { useI18n } from '@/i18n';
 
 /** Legacy auto-created local mounts (pre Drive-unify scheme) that must never
  *  show as File Explorer sources — superseded by HOME (/user/files) + Drive
@@ -40,6 +41,7 @@ interface SourceTreeProps {
 }
 
 export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }: SourceTreeProps) {
+  const { t } = useI18n();
   const { mounts, mountsLoading, fetchMounts, deleteMount } = useVFS();
   const [deleteTarget, setDeleteTarget] = useState<VFSMount | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -89,7 +91,7 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
           alignItems: 'center',
         }}
       >
-        <span style={{ flex: 1 }}>Storage</span>
+        <span style={{ flex: 1 }}>{t('explorer.source.storage')}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -102,31 +104,32 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
                 display: 'flex',
                 borderRadius: 'var(--radius-sm)',
               }}
-              title="Add storage"
+              title={t('explorer.source.addTitle')}
+              aria-label={t('explorer.source.addTitle')}
             >
               <Plus size={12} />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setCreateFolderOpen(true)} className="gap-2">
-              <FolderPlus size={14} /> Nueva carpeta compartida
+              <FolderPlus size={14} /> {t('explorer.source.sharedFolder')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onAddSource?.()} className="gap-2">
-              <Cloud size={14} /> Cloud storage
+              <Cloud size={14} /> {t('explorer.source.cloudStorage')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
       {mountsLoading && (
-        <div style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          Loading...
+        <div role="status" style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          {t('explorer.source.loading')}
         </div>
       )}
 
       {!mountsLoading && allMounts.length === 0 && (
         <div style={{ padding: '4px 8px' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No storage yet</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('explorer.source.none')}</span>
           <button
             onClick={() => setCreateFolderOpen(true)}
             style={{
@@ -142,7 +145,7 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
               fontFamily: 'var(--font-sans)',
             }}
           >
-            + Nueva carpeta compartida
+            + {t('explorer.source.sharedFolder')}
           </button>
         </div>
       )}
@@ -162,9 +165,9 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteMount}
-        title={`Remove "${deleteTarget?.name}"?`}
-        description="This will remove the mount point. Files in the source will not be deleted."
-        confirmLabel="Remove"
+        title={t('explorer.source.removeTitle', { name: deleteTarget?.name ?? '' })}
+        description={t('explorer.source.removeDescription')}
+        confirmLabel={t('explorer.source.remove')}
         variant="danger"
       />
 
@@ -188,6 +191,7 @@ function MountTreeItem({ mount, currentPath, onNavigate, onDelete, icon }: {
   onDelete: () => void;
   icon?: React.ReactNode;
 }) {
+  const { t } = useI18n();
   const vfsPath = '/vfs' + (mount.mount_path.startsWith('/') ? mount.mount_path : '/' + mount.mount_path);
   const isActive = currentPath.startsWith(vfsPath);
   const [expanded, setExpanded] = useState(isActive);
@@ -225,6 +229,9 @@ function MountTreeItem({ mount, currentPath, onNavigate, onDelete, icon }: {
       >
         <button
           onClick={handleExpand}
+          title={t(expanded ? 'explorer.source.collapseMount' : 'explorer.source.expandMount', { name: mount.name })}
+          aria-label={t(expanded ? 'explorer.source.collapseMount' : 'explorer.source.expandMount', { name: mount.name })}
+          aria-expanded={expanded}
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             padding: '0 2px', display: 'flex', color: 'var(--text-dim)',
@@ -275,16 +282,17 @@ function MountTreeItem({ mount, currentPath, onNavigate, onDelete, icon }: {
         {hovered ? (
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title={t('explorer.source.removeMount')}
+            aria-label={t('explorer.source.removeTitle', { name: mount.name })}
             style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
               color: 'var(--text-muted)', padding: 2, display: 'flex',
             }}
-            title="Remove mount"
           >
             <Trash2 size={11} />
           </button>
         ) : mount.read_only ? (
-          <span style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', paddingRight: 4 }}>RO</span>
+          <span aria-label={t('explorer.source.readOnly')} title={t('explorer.source.readOnly')} style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', paddingRight: 4 }}>RO</span>
         ) : null}
       </div>
 
@@ -314,6 +322,7 @@ function VFSFolderNode({ node, currentPath, onNavigate, depth }: {
   onNavigate: (path: string) => void;
   depth: number;
 }) {
+  const { t } = useI18n();
   const vfsPath = '/vfs' + node.path;
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<VFSNode[]>([]);
@@ -344,6 +353,9 @@ function VFSFolderNode({ node, currentPath, onNavigate, depth }: {
       >
         <button
           onClick={handleExpand}
+          title={t(expanded ? 'explorer.source.collapseFolder' : 'explorer.source.expandFolder', { name: node.name })}
+          aria-label={t(expanded ? 'explorer.source.collapseFolder' : 'explorer.source.expandFolder', { name: node.name })}
+          aria-expanded={expanded}
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             padding: '0 2px', display: 'flex', color: 'var(--text-dim)',

@@ -10,9 +10,10 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Tags } from 'lucide-react';
 import { toast } from 'sonner';
+import { useI18n } from '@/i18n';
 import { api } from '@/services/api';
 import { TagInput } from '@/components/shared/TagInput';
 import type { FileRecord } from '@/types/files';
@@ -44,6 +45,9 @@ function commonTags(files: FileRecord[]): string[] {
  * POST /files/bulk {action: tag|untag}.
  */
 export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const initial = useMemo(() => commonTags(files), [files]);
   const [tags, setTags] = useState<string[]>(initial);
   const [saving, setSaving] = useState(false);
@@ -55,7 +59,9 @@ export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
   if (!open || files.length === 0) return null;
 
   const isMulti = files.length > 1;
-  const title = isMulti ? `Tags for ${files.length} items` : `Tags: ${files[0]!.filename}`;
+  const title = isMulti
+    ? t('drive.tags.title.multiple', { count: files.length })
+    : t('drive.tags.title.single', { filename: files[0]!.filename });
 
   const handleSave = async () => {
     setSaving(true);
@@ -75,11 +81,11 @@ export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
           await api.post('/files/bulk', { action: 'untag', ids, params: { tags: removed } });
         }
       }
-      toast.success('Tags updated');
+      toast.success(tRef.current('drive.tags.updated'));
       onSaved?.();
       onClose();
     } catch {
-      toast.error('Could not update tags');
+      toast.error(tRef.current('drive.tags.updateFailed'));
     }
     setSaving(false);
   };
@@ -120,7 +126,7 @@ export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
             <Tags size={15} style={{ flexShrink: 0, color: 'var(--mod-drive)' }} />
             {title}
           </h3>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label={t('drive.tags.close')} style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--text-dim)', padding: 2, flexShrink: 0, display: 'flex',
           }}>
@@ -131,11 +137,10 @@ export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
         <div style={{ padding: '16px 20px' }}>
           {isMulti && (
             <p style={{ margin: '0 0 10px', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              Showing tags shared by all {files.length} items. Added tags are applied
-              to every item; removed tags are removed from every item.
+              {t('drive.tags.multiDescription', { count: files.length })}
             </p>
           )}
-          <TagInput tags={tags} onChange={setTags} addLabel="tag" />
+          <TagInput tags={tags} onChange={setTags} addLabel={t('drive.tags.inputLabel')} />
         </div>
 
         {/* Footer */}
@@ -151,7 +156,7 @@ export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
               fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('drive.tags.cancel')}
           </button>
           <button
             onClick={() => { void handleSave(); }}
@@ -166,7 +171,7 @@ export function TagsModal({ open, files, onClose, onSaved }: TagsModalProps) {
               fontFamily: 'var(--font-sans)',
             }}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('drive.tags.saving') : t('drive.tags.save')}
           </button>
         </div>
       </div>

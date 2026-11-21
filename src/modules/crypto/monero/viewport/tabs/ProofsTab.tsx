@@ -11,6 +11,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Copy, Check, ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
@@ -22,6 +23,7 @@ function copyToClipboard(text: string): Promise<void> {
 }
 
 export function ProofsTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [mode, setMode] = useState<Mode>('generate');
@@ -73,23 +75,23 @@ export function ProofsTab() {
 
     try {
       if (proofType === 'tx') {
-        if (!txid.trim()) { setError('TX ID is required'); return; }
-        if (!address.trim()) { setError('Address is required'); return; }
+        if (!txid.trim()) { setError(t('crypto.wallet.proofTxIdRequired')); return; }
+        if (!address.trim()) { setError(t('crypto.wallet.proofAddressRequired')); return; }
         const result = await call<{ signature: string }>('get_tx_proof', {
           txid: txid.trim(),
           address: address.trim(),
           message: message.trim() || undefined,
         });
         if (result?.signature) setGeneratedProof(result.signature);
-        else setError('No proof returned');
+        else setError(t('crypto.wallet.noProofReturned'));
       } else if (proofType === 'spend') {
-        if (!txid.trim()) { setError('TX ID is required'); return; }
+        if (!txid.trim()) { setError(t('crypto.wallet.proofTxIdRequired')); return; }
         const result = await call<{ signature: string }>('get_spend_proof', {
           txid: txid.trim(),
           message: message.trim() || undefined,
         });
         if (result?.signature) setGeneratedProof(result.signature);
-        else setError('No proof returned');
+        else setError(t('crypto.wallet.noProofReturned'));
       } else if (proofType === 'reserve') {
         const params: Record<string, unknown> = {
           all: allBalance,
@@ -101,14 +103,14 @@ export function ProofsTab() {
         }
         const result = await call<{ signature: string }>('get_reserve_proof', params);
         if (result?.signature) setGeneratedProof(result.signature);
-        else setError('No proof returned');
+        else setError(t('crypto.wallet.noProofReturned'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to generate proof');
+      setError(err?.message || t('crypto.wallet.generateProofFailed'));
     } finally {
       setLoading(false);
     }
-  }, [call, proofType, txid, address, message, amount, allBalance, accountIndex]);
+  }, [call, proofType, txid, address, message, amount, allBalance, accountIndex, t]);
 
   // --- Verify ---
   const verifyProof = useCallback(async () => {
@@ -119,7 +121,7 @@ export function ProofsTab() {
     try {
       if (proofType === 'tx') {
         if (!vTxid.trim() || !vAddress.trim() || !vSignature.trim()) {
-          setError('TX ID, address, and signature are required');
+          setError(t('crypto.wallet.proofTxAddressSignatureRequired'));
           return;
         }
         const result = await call<{ good: boolean; received: number; confirmations: number }>('check_tx_proof', {
@@ -129,10 +131,10 @@ export function ProofsTab() {
           signature: vSignature.trim(),
         });
         if (result) setVerifyResult({ valid: result.good, received: result.received, confirmations: result.confirmations });
-        else setError('No result returned');
+        else setError(t('crypto.wallet.noResultReturned'));
       } else if (proofType === 'spend') {
         if (!vTxid.trim() || !vSignature.trim()) {
-          setError('TX ID and signature are required');
+          setError(t('crypto.wallet.proofTxSignatureRequired'));
           return;
         }
         const result = await call<{ good: boolean }>('check_spend_proof', {
@@ -141,10 +143,10 @@ export function ProofsTab() {
           signature: vSignature.trim(),
         });
         if (result) setVerifyResult({ valid: result.good });
-        else setError('No result returned');
+        else setError(t('crypto.wallet.noResultReturned'));
       } else if (proofType === 'reserve') {
         if (!vAddress.trim() || !vSignature.trim()) {
-          setError('Address and signature are required');
+          setError(t('crypto.wallet.proofAddressSignatureRequired'));
           return;
         }
         const result = await call<{ good: boolean; total: number; spent: number }>('check_reserve_proof', {
@@ -153,40 +155,40 @@ export function ProofsTab() {
           signature: vSignature.trim(),
         });
         if (result) setVerifyResult({ valid: result.good, total: result.total, spent: result.spent });
-        else setError('No result returned');
+        else setError(t('crypto.wallet.noResultReturned'));
       }
     } catch (err: any) {
-      setError(err?.message || 'Verification failed');
+      setError(err?.message || t('crypto.wallet.verifyProofFailed'));
     } finally {
       setLoading(false);
     }
-  }, [call, proofType, vTxid, vAddress, vMessage, vSignature]);
+  }, [call, proofType, vTxid, vAddress, vMessage, vSignature, t]);
 
   const picoToXmr = (p: number) => (p / 1e12).toFixed(6);
 
   return (
     <div className="pr-root">
-      <h3 className="pr-title">Proofs</h3>
+      <h3 className="pr-title">{t('crypto.wallet.proofs')}</h3>
 
       {/* Mode toggle */}
       <div className="pr-mode-row">
         <button className={`pr-mode-btn ${mode === 'generate' ? 'pr-mode-active' : ''}`} onClick={() => { setMode('generate'); resetResults(); }}>
-          Generate
+          {t('crypto.wallet.generate')}
         </button>
         <button className={`pr-mode-btn ${mode === 'verify' ? 'pr-mode-active' : ''}`} onClick={() => { setMode('verify'); resetResults(); }}>
-          Verify
+          {t('crypto.wallet.verify')}
         </button>
       </div>
 
       {/* Proof type selector */}
       <div className="pr-type-row">
-        {(['tx', 'spend', 'reserve'] as ProofType[]).map((t) => (
+        {(['tx', 'spend', 'reserve'] as ProofType[]).map((proof) => (
           <button
-            key={t}
-            className={`pr-type-btn ${proofType === t ? 'pr-type-active' : ''}`}
-            onClick={() => { setProofType(t); resetResults(); }}
+            key={proof}
+            className={`pr-type-btn ${proofType === proof ? 'pr-type-active' : ''}`}
+            onClick={() => { setProofType(proof); resetResults(); }}
           >
-            {t === 'tx' ? 'Transaction' : t === 'spend' ? 'Spend' : 'Reserve'}
+            {t(proof === 'tx' ? 'crypto.wallet.transaction' : proof === 'spend' ? 'crypto.wallet.spend' : 'crypto.wallet.reserve')}
           </button>
         ))}
       </div>
@@ -194,13 +196,13 @@ export function ProofsTab() {
       {/* Description */}
       <div className="pr-desc">
         {mode === 'generate' ? (
-          proofType === 'tx' ? 'Prove that a payment was made to a specific address.' :
-          proofType === 'spend' ? 'Prove that you are the sender of a transaction.' :
-          'Prove that you hold a certain amount of XMR in reserve.'
+          proofType === 'tx' ? t('crypto.wallet.provePayment') :
+          proofType === 'spend' ? t('crypto.wallet.proveSender') :
+          t('crypto.wallet.proveReserve')
         ) : (
-          proofType === 'tx' ? 'Verify that a payment was made to a specific address.' :
-          proofType === 'spend' ? 'Verify that someone was the sender of a transaction.' :
-          'Verify that someone holds a certain reserve of XMR.'
+          proofType === 'tx' ? t('crypto.wallet.verifyPayment') :
+          proofType === 'spend' ? t('crypto.wallet.verifySender') :
+          t('crypto.wallet.verifyReserve')
         )}
       </div>
 
@@ -210,12 +212,12 @@ export function ProofsTab() {
           {proofType === 'tx' && (
             <>
               <div className="pr-field">
-                <label className="pr-label">Transaction ID</label>
-                <input className="pr-input" placeholder="64-character tx hash" value={txid} onChange={(e) => setTxid(e.target.value)} spellCheck={false} />
+                <label className="pr-label">{t('crypto.wallet.txId')}</label>
+                <input className="pr-input" placeholder={t('crypto.wallet.txHashPlaceholder')} value={txid} onChange={(e) => setTxid(e.target.value)} spellCheck={false} />
               </div>
               <div className="pr-field">
-                <label className="pr-label">Recipient Address</label>
-                <input className="pr-input" placeholder="Monero address" value={address} onChange={(e) => setAddress(e.target.value)} spellCheck={false} />
+                <label className="pr-label">{t('crypto.wallet.recipientAddress')}</label>
+                <input className="pr-input" placeholder={t('crypto.wallet.moneroAddressPlaceholder')} value={address} onChange={(e) => setAddress(e.target.value)} spellCheck={false} />
               </div>
             </>
           )}
@@ -223,8 +225,8 @@ export function ProofsTab() {
           {/* Spend Proof: txid + message */}
           {proofType === 'spend' && (
             <div className="pr-field">
-              <label className="pr-label">Transaction ID</label>
-              <input className="pr-input" placeholder="64-character tx hash" value={txid} onChange={(e) => setTxid(e.target.value)} spellCheck={false} />
+              <label className="pr-label">{t('crypto.wallet.txId')}</label>
+              <input className="pr-input" placeholder={t('crypto.wallet.txHashPlaceholder')} value={txid} onChange={(e) => setTxid(e.target.value)} spellCheck={false} />
             </div>
           )}
 
@@ -232,22 +234,22 @@ export function ProofsTab() {
           {proofType === 'reserve' && (
             <>
               <div className="pr-field">
-                <label className="pr-label">Scope</label>
+                <label className="pr-label">{t('crypto.wallet.scope')}</label>
                 <div className="pr-check-row">
                   <label className="pr-check">
                     <input type="checkbox" checked={allBalance} onChange={(e) => setAllBalance(e.target.checked)} />
-                    Prove entire balance
+                    {t('crypto.wallet.proveEntireBalance')}
                   </label>
                 </div>
               </div>
               {!allBalance && (
                 <>
                   <div className="pr-field">
-                    <label className="pr-label">Account Index</label>
+                    <label className="pr-label">{t('crypto.wallet.accountIndex')}</label>
                     <input className="pr-input pr-input-sm" type="number" min="0" value={accountIndex} onChange={(e) => setAccountIndex(parseInt(e.target.value) || 0)} />
                   </div>
                   <div className="pr-field">
-                    <label className="pr-label">Amount (XMR, optional)</label>
+                    <label className="pr-label">{t('crypto.wallet.amountOptional')}</label>
                     <input className="pr-input pr-input-sm" type="number" step="0.000001" min="0" placeholder="0.000000" value={amount} onChange={(e) => setAmount(e.target.value)} />
                   </div>
                 </>
@@ -257,12 +259,12 @@ export function ProofsTab() {
 
           {/* Common: message */}
           <div className="pr-field">
-            <label className="pr-label">Message (optional)</label>
-            <input className="pr-input" placeholder="Optional message to include in proof" value={message} onChange={(e) => setMessage(e.target.value)} />
+            <label className="pr-label">{t('crypto.wallet.messageOptional')}</label>
+            <input className="pr-input" placeholder={t('crypto.wallet.messageInProof')} value={message} onChange={(e) => setMessage(e.target.value)} />
           </div>
 
           <button className="pr-btn pr-btn-primary" onClick={generateProof} disabled={loading}>
-            {loading ? <><Loader2 size={13} className="spin" /> Generating...</> : 'Generate Proof'}
+            {loading ? <><Loader2 size={13} className="spin" /> {t('crypto.wallet.generating')}</> : t('crypto.wallet.generateProof')}
           </button>
 
           {/* Generated proof output */}
@@ -270,10 +272,10 @@ export function ProofsTab() {
             <div className="pr-result pr-result-success">
               <div className="pr-result-header">
                 <ShieldCheck size={14} style={{ color: '#22c55e' }} />
-                <span>Proof Generated</span>
+                <span>{t('crypto.wallet.proofGenerated')}</span>
                 <div style={{ flex: 1 }} />
                 <button className="pr-copy-btn" onClick={() => handleCopy(generatedProof)}>
-                  {copied ? <><Check size={11} style={{ color: '#22c55e' }} /> Copied</> : <><Copy size={11} /> Copy</>}
+                  {copied ? <><Check size={11} style={{ color: '#22c55e' }} /> {t('crypto.wallet.copied')}</> : <><Copy size={11} /> {t('crypto.wallet.copy')}</>}
                 </button>
               </div>
               <div className="pr-proof-text">{generatedProof}</div>
@@ -286,12 +288,12 @@ export function ProofsTab() {
           {proofType === 'tx' && (
             <>
               <div className="pr-field">
-                <label className="pr-label">Transaction ID</label>
-                <input className="pr-input" placeholder="64-character tx hash" value={vTxid} onChange={(e) => setVTxid(e.target.value)} spellCheck={false} />
+                <label className="pr-label">{t('crypto.wallet.txId')}</label>
+                <input className="pr-input" placeholder={t('crypto.wallet.txHashPlaceholder')} value={vTxid} onChange={(e) => setVTxid(e.target.value)} spellCheck={false} />
               </div>
               <div className="pr-field">
-                <label className="pr-label">Address</label>
-                <input className="pr-input" placeholder="Monero address" value={vAddress} onChange={(e) => setVAddress(e.target.value)} spellCheck={false} />
+                <label className="pr-label">{t('crypto.wallet.address')}</label>
+                <input className="pr-input" placeholder={t('crypto.wallet.moneroAddressPlaceholder')} value={vAddress} onChange={(e) => setVAddress(e.target.value)} spellCheck={false} />
               </div>
             </>
           )}
@@ -299,33 +301,33 @@ export function ProofsTab() {
           {/* Spend Proof verify: txid + message + signature */}
           {proofType === 'spend' && (
             <div className="pr-field">
-              <label className="pr-label">Transaction ID</label>
-              <input className="pr-input" placeholder="64-character tx hash" value={vTxid} onChange={(e) => setVTxid(e.target.value)} spellCheck={false} />
+              <label className="pr-label">{t('crypto.wallet.txId')}</label>
+              <input className="pr-input" placeholder={t('crypto.wallet.txHashPlaceholder')} value={vTxid} onChange={(e) => setVTxid(e.target.value)} spellCheck={false} />
             </div>
           )}
 
           {/* Reserve Proof verify: address + message + signature */}
           {proofType === 'reserve' && (
             <div className="pr-field">
-              <label className="pr-label">Address</label>
-              <input className="pr-input" placeholder="Monero address of the prover" value={vAddress} onChange={(e) => setVAddress(e.target.value)} spellCheck={false} />
+              <label className="pr-label">{t('crypto.wallet.address')}</label>
+              <input className="pr-input" placeholder={t('crypto.wallet.moneroAddressPlaceholder')} value={vAddress} onChange={(e) => setVAddress(e.target.value)} spellCheck={false} />
             </div>
           )}
 
           {/* Common: message */}
           <div className="pr-field">
-            <label className="pr-label">Message (optional)</label>
-            <input className="pr-input" placeholder="Same message used when generating" value={vMessage} onChange={(e) => setVMessage(e.target.value)} />
+            <label className="pr-label">{t('crypto.wallet.messageOptional')}</label>
+            <input className="pr-input" placeholder={t('crypto.wallet.sameMessage')} value={vMessage} onChange={(e) => setVMessage(e.target.value)} />
           </div>
 
           {/* Signature / proof string */}
           <div className="pr-field">
-            <label className="pr-label">Proof Signature</label>
-            <textarea className="pr-textarea" placeholder="Paste the proof string here..." value={vSignature} onChange={(e) => setVSignature(e.target.value)} rows={4} spellCheck={false} />
+            <label className="pr-label">{t('crypto.wallet.proofSignature')}</label>
+            <textarea className="pr-textarea" placeholder={t('crypto.wallet.proofPlaceholder')} value={vSignature} onChange={(e) => setVSignature(e.target.value)} rows={4} spellCheck={false} />
           </div>
 
           <button className="pr-btn pr-btn-primary" onClick={verifyProof} disabled={loading}>
-            {loading ? <><Loader2 size={13} className="spin" /> Verifying...</> : 'Verify Proof'}
+            {loading ? <><Loader2 size={13} className="spin" /> {t('crypto.wallet.verifying')}</> : t('crypto.wallet.verifyProof')}
           </button>
 
           {/* Verify result */}
@@ -333,34 +335,34 @@ export function ProofsTab() {
             <div className={`pr-result ${verifyResult.valid ? 'pr-result-success' : 'pr-result-fail'}`}>
               <div className="pr-result-header">
                 {verifyResult.valid ? (
-                  <><ShieldCheck size={14} style={{ color: '#22c55e' }} /><span>Proof Valid</span></>
+                  <><ShieldCheck size={14} style={{ color: '#22c55e' }} /><span>{t('crypto.wallet.proofValid')}</span></>
                 ) : (
-                  <><ShieldAlert size={14} style={{ color: '#ef4444' }} /><span>Proof Invalid</span></>
+                  <><ShieldAlert size={14} style={{ color: '#ef4444' }} /><span>{t('crypto.wallet.proofInvalid')}</span></>
                 )}
               </div>
               {verifyResult.valid && (
                 <div className="pr-result-details">
                   {verifyResult.received !== undefined && (
                     <div className="pr-detail-row">
-                      <span className="pr-detail-label">Received</span>
+                      <span className="pr-detail-label">{t('crypto.wallet.received')}</span>
                       <span>{picoToXmr(verifyResult.received)} XMR</span>
                     </div>
                   )}
                   {verifyResult.confirmations !== undefined && (
                     <div className="pr-detail-row">
-                      <span className="pr-detail-label">Confirmations</span>
+                      <span className="pr-detail-label">{t('crypto.wallet.confirmationsLabel')}</span>
                       <span>{verifyResult.confirmations}</span>
                     </div>
                   )}
                   {verifyResult.total !== undefined && (
                     <div className="pr-detail-row">
-                      <span className="pr-detail-label">Total Reserve</span>
+                      <span className="pr-detail-label">{t('crypto.wallet.totalReserve')}</span>
                       <span>{picoToXmr(verifyResult.total)} XMR</span>
                     </div>
                   )}
                   {verifyResult.spent !== undefined && (
                     <div className="pr-detail-row">
-                      <span className="pr-detail-label">Spent</span>
+                      <span className="pr-detail-label">{t('crypto.wallet.spent')}</span>
                       <span>{picoToXmr(verifyResult.spent)} XMR</span>
                     </div>
                   )}

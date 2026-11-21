@@ -57,22 +57,22 @@ export function shufflePlayTracks(tracks: Track[]): void {
 }
 
 /** Fetch an album's tracks and play them all (cover hover-play action). */
-export async function playAlbumById(albumId: string): Promise<void> {
+export async function playAlbumById(albumId: string, t: (key: string) => string): Promise<void> {
   try {
     const album = await musicService.getAlbum(albumId);
     playTracks(album.tracks);
   } catch {
-    toast.error('Could not play album');
+    toast.error(t('music.albumPlayFailed'));
   }
 }
 
 /** Fetch a playlist's tracks and play them all. */
-export async function playPlaylistById(playlistId: string): Promise<void> {
+export async function playPlaylistById(playlistId: string, t: (key: string) => string): Promise<void> {
   try {
     const { tracks } = await musicService.getPlaylist(playlistId);
     playTracks(tracks);
   } catch {
-    toast.error('Could not play playlist');
+    toast.error(t('music.playlistPlayFailed'));
   }
 }
 

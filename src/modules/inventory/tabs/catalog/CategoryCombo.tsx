@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import { inputStyle } from '@/modules/inventory/ui';
+import { useI18n } from '@/i18n';
 
 /** Categorías sugeridas (se mergean con las ya usadas en el inventario). */
 const SUGGESTED_CATEGORIES = [
@@ -31,6 +32,7 @@ export function CategoryCombo({ value, onChange, options }: {
   onChange: (v: string) => void;
   options: string[];
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const all = useMemo(
     () => [...new Set([...options, ...SUGGESTED_CATEGORIES])].sort(),
@@ -46,7 +48,7 @@ export function CategoryCombo({ value, onChange, options }: {
       <input
         style={inputStyle}
         value={value}
-        placeholder="e.g. electronics"
+        placeholder={t('inventory.catalog.categoryExample')}
         onChange={e => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}

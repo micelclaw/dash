@@ -4,38 +4,45 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, AlertTriangle, X, Puzzle, Plus, LayoutGrid, List } from 'lucide-react';
+import { Search, AlertTriangle, X, Puzzle, Plus, LayoutGrid, List, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppsStore } from '@/stores/apps.store';
 import { AppCard } from './AppCard';
 import { AppListRow, AppListHeader } from './AppListRow';
-import { AppDetail } from './AppDetail';
+import { AppDetail, ForkNameDialog } from './AppDetail';
+import type { AppPrimaryAction, CatalogView } from './AppCatalogPresentation';
+import { appOrigin, registryApp, matchesCatalog, ORIGIN_FILTERS } from './catalog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Button } from '@/components/ui/button';
+import { importRegistryPackage, type PublicRegistryPackage } from '@/services/public-registry.service';
+import { officeColor } from '@/config/office-colors';
 import { AppEditor } from './AppEditor';
 import { AssignAppsModal as SharedAssignAppsModal } from '@/components/shared/AssignAppsModal';
 import { AppIcon } from '@/components/shared/AppIcon';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { RegistryBrowser } from './RegistryBrowser';
+import { useRegistryStore } from '@/stores/registry.store';
 import { PluginsBrowser } from './PluginsBrowser';
 import { WorkshopTab } from './WorkshopTab';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSearchParams } from 'react-router';
 import { api } from '@/services/api';
 import * as gwService from '@/services/gateway.service';
-import { getInstalledApps } from '@/services/apps.service';
+import { getInstalledApps, getAppStorage, suggestForkName, forkApp } from '@/services/apps.service';
 import type { InstalledApp } from '@/types/apps';
+import { useI18n } from '@/i18n';
 
 // Claves internas (se conservan por compat). Etiquetas: 'available'→"Instaladas"
 // (apps activas), 'disponibles'→"Disponibles" (en el sistema, no activas), 'installed'
-// →"Asignadas" (a agentes), 'adapted'→"Adapted", 'registry'→"Registro".
-type Tab = 'available' | 'disponibles' | 'installed' | 'adapted' | 'registry' | 'plugins' | 'workshop';
+// →"Asignadas" (a agentes), 'registry'→"Registro". Adaptadas se editan en Taller.
+type Tab = 'available' | 'disponibles' | 'installed' | 'registry' | 'plugins' | 'workshop';
 
 // Origin tag colors (quién hizo la app). Micelclaw = cian (oficial), OpenClaw = granate
-// (de serie), Tuya = ámbar (creada por ti en Claw Studio), Community = slate (de un tercero).
+// (de serie), Community = slate (comunidad y aplicaciones propias).
 const ORIGIN_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   Micelclaw: { bg: '#06b6d412', border: '#06b6d430', text: '#06b6d4' },
   OpenClaw:  { bg: '#9f123912', border: '#9f123930', text: '#9f1239' },
-  Tuya:      { bg: '#f59e0b12', border: '#f59e0b30', text: '#f59e0b' },
   Community: { bg: '#64748b12', border: '#64748b30', text: '#64748b' },
 };
 
@@ -68,6 +75,7 @@ function TagButton({ label, active, colors, onClick }: {
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       style={{
         padding: '3px 10px',
         fontSize: '0.6875rem',
@@ -87,34 +95,43 @@ function TagButton({ label, active, colors, onClick }: {
 }
 
 export function Component() {
+  const { t: tr } = useI18n();
   const {
-    installedApps, loading, error,
-    fetchInstalledApps, restartRequired, clearRestart,
+    error, restartRequired, clearRestart,
   } = useAppsStore();
 
-  const [tab, setTab] = useState<Tab>('available');
+  const [tab, setTab] = useState<Tab>('registry');
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const principal = useAuthStore((s) => `${s.user?.id??''}:${s.sessionGeneration}:${s.user?.role??''}`);
   const [searchParams] = useSearchParams();
   const focusPlugin = searchParams.get('focus') ?? undefined;
   // Deep-link support: /micelhub?tab=plugins&focus=acpx (from Studio Engines).
   useEffect(() => {
     if (searchParams.get('tab') === 'plugins' && isAdmin) setTab('plugins');
     if (searchParams.get('tab') === 'workshop') setTab('workshop');
+    if (searchParams.get('tab') === 'adapted') setTab('workshop');
   }, [searchParams, isAdmin]);
   const [search, setSearch] = useState('');
+  const [exactResult, setExactResult] = useState<{name:string;version:string}|null>(null);
+  const [storage, setStorage] = useState<Record<string,number|null>>({});
+  const [pendingUninstall, setPendingUninstall] = useState<InstalledApp|null>(null);
+  const [forkSource, setForkSource] = useState<InstalledApp|null>(null);
+  const [forkName, setForkName] = useState('');
+  const registry = useRegistryStore();
+  const registryOwned = registry.owner === principal;
+  const localPackages = registryOwned ? registry.local : [];
+  const publicEntries = registryOwned ? registry.catalog : [];
   const [selectedApp, setSelectedApp] = useState<InstalledApp | null>(null);
   const [editingApp, setEditingApp] = useState<InstalledApp | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   // Clickable tag filters — 4 grupos: Origen · Nivel · Plan · Distintivos.
-  const [originFilters, setOriginFilters] = useState<Set<string>>(new Set(['Micelclaw', 'OpenClaw', 'Tuya', 'Community']));
+  const [originFilters, setOriginFilters] = useState<Set<string>>(new Set(ORIGIN_FILTERS));
   const [levelFilters, setLevelFilters] = useState<Set<string>>(new Set(['L1', 'L2', 'L3']));
   const [tierFilters, setTierFilters] = useState<Set<string>>(new Set(['Free', 'Pro', 'Plus']));
-  // Distintivos: no excluyentes, OFF por defecto (sin restringir). Verified activo = solo
-  // verificadas; Featured activo = incluir las destacadas (ocultas por defecto).
+  // Distintivos: inicialmente sin restricción; cada botón reduce los resultados.
   const [distintivoFilters, setDistintivoFilters] = useState<Set<string>>(new Set());
-  const [adaptedCount, setAdaptedCount] = useState(0);
   // Modo de visualización del grid de apps (Installed/Adapted): cuadrícula de tarjetas o lista
   // por columnas. Persistido en localStorage (patrón de Flows view-mode).
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
@@ -131,7 +148,13 @@ export function Component() {
   // Apps del registry que están INSTALADAS (p.ej. n8n) → se muestran como tarjetas normales
   // en la pestaña "Installed". La asignación a agentes la maneja AssignAppsModal vía
   // GET /managed-agents/available-skills (que ya las incluye desde F2), no esta página.
-  const [registryApps, setRegistryApps] = useState<InstalledApp[]>([]);
+  const registryApps = registryOwned ? registry.installed.filter(app => app.source === 'registry') : [];
+  useEffect(() => {
+    setSelectedApp(null);
+    setEditingApp(null);
+    setAvailableApps([]);
+    setStorage({}); setExactResult(null); setPendingUninstall(null); setForkSource(null);
+  }, [principal]);
 
   // Installed tab: agents with their skills
   const [agentsWithSkills, setAgentsWithSkills] = useState<Array<{
@@ -141,6 +164,7 @@ export function Component() {
   const [installedLoading, setInstalledLoading] = useState(false);
 
   const toggleFilter = (set: Set<string>, value: string, setter: (s: Set<string>) => void) => {
+    setExactResult(null);
     const next = new Set(set);
     if (next.has(value)) next.delete(value);
     else next.add(value);
@@ -149,24 +173,29 @@ export function Component() {
 
   // Fetch available apps: SINGLE SOURCE via skills.status RPC
   const fetchAvailable = useCallback(async () => {
+    const actor = principal;
+    const current = () => `${useAuthStore.getState().user?.id??''}:${useAuthStore.getState().sessionGeneration}:${useAuthStore.getState().user?.role??''}` === actor;
     setAvailableLoading(true);
     try {
       const skills = await gwService.getSkillsStatus().catch(() => []);
+      if (!current()) return;
       // Apps L1 deshabilitadas (store Core, GET /apps/skill-state): skills.status no conoce ese
       // estado (las L1 no están en installed_apps) → lo mergeamos para que la tarjeta muestre el
       // toggle Enable/Disable correcto.
-      const disabledApps = await api.get<{ data: { disabled: string[] } }>('/apps/skill-state')
+      const disabledApps = isAdmin ? await api.get<{ data: { disabled: string[] } }>('/apps/skill-state')
         .then((r) => new Set(r.data?.disabled ?? []))
-        .catch(() => new Set<string>());
+        .catch(() => new Set<string>()) : new Set<string>();
+      if (!current()) return;
 
       // Las apps con backend (L2/L3) viven en installed_apps con su nivel/autor/estado REALES
       // (p.ej. una app salida de Studio: L3, author='studio', status active/available). skills.status solo ve la
       // SKILL.md materializada y sintetiza un nivel/origen heurístico (L1·Micelclaw) que MIENTE.
       // Indexamos TODAS las filas de DB por nombre (cualquier source: studio/local/registry/adapted)
       // para corregir nivel+autor+estado de la tarjeta (cero tarjetas nuevas: solo enriquece).
-      const installedByName = await getInstalledApps({})
+      const installedByName = isAdmin ? await getInstalledApps({})
         .then((r) => new Map((r.data ?? []).map((a) => [a.app_name, a])))
-        .catch(() => new Map<string, InstalledApp>());
+        .catch(() => new Map<string, InstalledApp>()) : new Map<string, InstalledApp>();
+      if (!current()) return;
 
       // Convert skills.status data to InstalledApp shape for unified rendering
       const seenNames = new Set<string>();
@@ -212,6 +241,15 @@ export function Component() {
         const hasInstall = (s.install?.length ?? 0) > 0;
         const appLevel = dbApp?.app_level ?? ((hasBins || hasExternalEnv || hasConfig || hasInstall) ? 2 : 1);
 
+        // Installed metadata owns identity/version/plan/tags and local editing.
+        if (dbApp) return {
+          ...dbApp,
+          manifest: { ...dbApp.manifest, icon: dbApp.manifest.icon ?? displayIcon,
+            icon_kind: dbApp.manifest.icon_kind ?? (dbApp.manifest.ui?.module?.icon ? 'lucide' : displayIconKind),
+            ...(dbApp.manifest.ui?.module?.icon && !dbApp.manifest.icon ? {icon:dbApp.manifest.ui.module.icon} : {}),
+            color: officeColor(dbApp.app_name) ?? dbApp.manifest.color ?? dbApp.manifest.ui?.module?.color ?? displayColor,
+          },
+        };
         return {
           id: `${source}-${s.skill_key ?? s.name}`,
           app_name: s.name,
@@ -257,75 +295,44 @@ export function Component() {
       // Apps de DB (L2/L3: studio/local) que NO están en skills.status — típicamente una app
       // DESINSTALADA (status='available'), cuya SKILL.md se desmaterializó → el Gateway ya no la
       // lista. Deben seguir apareciendo (en Disponibles) para poder reinstalarla. Las 'registry'
-      // ya vienen por su propio fetch; las 'adapted' tienen su tab.
+      // ya vienen por su propio fetch; las adaptadas conservan sus metadatos y estado.
       const extras: InstalledApp[] = [...installedByName.values()].filter(
-        (a) => !seenNames.has(a.app_name) && a.source !== 'registry' && a.source !== 'adapted',
+        (a) => !seenNames.has(a.app_name) && a.source !== 'registry' && a.status !== 'archived',
       );
 
       setAvailableApps([...allApps, ...extras]);
     } catch { /* silent */ }
-    finally { setAvailableLoading(false); }
-  }, []);
+    finally { if(current())setAvailableLoading(false); }
+  }, [isAdmin, principal]);
 
   // Fetch apps del registry que están INSTALADAS → tarjetas en "Installed", tratadas como
   // CUALQUIER otra app instalada. Fuente = installed_apps (GET /apps?source=registry) para que
   // el `status` sea el REAL (active/disabled) → el toggle Enable/Disable de la tarjeta queda
   // sincronizado (antes se hardcodeaba 'active' desde /apps/registry y se desincronizaba).
-  const fetchRegistryApps = useCallback(async () => {
-    try {
-      const res = await getInstalledApps({ source: 'registry' });
-      // Excluir apps archivadas (GET /apps no filtra status → si no, una app desinstalada-por-
-      // archive reaparecería como tarjeta zombi). Tras el fix de purge en S9 no debería haber, pero
-      // blindamos por si quedan filas legacy.
-      setRegistryApps((res.data ?? []).filter((a) => a.status !== 'archived').map((a) => {
-        // El icono lo resuelve ahora <AppIcon>/resolveManifestIcon desde el manifest
-        // (soporta ui.module.icon como nombre Lucide) → sin override de emoji.
-        const m = (a.manifest ?? {}) as unknown as Record<string, unknown>;
-        return {
-          ...a,
-          manifest: {
-            ...m,
-            name: a.app_name,
-            tier_required: (m.tier_required as string) ?? 'free',
-            // Registry apps are third-party/community — NOT auto-verified.
-            tags: Array.from(new Set([...(((m.tags as string[]) ?? [])), 'free'])),
-          },
-        } as unknown as InstalledApp;
-      }));
-    } catch { /* silent */ }
-  }, []);
+  const fetchRegistryApps = useCallback(async () => { await useRegistryStore.getState().refresh(); }, []);
 
   // Fetch agents with skills for Installed tab
   const fetchInstalled = useCallback(async () => {
+    const actor = principal;
     setInstalledLoading(true);
     try {
       const res = await api.get<{ data: typeof agentsWithSkills }>('/managed-agents');
-      setAgentsWithSkills(res.data);
+      if (`${useAuthStore.getState().user?.id??''}:${useAuthStore.getState().sessionGeneration}:${useAuthStore.getState().user?.role??''}` === actor) setAgentsWithSkills(res.data);
     } catch { /* silent */ }
     finally { setInstalledLoading(false); }
-  }, []);
+  }, [principal]);
 
   // Preload all data sources on mount for accurate tab counts
   useEffect(() => {
     fetchAvailable();
     fetchInstalled();
     fetchRegistryApps();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchAvailable, fetchInstalled, fetchRegistryApps]);
 
-  // Fetch adapted count on mount (for tab badge)
   useEffect(() => {
-    getInstalledApps({ source: 'adapted' }).then(res => setAdaptedCount(res.meta.total)).catch(() => {});
-  }, []);
-
-  // Reload data when tab changes
-  useEffect(() => {
-    if (tab === 'available' || tab === 'disponibles') { fetchAvailable(); fetchRegistryApps(); }
-    else if (tab === 'installed') fetchInstalled();
-    else if (tab === 'adapted') {
-      fetchInstalledApps({ source: 'adapted' });
-      getInstalledApps({ source: 'adapted' }).then(res => setAdaptedCount(res.meta.total)).catch(() => {});
-    }
-  }, [tab, fetchAvailable, fetchInstalled, fetchRegistryApps, fetchInstalledApps]);
+    if (tab === 'available' || tab === 'disponibles' || tab === 'workshop') void fetchAvailable();
+    else if (tab === 'installed') void fetchInstalled();
+  }, [tab, fetchAvailable, fetchInstalled]);
 
   // Assign/unassign skills to agents (Installed tab). La asignación la maneja
   // SharedAssignAppsModal; aquí solo el desasignar inline (handleUnassignSkill).
@@ -346,81 +353,117 @@ export function Component() {
   };
 
   const handleRefresh = useCallback(() => {
-    if (tab === 'available' || tab === 'disponibles') { fetchAvailable(); fetchRegistryApps(); }
+    void useRegistryStore.getState().refresh();
+    if (tab === 'available' || tab === 'disponibles' || tab === 'workshop') { void fetchAvailable(); }
     else if (tab === 'installed') fetchInstalled();
-    else if (tab === 'adapted') fetchInstalledApps({ source: 'adapted' });
-  }, [tab, fetchAvailable, fetchInstalled, fetchRegistryApps, fetchInstalledApps]);
+  }, [tab, fetchAvailable, fetchInstalled]);
 
-  // ORIGEN de una app (quién la hizo) — mutuamente excluyente, UNA por app.
-  //  • OpenClaw   = de serie con el runtime OpenClaw.
-  //  • Tuya       = la creaste TÚ en Claw Studio (author='studio' / source='studio').
-  //  • Micelclaw  = oficial (author='micelclaw', o las skills/apps de fábrica del repo).
-  //  • Community  = la subió un tercero (registro público / autor ajeno).
-  // (Verified/Registry ya NO son un origen — Verified es un distintivo; Registry es una tab.)
-  const getOrigin = (app: InstalledApp): string => {
-    const author = app.manifest?.author;
-    // El backend ya emite source='studio' (mig 0268); el union AppSource aún no lo recoge.
-    const source: string = app.source;
-    if (source === 'openclaw') return 'OpenClaw';
-    if (author === 'studio' || source === 'studio') return 'Tuya';
-    if (author === 'micelclaw') return 'Micelclaw';
-    if (source === 'micelhub' || source === 'local' || source === 'adapted') return 'Micelclaw';
-    return 'Community';
-  };
-
-  // Filter apps based on active tag filters + search. Los filtros de tag solo
-  // aplican en las tabs de catálogo (available/installed); Adapted solo usa search.
-  const filterApps = (apps: InstalledApp[]): InstalledApp[] => {
-    return apps.filter(app => {
-      // Search (all tabs)
-      if (search) {
-        const q = search.toLowerCase();
-        const name = (app.manifest?.name ?? app.app_name ?? '').toLowerCase();
-        const desc = (app.manifest?.description ?? '').toLowerCase();
-        if (!name.includes(q) && !desc.includes(q)) return false;
-      }
-      if (tab !== 'available' && tab !== 'disponibles') return true;
-      // Origen
-      if (originFilters.size > 0 && !originFilters.has(getOrigin(app))) return false;
-      // Nivel
-      const level = `L${app.app_level}`;
-      if (levelFilters.size > 0 && !levelFilters.has(level)) return false;
-      // Plan (tier)
-      const tierReq = app.manifest?.tier_required ?? 'free';
-      const tier = tierReq === 'pro' ? 'Pro' : tierReq === 'plus' ? 'Plus' : 'Free';
-      if (tierFilters.size > 0 && !tierFilters.has(tier)) return false;
-      // Distintivos (grupo propio, sellos de Micelclaw): Verified activo = solo verificadas;
-      // las Featured se ocultan salvo que se incluyan explícitamente.
-      const tags = app.manifest?.tags ?? [];
-      if (distintivoFilters.has('Verified') && !tags.includes('verified')) return false;
-      const isFeatured = tags.includes('featured');
-      if (isFeatured && !distintivoFilters.has('Featured')) return false;
-      return true;
-    });
-  };
-
-  // Catálogo combinado (skills.status enriquecidas + apps del registry), dedup por nombre
-  // (la fila de DB con ciclo de vida gana sobre una skill homónima). Se PARTE por estado:
-  // Instaladas = activas ('active'); Disponibles = en el sistema pero no activas ('available').
-  const isCatalogTab = tab === 'available' || tab === 'disponibles';
-  const registryNames = new Set(registryApps.map((a) => a.app_name));
-  const catalog = isCatalogTab
-    ? [...registryApps, ...availableApps.filter((a) => !registryNames.has(a.app_name))]
-    : [];
-  const installedList = catalog.filter((a) => a.status === 'active');
-  const disponiblesList = catalog.filter((a) => a.status !== 'active');
-  const currentApps = tab === 'available' ? installedList
-    : tab === 'disponibles' ? disponiblesList
-    : tab === 'adapted' ? installedApps
-    : [];
-  const filtered = filterApps(currentApps);
+  const isCatalogTab = tab === 'available' || tab === 'disponibles' || tab === 'registry';
+  const catalogView: CatalogView = tab === 'registry' ? 'registry' : tab === 'disponibles' ? 'available' : 'installed';
+  const registryNames = new Set(registryApps.map(app => app.app_name));
+  const knownApps = [...registryApps, ...availableApps.filter(app => !registryNames.has(app.app_name) && app.status !== 'archived')];
+  const pendingPackages = localPackages.filter(local => !knownApps.some(app => app.app_name === local.name && app.version === local.version))
+    .map(local => registryApp(local, publicEntries.find(entry => entry.name === local.name && entry.version === local.version)));
+  const catalog = [...knownApps, ...pendingPackages].map(app => {
+    // Exact-version catalogue distinctions describe editorial selection, never
+    // local package integrity, installation success or functional acceptance.
+    const editorial = publicEntries.find(entry => entry.name === app.app_name && entry.version === app.version)?.tags ?? [];
+    return {...app, manifest:{...app.manifest,tags:[...new Set([...(app.manifest?.tags ?? []),...editorial])]}, installation_size_bytes:storage[app.app_name] ?? app.installation_size_bytes};
+  });
+  const installedList = catalog.filter(app => app.status === 'active');
+  const disponiblesList = catalog.filter(app => app.status !== 'active');
+  const publicApps = publicEntries.map(entry => registryApp(localPackages.find(local => local.name === entry.name && local.version === entry.version), entry));
+  const currentApps = tab === 'registry' ? publicApps : tab === 'available' ? installedList : disponiblesList;
+  const filters = {origins:originFilters, levels:levelFilters, tiers:tierFilters, distinctions:distintivoFilters};
+  const filtered = currentApps.filter(app => matchesCatalog(app, search, filters, tab === 'disponibles' ? exactResult : null));
   const installedCount = installedList.length;
   const disponiblesCount = disponiblesList.length;
-  const isLoading = isCatalogTab ? availableLoading : tab === 'installed' ? installedLoading : loading;
+  const isLoading = isCatalogTab && (tab === 'registry' ? registry.loading && !publicApps.length : availableLoading && !catalog.length);
+  const storageNames = [...new Set(knownApps.map(app => app.app_name))].sort().join(',');
+  useEffect(() => {
+    if (!isAdmin || !storageNames) return;
+    let current = true;
+    void getAppStorage(storageNames.split(',')).then(rows => { if (current) setStorage(Object.fromEntries(rows.map(row => [row.name, row.installation_size_bytes]))); }).catch(() => { /* Size remains explicitly unavailable on older Core. */ });
+    return () => { current = false; };
+  }, [storageNames, isAdmin, principal, registry.installed]);
+  const shownApp = selectedApp && ((tab === 'registry' ? [...publicApps, ...catalog] : [...catalog, ...publicApps]).find(app => app.app_name === selectedApp.app_name && app.version === selectedApp.version) ?? selectedApp);
+
+  const download = async (entry: PublicRegistryPackage) => {
+    const actor = principal;
+    try {
+      const local = await registry.download(entry);
+      if (!local || useRegistryStore.getState().owner !== actor) return;
+      setOriginFilters(new Set(ORIGIN_FILTERS)); setLevelFilters(new Set(['L1','L2','L3']));
+      setTierFilters(new Set(['Free','Pro','Plus'])); setDistintivoFilters(new Set());
+      setSearch(entry.display_name); setExactResult({name:entry.name,version:entry.version});
+      setSelectedApp(null); setTab('disponibles'); void fetchAvailable();
+      toast.success(tr('micelhub.getAppSuccess',{name:entry.display_name}));
+    } catch (cause) { toast.error(tr('micelhub.registryActionFailed'),{description:cause instanceof Error ? cause.message : String(cause)}); }
+  };
+  const primaryAction = (app: InstalledApp, view: CatalogView = catalogView): AppPrimaryAction => {
+    const busy = registryOwned ? registry.busy[app.app_name] : undefined;
+    const local = localPackages.find(row => row.name === app.app_name && row.version === app.version && row.claw_file);
+    const entry = publicEntries.find(row => row.name === app.app_name && row.version === app.version);
+    const active = installedList.find(row => row.app_name === app.app_name && row.version === app.version);
+    const progress = registry.progress[app.app_name];
+    if (view === 'registry') return {
+      registryState: active ? 'installed' : local ? 'downloaded' : 'public',
+      label: tr('micelhub.download'),
+      disabled: !isAdmin || !!active || !!local || !entry || !!busy, busy: busy === 'downloading',
+      title: !isAdmin ? tr('micelhub.registryAdminRequired') : undefined,
+      statusText: busy === 'downloading' ? tr(progress?.phase === 'checking' ? 'micelhub.registryChecking' : 'micelhub.registryDownloading') : active ? tr('micelhub.appInstalled') : local ? tr('micelhub.appDownloaded') : undefined,
+      progress: progress?.phase === 'downloading' && progress.total_bytes > 0 ? Math.min(100, progress.received_bytes / progress.total_bytes * 100) : null,
+      error: registry.errors[app.app_name], onClick: () => { if (entry) void download(entry); },
+    };
+    return { busy: !!busy, disabled: !isAdmin || !!busy || !!registry.installed_error,
+      title: !isAdmin ? tr('micelhub.registryAdminRequired') : undefined,
+      statusText: busy ? tr(busy === 'removing' ? 'micelhub.registryRemoving' : 'micelhub.registryInstalling') : undefined,
+      onClick: async () => {
+        if (view === 'installed') { setPendingUninstall(app); return; }
+        try {
+          if (local && app.source === 'registry') await registry.install(local); else await registry.activate(app);
+          if (useRegistryStore.getState().owner !== principal) return;
+          setSelectedApp(null); handleRefresh(); toast.success(tr('micelhub.installedSuccess'));
+        } catch (cause) { toast.error(tr('micelhub.installFailed'), {description:cause instanceof Error ? cause.message : String(cause)}); }
+      },
+    };
+  };
+  const confirmUninstall = async () => {
+    if (!pendingUninstall) return;
+    const app = pendingUninstall;
+    try {
+      const local = localPackages.some(row => row.name === app.app_name && row.version === app.version && row.claw_file);
+      await registry.deactivate(app, app.source === 'registry' && local);
+      if (useRegistryStore.getState().owner !== principal) return;
+      setPendingUninstall(null); setSelectedApp(null); handleRefresh(); toast.success(tr('micelhub.uninstalledSuccess'));
+    } catch (cause) { toast.error(tr('micelhub.registryActionFailed'),{description:cause instanceof Error ? cause.message : String(cause)}); }
+  };
+  const importFile = () => {
+    const input = document.createElement('input'); input.type='file'; input.accept='.claw';
+    input.onchange = async () => { const file=input.files?.[0]; if(!file)return;
+      try { await importRegistryPackage(file); await registry.refresh(); } catch(cause){toast.error(tr('micelhub.registryActionFailed'),{description:cause instanceof Error?cause.message:String(cause)});} };
+    input.click();
+  };
+  const startCopy = async (app: InstalledApp) => {
+    try { setForkName(await suggestForkName(app.app_name)); setForkSource(app); }
+    catch(cause){toast.error(tr('micelhub.registryActionFailed'),{description:cause instanceof Error?cause.message:String(cause)});}
+  };
+  const createCopy = async (name:string) => {
+    if (!forkSource) return;
+    try { await forkApp(forkSource.app_name,name); setForkSource(null); await fetchAvailable(); toast.success(tr('micelhub.copiedSuccess')); }
+    catch(cause){toast.error(tr('micelhub.registryActionFailed'),{description:cause instanceof Error?cause.message:String(cause)});}
+  };
+
+  const dialogs = <>
+    <ConfirmDialog open={!!pendingUninstall} title={tr('micelhub.uninstallAppTitle',{name:pendingUninstall?.manifest?.name??pendingUninstall?.app_name??''})}
+      description={tr('micelhub.uninstallKeepData')} confirmLabel={tr('micelhub.uninstall')} variant="warning" closeOnConfirm={false}
+      pending={!!(pendingUninstall&&registry.busy[pendingUninstall.app_name])} onClose={()=>setPendingUninstall(null)} onConfirm={()=>void confirmUninstall()}/>
+    {forkSource&&<ForkNameDialog suggestedName={forkName} onClose={()=>setForkSource(null)} onConfirm={name=>void createCopy(name)}/>}
+  </>;
 
   // Mobile: push to detail (salvo si hay editor abierto — el editor de :361 gana).
-  if (isMobile && selectedApp && !editingApp) {
-    return <AppDetail key={selectedApp.id} app={selectedApp} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} onEditFiles={selectedApp.source === 'adapted' ? () => setEditingApp(selectedApp) : undefined} />;
+  if (isMobile && shownApp && !editingApp) {
+    return <><AppDetail key={shownApp.id} app={shownApp} catalogView={catalogView} primaryAction={primaryAction(shownApp)} origin={appOrigin(shownApp)} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} />{dialogs}</>;
   }
 
   const needsRestart = restartRequired.openclaw || restartRequired.core;
@@ -449,9 +492,9 @@ export function Component() {
             }}>
               <AlertTriangle size={14} />
               <span style={{ flex: 1 }}>
-                Restart required — {restartRequired.reason || 'An app was modified.'}
-                {restartRequired.openclaw && ' OpenClaw needs to restart.'}
-                {restartRequired.core && ' Claw Core needs to restart.'}
+                {tr('micelhub.restartRequired', { reason: restartRequired.reason || tr('micelhub.appModified') })}
+                {restartRequired.openclaw && tr('micelhub.openclawRestart')}
+                {restartRequired.core && tr('micelhub.coreRestart')}
               </span>
               <button onClick={() => { if (restartRequired.openclaw) clearRestart('openclaw'); if (restartRequired.core) clearRestart('core'); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2, display: 'flex' }}>
@@ -460,66 +503,38 @@ export function Component() {
             </div>
           )}
 
-          {/* Search */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ flex: 1 }} />
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)', padding: '4px 10px', minWidth: 200,
+          <div className="micelhub-topbar">
+            <nav className="micelhub-tabs" role="tablist" aria-label="MicelHub" onKeyDown={event=>{
+              if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+              const tabs=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+              const index=tabs.indexOf(document.activeElement as HTMLButtonElement);
+              const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+              event.preventDefault();tabs[next]?.focus();tabs[next]?.click();
             }}>
-              <Search size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search apps..."
-                style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: '0.8125rem', width: '100%', fontFamily: 'var(--font-sans)' }} />
-            </div>
-          </div>
-
-          {/* Tabs + toggle de vista (cuadrícula/lista) */}
-          <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            {([...(['available', 'disponibles', 'installed', 'adapted', 'registry', 'workshop'] as Tab[]), ...(isAdmin ? (['plugins'] as Tab[]) : [])]).map((t) => (
-              <button key={t} onClick={() => { setTab(t); setSelectedApp(null); }} style={{
-                padding: '6px 12px',
-                background: tab === t ? 'var(--surface-hover)' : 'transparent',
-                border: tab === t ? '1px solid var(--border)' : '1px solid transparent',
-                borderRadius: 'var(--radius-md)',
-                color: tab === t ? 'var(--text)' : 'var(--text-dim)',
-                fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                fontWeight: tab === t ? 500 : 400,
-              }}>
-                {/* Ciclo de vida: Instaladas (activas) · Disponibles (en el sistema, no
-                    activas) · Asignadas (a agentes) · Adapted · Registro. */}
-                {t === 'available' && `Instaladas${installedCount > 0 ? ` (${installedCount})` : ''}`}
-                {t === 'disponibles' && `Disponibles${disponiblesCount > 0 ? ` (${disponiblesCount})` : ''}`}
-                {t === 'installed' && `Asignadas${agentsWithSkills.length > 0 ? ` (${agentsWithSkills.filter(a => a.skills.length > 0).length})` : ''}`}
-                {t === 'adapted' && `Adapted${adaptedCount > 0 ? ` (${adaptedCount})` : ''}`}
-                {t === 'registry' && 'Registro'}
-                {t === 'workshop' && 'Workshop'}
-                {t === 'plugins' && 'Plugins'}
-              </button>
-            ))}
-            {/* Toggle cuadrícula/lista — solo donde hay grid de tarjetas (Installed/Adapted) */}
-            {(tab === 'available' || tab === 'disponibles' || tab === 'adapted') && (
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
-                {([['grid', LayoutGrid, 'Cuadrícula'], ['list', List, 'Lista']] as const).map(([mode, Icon, title]) => (
-                  <button key={mode} onClick={() => changeViewMode(mode)} title={title} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28,
-                    background: viewMode === mode ? 'var(--surface-hover)' : 'transparent',
-                    border: `1px solid ${viewMode === mode ? 'var(--border)' : 'transparent'}`,
-                    borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                    color: viewMode === mode ? 'var(--text)' : 'var(--text-dim)',
-                  }}>
-                    <Icon size={15} />
-                  </button>
-                ))}
-              </div>
-            )}
+              {(['registry','disponibles','available','installed','workshop',...(isAdmin?['plugins']:[])] as Tab[]).map(value => {
+                const label = value==='registry'?tr('micelhub.registry'):value==='disponibles'?tr('micelhub.available'):value==='available'?tr('micelhub.installed'):value==='installed'?tr('micelhub.assigned'):value==='workshop'?tr('micelhub.workshop'):tr('micelhub.plugins');
+                const count = value==='disponibles'?disponiblesCount:value==='available'?installedCount:value==='installed'?agentsWithSkills.filter(agent=>agent.skills.length>0).length:0;
+                return <button key={value} role="tab" aria-selected={tab===value} tabIndex={tab===value?0:-1} onClick={event=>{setTab(value);setSelectedApp(null);setExactResult(null);event.currentTarget.scrollIntoView({block:'nearest',inline:'nearest'});}}
+                  className="shrink-0 rounded-[var(--radius-md)] border px-3 py-2 text-[13px] transition-colors"
+                  style={{borderColor:tab===value?'var(--border)':'transparent',background:tab===value?'var(--surface-hover)':'transparent',color:tab===value?'var(--text)':'var(--text-dim)',fontWeight:tab===value?600:400}}>
+                  {label}{count>0&&<> <span className="ml-1 text-[11px] text-[var(--text-muted)]">({count})</span></>}
+                </button>;
+              })}
+            </nav>
+            {isCatalogTab&&<div className="micelhub-search flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-3 focus-within:border-[var(--amber)]">
+              <Search size={16} className="shrink-0 text-[var(--text-dim)]"/>
+              <input type="search" aria-label={tr('micelhub.search')} value={search} onChange={event=>{setSearch(event.target.value);setExactResult(null);}} placeholder={tr('micelhub.search')}
+                className="h-9 min-w-0 flex-1 border-0 bg-transparent text-sm text-[var(--text)] outline-none [&::-webkit-search-cancel-button]:hidden"/>
+              {search&&<button type="button" aria-label={tr('micelhub.clearSearch')} onClick={()=>{setSearch('');setExactResult(null);}} className="rounded p-1 text-[var(--text-dim)] hover:text-[var(--text)]"><X size={14}/></button>}
+            </div>}
           </div>
 
           {/* Filtros por tag — 4 grupos: Origen · Nivel · Plan · Distintivos */}
-          {(tab === 'available' || tab === 'disponibles') && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {isCatalogTab && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1" aria-label="Application filters">
               {/* Origen */}
-              {['Micelclaw', 'OpenClaw', 'Tuya', 'Community'].map(origin => (
+              {ORIGIN_FILTERS.map(origin => (
                 <TagButton key={origin} label={origin} active={originFilters.has(origin)}
                   colors={(ORIGIN_COLORS[origin] ?? ORIGIN_COLORS.Community)!}
                   onClick={() => toggleFilter(originFilters, origin, setOriginFilters)} />
@@ -546,21 +561,23 @@ export function Component() {
                   onClick={() => toggleFilter(distintivoFilters, st, setDistintivoFilters)} />
               ))}
             </div>
+            <div className="ml-auto flex shrink-0 gap-1" aria-label="View">
+              {([['grid',LayoutGrid,tr('micelhub.grid')],['list',List,tr('micelhub.list')]] as const).map(([mode,Icon,label])=><button key={mode} type="button" title={label} aria-label={label} aria-pressed={viewMode===mode} onClick={()=>changeViewMode(mode)} className="rounded-[var(--radius-md)] border p-1.5" style={{borderColor:viewMode===mode?'var(--border)':'transparent',background:viewMode===mode?'var(--surface-hover)':'transparent',color:viewMode===mode?'var(--text)':'var(--text-dim)'}}><Icon size={16}/></button>)}
+            </div>
+            </div>
           )}
         </div>
 
         {/* Content */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
+          {isCatalogTab&&tab!=='registry'&&(registry.local_error||registry.installed_error)&&<p role="alert" className="mx-4 mt-3 rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text-dim)]">{tr('micelhub.registryFailed')}</p>}
+          {tab==='disponibles'&&isAdmin&&<div className="flex justify-end px-4 pt-3"><Button variant="outline" size="sm" onClick={importFile}><Upload size={13}/>{tr('micelhub.registryImport')}</Button></div>}
           {tab === 'workshop' ? (
-            <WorkshopTab />
+            <WorkshopTab adaptedApps={catalog.filter(app=>app.source==='adapted')} copyableApps={installedList} onEditApp={isAdmin?setEditingApp:undefined} onCreateCopy={isAdmin?startCopy:undefined} />
           ) : tab === 'plugins' ? (
             <PluginsBrowser focusId={focusPlugin} />
           ) : tab === 'registry' ? (
-            <RegistryBrowser
-              onSelect={setSelectedApp}
-              selectedName={selectedApp?.app_name ?? null}
-              onChanged={fetchRegistryApps}
-            />
+            <RegistryBrowser apps={filtered} onSelect={setSelectedApp} selectedId={selectedApp?.id??null} onRefresh={()=>void registry.refresh(true)} getAction={app=>primaryAction(app,'registry')} viewMode={viewMode} loading={isLoading} error={registry.public_error} hasQuery={!!search.trim()}/>
           ) : tab === 'installed' ? (
             /* Installed: view by agent */
             installedLoading ? (
@@ -581,25 +598,27 @@ export function Component() {
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                      {agent.skills.map(s => (
+                      {agent.skills.map(s => {
+                        const chipColor=officeColor(s.id)??officeColor(s.name.toLowerCase())??s.color??'#06b6d4';
+                        return (
                         <span key={s.id} style={{
                           display: 'flex', alignItems: 'center', gap: 3,
                           padding: '3px 8px', fontSize: '0.6875rem',
-                          background: '#06b6d412', border: '1px solid #06b6d430',
-                          borderRadius: 'var(--radius-sm)', color: '#06b6d4',
+                          background: `color-mix(in srgb, ${chipColor} 7%, transparent)`, border: `1px solid color-mix(in srgb, ${chipColor} 30%, transparent)`,
+                          borderRadius: 'var(--radius-sm)', color: chipColor,
                         }}>
-                          <AppIcon icon={s.icon ?? '📦'} icon_kind={s.icon_kind} color={s.color} size={13} /> {s.name}
+                          <AppIcon icon={s.icon ?? '📦'} icon_kind={s.icon_kind} color={chipColor} size={13} /> {s.name}
                           <button onClick={(e) => { e.stopPropagation(); handleUnassignSkill(agent.id, ((s as Record<string, unknown>).skill_id as string) ?? s.id); }}
-                            title={`Remove ${s.name}`}
+                            title={tr('micelhub.removeApp', { name: s.name })}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex', marginLeft: 2 }}>
                             <X size={10} />
                           </button>
                         </span>
-                      ))}
+                      );})}
                       {agent.skills.length === 0 && (
-                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>No apps assigned</span>
+                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{tr('micelhub.noAppsAssigned')}</span>
                       )}
-                      <button onClick={(e) => { e.stopPropagation(); setAssigningAgent(agent.id); }} title="Assign apps"
+                      <button onClick={(e) => { e.stopPropagation(); setAssigningAgent(agent.id); }} title={tr('micelhub.assignApps')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-muted)' }}>
                         <Plus size={12} />
                       </button>
@@ -609,13 +628,13 @@ export function Component() {
                 {agentsWithSkills.length === 0 && (
                   <div style={{ padding: 48, textAlign: 'center' }}>
                     <Puzzle size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: 12 }} />
-                    <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem', margin: 0 }}>No agents found</p>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem', margin: 0 }}>{tr('micelhub.noAgents')}</p>
                   </div>
                 )}
               </div>
             )
           ) : isLoading ? (
-            <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%,280px), 1fr))', gap: 12 }}>
               {[1, 2, 3, 4, 5, 6].map((i) => (
                 <div key={i} style={{ height: 140, background: 'var(--surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', animation: 'pulse 2s infinite' }} />
               ))}
@@ -623,44 +642,47 @@ export function Component() {
           ) : error ? (
             <div style={{ padding: 32, textAlign: 'center', color: 'var(--error)', fontSize: '0.875rem' }}>
               {error}<br />
-              <button onClick={handleRefresh} style={{ marginTop: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 12px', color: 'var(--text)', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>Retry</button>
+              <button onClick={handleRefresh} style={{ marginTop: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '6px 12px', color: 'var(--text)', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>{tr('micelhub.retry')}</button>
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: 48, textAlign: 'center' }}>
               <Puzzle size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: 12 }} />
               <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem', margin: 0 }}>
-                {search ? 'No apps match your search.' : 'No apps found with current filters.'}
+                {search ? tr('micelhub.noLocalSearchResults') : tr('micelhub.noFilterResults')}
               </p>
             </div>
           ) : viewMode === 'list' ? (
             <div>
-              <AppListHeader />
+              <AppListHeader catalogView={catalogView} />
               {filtered.map((app) => (
-                <AppListRow key={app.id} app={app} origin={getOrigin(app)}
+                <AppListRow key={app.id} app={app} origin={appOrigin(app)}
                   selected={selectedApp?.id === app.id}
                   onClick={() => setSelectedApp(app)}
-                  onRefresh={handleRefresh} />
+                  onRefresh={handleRefresh} catalogView={catalogView} primaryAction={primaryAction(app)} />
               ))}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, padding: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%,280px), 1fr))', gap: 12, padding: 16 }}>
               {filtered.map((app) => (
-                <AppCard key={app.id} app={app} origin={getOrigin(app)}
+                <AppCard key={app.id} app={app} origin={appOrigin(app)}
                   selected={selectedApp?.id === app.id}
                   onClick={() => setSelectedApp(app)}
-                  onRefresh={handleRefresh} />
+                  onRefresh={handleRefresh} catalogView={catalogView} primaryAction={primaryAction(app)} />
               ))}
             </div>
           )}
+
         </ScrollArea>
       </div>
 
       {/* Detail panel (desktop) */}
-      {!isMobile && selectedApp && (
+      {!isMobile && shownApp && (
         <div style={{ width: 400, minWidth: 400, borderLeft: '1px solid var(--border)', overflow: 'hidden' }}>
-          <AppDetail key={selectedApp.id} app={selectedApp} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} onEditFiles={selectedApp.source === 'adapted' ? () => setEditingApp(selectedApp) : undefined} />
+          <AppDetail key={shownApp.id} app={shownApp} origin={appOrigin(shownApp)} catalogView={catalogView} primaryAction={primaryAction(shownApp)} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} />
         </div>
       )}
+
+      {dialogs}
 
       {/* Assign Apps Modal (Installed tab) — shared component */}
       {assigningAgent && (() => {
@@ -681,6 +703,10 @@ export function Component() {
       })()}
 
       <style>{`
+        .micelhub-topbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .micelhub-tabs { display:flex; gap:2px; align-items:center; flex:1 1 510px; min-width:0; overflow-x:auto; }
+        .micelhub-search { flex:1 1 280px; max-width:380px; min-width:0; }
+        @media(max-width:768px) { .micelhub-search { flex-basis:100%; max-width:none; } .micelhub-tabs { flex-basis:100%; } }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }

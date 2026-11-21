@@ -12,16 +12,19 @@
 
 import { useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
+import { useI18n } from '@/i18n';
+import { formatGridDateTime } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 import { AgentSelect } from '../AgentSelect';
 import type { Meeting } from '../types';
 
 const STATUS_FILTER_OPTIONS = [
-  { value: 'active', label: 'Activas' },
-  { value: 'scheduled', label: 'Programadas' },
-  { value: 'in_progress', label: 'En progreso' },
-  { value: 'completed', label: 'Completadas' },
-  { value: 'archived', label: 'Archivadas' },
-  { value: 'all', label: 'Todas' },
+  { value: 'active', key: 'council.archive.filter.active' },
+  { value: 'scheduled', key: 'council.archive.filter.scheduled' },
+  { value: 'in_progress', key: 'council.archive.filter.inProgress' },
+  { value: 'completed', key: 'council.archive.filter.completed' },
+  { value: 'archived', key: 'council.archive.filter.archived' },
+  { value: 'all', key: 'council.archive.filter.all' },
 ];
 
 interface MeetingArchiveProps {
@@ -29,26 +32,12 @@ interface MeetingArchiveProps {
   onSelect: (id: string) => void;
 }
 
-function formatMeetingDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }) + ' \u2014 ' + date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-function statusLabel(status: Meeting['status']): string {
+function statusLabel(status: Meeting['status'], t: (key: string) => string): string {
   switch (status) {
-    case 'scheduled': return 'Scheduled';
-    case 'in_progress': return 'In Progress';
-    case 'completed': return 'Completed';
-    case 'archived': return 'Archived';
+    case 'scheduled': return t('council.archive.status.scheduled');
+    case 'in_progress': return t('council.archive.status.inProgress');
+    case 'completed': return t('council.archive.status.completed');
+    case 'archived': return t('council.archive.status.archived');
   }
 }
 
@@ -71,6 +60,8 @@ function statusBg(status: Meeting['status']): string {
 }
 
 export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('active');
   const [query, setQuery] = useState('');
@@ -104,9 +95,9 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
         fontSize: '0.875rem',
       }}>
         <span style={{ fontSize: '2rem' }}>🏛️</span>
-        <span>No council meetings yet.</span>
+        <span>{t('council.archive.empty.title')}</span>
         <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-          Schedule your first meeting to get started.
+          {t('council.archive.empty.description')}
         </span>
       </div>
     );
@@ -130,7 +121,8 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por título o participante…"
+            placeholder={t('council.archive.search.placeholder')}
+            aria-label={t('council.archive.search.label')}
             style={{
               width: '100%', boxSizing: 'border-box',
               background: 'var(--surface)', border: '1px solid var(--border)',
@@ -141,14 +133,15 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
           {query && (
             <button
               onClick={() => setQuery('')}
+              aria-label={t('council.archive.search.clear')}
               style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: 2 }}
-              title="Limpiar"
+              title={t('council.archive.search.clear')}
             >
               <X size={13} />
             </button>
           )}
         </div>
-        <AgentSelect value={statusFilter} options={STATUS_FILTER_OPTIONS} onChange={setStatusFilter} minWidth={150} />
+        <AgentSelect value={statusFilter} options={STATUS_FILTER_OPTIONS.map(({ value, key }) => ({ value, label: t(key) }))} onChange={setStatusFilter} minWidth={150} />
       </div>
 
       {sorted.length === 0 ? (
@@ -157,8 +150,8 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
           color: 'var(--text-muted)', fontSize: '0.8125rem',
         }}>
           {query.trim()
-            ? `Sin reuniones que coincidan con "${query.trim()}".`
-            : 'No hay reuniones con este filtro.'}
+            ? t('council.archive.noMatches', { query: query.trim() })
+            : t('council.archive.noFilterResults')}
         </div>
       ) : (
       <div style={{
@@ -221,7 +214,7 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
                     marginLeft: 12,
                     border: meeting.status === 'archived' ? '1px solid var(--border)' : 'none',
                   }}>
-                    {statusLabel(meeting.status)}
+                    {statusLabel(meeting.status, t)}
                   </span>
                 )}
               </div>
@@ -232,7 +225,8 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
                 color: 'var(--text-dim)',
                 marginBottom: 10,
               }}>
-                {formatMeetingDate(dateStr)}
+                {/* Scheduling inputs still interpret the chosen date/time in browser-local time; until the form supports an explicit timezone, display the stored instant in that same grid zone while honoring saved date and clock formats. */}
+                {formatGridDateTime(new Date(dateStr), locale, general)}
               </div>
 
               {/* Participant chips */}
@@ -273,8 +267,8 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
                 fontSize: '0.75rem',
                 color: 'var(--text-muted)',
               }}>
-                <span>{meeting.messages.length} message{meeting.messages.length !== 1 ? 's' : ''}</span>
-                <span>{meeting.action_items.length} action item{meeting.action_items.length !== 1 ? 's' : ''}</span>
+                <span>{t(`council.archive.messages.${meeting.messages.length === 1 ? 'one' : 'other'}`, { count: meeting.messages.length })}</span>
+                <span>{t(`council.archive.actionItems.${meeting.action_items.length === 1 ? 'one' : 'other'}`, { count: meeting.action_items.length })}</span>
               </div>
             </div>
           );

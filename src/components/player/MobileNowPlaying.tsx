@@ -18,12 +18,14 @@ import { ProgressBar } from './ProgressBar';
 import { VolumeControl } from './VolumeControl';
 import { coverSrc } from './cover-src';
 import { Music } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface MobileNowPlayingProps {
   onClose: () => void;
 }
 
 export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
+  const { t } = useI18n();
   const currentItem = usePlayerStore((s) => s.currentItem);
   const shuffle = usePlayerStore((s) => s.shuffle);
   const repeat = usePlayerStore((s) => s.repeat);
@@ -64,7 +66,7 @@ export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
           marginBottom: 24,
         }}
       >
-        <ArrowLeft size={18} /> Back
+        <ArrowLeft size={18} /> {t('player.back')}
       </button>
 
       {/* Cover art */}
@@ -114,6 +116,8 @@ export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 24, marginBottom: 12 }}>
         <button
           onClick={toggleShuffle}
+          title={t('player.shuffle')}
+          aria-label={t('player.shuffle')}
           style={{
             background: 'none',
             border: 'none',
@@ -128,6 +132,8 @@ export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
         <VolumeControl />
         <button
           onClick={cycleRepeat}
+          title={t('player.repeat')}
+          aria-label={t('player.repeat')}
           style={{
             background: 'none',
             border: 'none',
@@ -144,7 +150,7 @@ export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
       {/* Mini queue */}
       {queue.length > 1 && (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          {queueIndex + 1} of {queue.length} in queue
+          {t('player.queuePosition', { current: queueIndex + 1, count: queue.length })}
         </div>
       )}
     </div>

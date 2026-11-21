@@ -8,6 +8,7 @@
 // de jerga (tooltips) y selector de cuenta con búsqueda.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useI18n } from '@/i18n';
 import { Download, Search, ChevronsUpDown, FileSpreadsheet, FileText, Table2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DataTable, type DataColumn } from '@/components/ui/data-table';
@@ -72,6 +73,7 @@ interface ReportTableProps<T> {
 
 /** Menú de exportación: CSV de la vista (cliente) + CSV/XLSX/PDF completos (servidor). */
 export function ExportMenu({ clientCsv, serverReport, serverExtra }: { clientCsv?: () => void; serverReport?: string; serverExtra?: { accountId?: string; book?: 'issued' | 'received' } }) {
+  const { t } = useI18n();
   const { range } = useFinancePeriod();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<ExportFormat | null>(null);
@@ -81,22 +83,22 @@ export function ExportMenu({ clientCsv, serverReport, serverExtra }: { clientCsv
     if (!serverReport) return;
     setBusy(format);
     try { await downloadExport(serverReport, { format, from: range.from, to: range.to, ...serverExtra }); setOpen(false); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Couldn\'t export'); }
+    catch (e) { toast.error(e instanceof Error ? e.message : t('finance.accounting.exportFailed')); }
     finally { setBusy(null); }
   };
   const item = 'w-full text-left px-3 py-1.5 hover:bg-[var(--surface)] flex items-center gap-2 text-[var(--text)]';
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface-hover)]">
-        <Download size={13} /> Export
+        <Download size={13} /> {t('finance.accounting.export')}
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-1 w-48 rounded-[var(--radius-md,8px)] border border-[var(--border)] bg-[var(--card)] shadow-lg py-1 text-xs">
-          {clientCsv && <button type="button" onClick={() => { clientCsv(); setOpen(false); }} className={item}><Table2 size={13} /> CSV (vista actual)</button>}
+          {clientCsv && <button type="button" onClick={() => { clientCsv(); setOpen(false); }} className={item}><Table2 size={13} /> {t('finance.accounting.exportViewCsv')}</button>}
           {serverReport && <>
-            <button type="button" disabled={!!busy} onClick={() => void server('csv')} className={item}>{busy === 'csv' ? <Loader2 size={13} className="animate-spin" /> : <Table2 size={13} />} CSV completo</button>
-            <button type="button" disabled={!!busy} onClick={() => void server('xlsx')} className={item}>{busy === 'xlsx' ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />} Excel (XLSX)</button>
-            <button type="button" disabled={!!busy} onClick={() => void server('pdf')} className={item}>{busy === 'pdf' ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />} PDF</button>
+            <button type="button" disabled={!!busy} onClick={() => void server('csv')} className={item}>{busy === 'csv' ? <Loader2 size={13} className="animate-spin" /> : <Table2 size={13} />} {t('finance.accounting.exportFullCsv')}</button>
+            <button type="button" disabled={!!busy} onClick={() => void server('xlsx')} className={item}>{busy === 'xlsx' ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />} {t('finance.accounting.exportExcel')}</button>
+            <button type="button" disabled={!!busy} onClick={() => void server('pdf')} className={item}>{busy === 'pdf' ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />} {t('finance.accounting.exportPdf')}</button>
           </>}
         </div>
       )}
@@ -105,6 +107,7 @@ export function ExportMenu({ clientCsv, serverReport, serverExtra }: { clientCsv
 }
 
 export function ReportTable<T>(p: ReportTableProps<T>) {
+  const { t } = useI18n();
   const [q, setQ] = useState('');
   const filtered = useMemo(() => {
     if (!q.trim() || !p.search) return p.rows;
@@ -127,7 +130,7 @@ export function ReportTable<T>(p: ReportTableProps<T>) {
           {p.search && (
             <div className="relative">
               <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={p.searchPlaceholder ?? 'Search…'}
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={p.searchPlaceholder ?? t('finance.accounting.search')}
                 className="pl-7 pr-2 py-1.5 w-44 text-xs rounded-[var(--radius-sm,4px)] bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-[var(--mod-finance)]" />
             </div>
           )}
@@ -163,9 +166,10 @@ export function useAccounts(includeSystem = true) {
 }
 
 /** Selector de cuenta con búsqueda por código o nombre (combobox ligero). */
-export function AccountSelect({ accounts, value, onChange, placeholder = 'Account…', postableOnly = false }: {
+export function AccountSelect({ accounts, value, onChange, placeholder, postableOnly = false }: {
   accounts: Account[]; value: string; onChange: (id: string) => void; placeholder?: string; postableOnly?: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -184,13 +188,13 @@ export function AccountSelect({ accounts, value, onChange, placeholder = 'Accoun
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="w-full inline-flex items-center justify-between gap-2 px-2 py-1.5 text-xs rounded-[var(--radius-sm,4px)] bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--mod-finance)]">
-        <span className="truncate">{sel ? <><span className="font-mono text-[var(--text-dim)]">{sel.code ?? ''}</span> {sel.name}</> : <span className="text-[var(--text-dim)]">{placeholder}</span>}</span>
+        <span className="truncate">{sel ? <><span className="font-mono text-[var(--text-dim)]">{sel.code ?? ''}</span> {sel.name}</> : <span className="text-[var(--text-dim)]">{placeholder ?? t('finance.accounting.accountPlaceholder')}</span>}</span>
         <ChevronsUpDown size={13} className="opacity-50 shrink-0" />
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-[280px] max-h-72 overflow-auto rounded-[var(--radius-md,8px)] border border-[var(--border)] bg-[var(--card)] shadow-lg">
           <div className="sticky top-0 p-1.5 bg-[var(--card)] border-b border-[var(--border)]">
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search accounts…"
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('finance.accounting.searchAccounts')}
               className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] outline-none" />
           </div>
           {list.map((a) => (
@@ -200,7 +204,7 @@ export function AccountSelect({ accounts, value, onChange, placeholder = 'Accoun
               <span className="truncate">{a.name}</span>
             </button>
           ))}
-          {list.length === 0 && <div className="px-2.5 py-3 text-xs text-[var(--text-dim)]">No results</div>}
+          {list.length === 0 && <div className="px-2.5 py-3 text-xs text-[var(--text-dim)]">{t('finance.accounting.noResults')}</div>}
         </div>
       )}
     </div>
@@ -217,6 +221,7 @@ export function useStandardPlan(): ChartAccount[] {
 
 /** Picker para "partir de" una cuenta del plan estándar (PGC), agrupado por grupo. */
 export function StandardAccountPicker({ plan, onPick }: { plan: ChartAccount[]; onPick: (a: ChartAccount) => void }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -226,13 +231,13 @@ export function StandardAccountPicker({ plan, onPick }: { plan: ChartAccount[]; 
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="w-full inline-flex items-center justify-between gap-2 px-2 py-1.5 text-xs rounded-[var(--radius-sm,4px)] bg-[var(--bg)] border border-dashed border-[var(--border)] text-[var(--text-dim)] hover:border-[var(--mod-finance)]">
-        <span className="inline-flex items-center gap-1.5"><Search size={13} /> Buscar en el plan PGC (572 Bancos, 700 Ventas, 629 Gastos…)</span>
+        <span className="inline-flex items-center gap-1.5"><Search size={13} /> {t('finance.accounting.searchStandardPlan')}</span>
         <ChevronsUpDown size={13} className="opacity-50 shrink-0" />
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full max-h-72 overflow-auto rounded-[var(--radius-md,8px)] border border-[var(--border)] bg-[var(--card)] shadow-lg">
           <div className="sticky top-0 p-1.5 bg-[var(--card)] border-b border-[var(--border)]">
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Code or name…"
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('finance.accounting.searchCodeName')}
               className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] outline-none" />
           </div>
           {list.map((a) => (
@@ -240,10 +245,10 @@ export function StandardAccountPicker({ plan, onPick }: { plan: ChartAccount[]; 
               className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-[var(--surface)] text-[var(--text)] flex items-center gap-2">
               <span className="font-mono text-[var(--text-dim)] w-10 shrink-0">{a.code}</span>
               <span className="truncate flex-1">{a.name}</span>
-              <span className="text-[10px] text-[var(--text-dim)]">{ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span>
+              <span className="text-[10px] text-[var(--text-dim)]">{t(`finance.accounting.type.${a.type}`)}</span>
             </button>
           ))}
-          {list.length === 0 && <div className="px-2.5 py-3 text-xs text-[var(--text-dim)]">No results</div>}
+          {list.length === 0 && <div className="px-2.5 py-3 text-xs text-[var(--text-dim)]">{t('finance.accounting.noResults')}</div>}
         </div>
       )}
     </div>
@@ -251,15 +256,16 @@ export function StandardAccountPicker({ plan, onPick }: { plan: ChartAccount[]; 
 }
 
 export const PGC_GROUPS: Record<string, string> = {
-  '1': 'Group 1 · Basic financing',
-  '2': 'Group 2 · Non-current assets',
-  '3': 'Group 3 · Inventories',
-  '4': 'Group 4 · Payables and receivables',
-  '5': 'Group 5 · Financial accounts',
-  '6': 'Group 6 · Purchases and expenses',
-  '7': 'Group 7 · Sales and income',
+  '1': 'finance.accounting.group.1',
+  '2': 'finance.accounting.group.2',
+  '3': 'finance.accounting.group.3',
+  '4': 'finance.accounting.group.4',
+  '5': 'finance.accounting.group.5',
+  '6': 'finance.accounting.group.6',
+  '7': 'finance.accounting.group.7',
 };
 
 export const ACCOUNT_TYPE_LABEL: Record<string, string> = {
-  asset: 'Asset', liability: 'Liability', equity: 'Net worth', income: 'Income', expense: 'Expense',
+  asset: 'finance.accounting.type.asset', liability: 'finance.accounting.type.liability', equity: 'finance.accounting.type.equity',
+  income: 'finance.accounting.type.income', expense: 'finance.accounting.type.expense',
 };

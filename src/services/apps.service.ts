@@ -71,9 +71,15 @@ export async function updateAppStatus(
   // 'active' = install (activate), 'available' = uninstall (keep data). 'disabled'
   // kept for back-compat (the backend normalises it to 'available').
   status: 'active' | 'available' | 'disabled',
-): Promise<InstalledApp> {
-  const res = await api.patch<ApiResponse<InstalledApp>>(`/apps/${name}`, { status });
+  removeFiles = false,
+): Promise<InstalledApp & {requires_core_restart?:boolean;requires_openclaw_restart?:boolean}> {
+  const res = await api.patch<ApiResponse<InstalledApp & {requires_core_restart?:boolean;requires_openclaw_restart?:boolean}>>(`/apps/${encodeURIComponent(name)}`, { status, ...(removeFiles ? { remove_files: true } : {}) });
   return res.data;
+}
+
+export async function getAppStorage(names: string[]): Promise<Array<{name:string;installation_size_bytes:number|null}>> {
+  if (!names.length) return [];
+  return (await api.get<{data:Array<{name:string;installation_size_bytes:number|null}>}>('/apps/storage', {names:names.join(',')})).data;
 }
 
 export async function uninstallApp(

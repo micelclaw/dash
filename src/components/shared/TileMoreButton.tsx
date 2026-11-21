@@ -20,6 +20,7 @@
 import { useRef } from 'react';
 import { MoreVertical } from 'lucide-react';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { useI18n } from '@/i18n';
 
 interface TileMoreButtonProps {
   /** Posición absoluta dentro del tile (default: esquina superior derecha). */
@@ -28,11 +29,12 @@ interface TileMoreButtonProps {
 }
 
 export function TileMoreButton({ style, size = 15 }: TileMoreButtonProps) {
+  const { t } = useI18n();
   const touchTsRef = useRef(0);
   return (
     <button
-      aria-label="More actions"
-      title="More actions"
+      aria-label={t('shared.actions.more')}
+      title={t('shared.actions.more')}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();

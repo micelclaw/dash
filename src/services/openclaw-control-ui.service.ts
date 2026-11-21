@@ -1,11 +1,17 @@
-type ControlUiDiscovery = { data: { host: string; bootstrap_path: string; ready: boolean } };
+type ControlUiDiscovery = { data: { host: string; bootstrap_path: string; ready: boolean; https_port?: number } };
 // The 9.4 Gateway can take 4–5 minutes to apply an identity roster change.
 // Leave margin for its second automatic reload without retrying forever.
 const BOOTSTRAP_WAIT_MS = 8 * 60_000;
 const MAX_NETWORK_FAILURES = 3;
 
-function controlUiUrl(host: string, path: string): string {
-  return `https://${host}${path}`;
+function controlUiUrl(host: string, path: string, httpsPort = 443): string {
+  if (typeof host !== 'string' || !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(host) || !host.includes('.') || host.includes('..')
+    || !Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535
+    || !['/', '/__micelclaw__/control-ui/bootstrap'].includes(path)) throw new Error('OPENCLAW_CONTROL_UI_DISCOVERY_INVALID');
+  const origin = new URL(`https://${host}`);
+  if (origin.host !== host || origin.hostname !== host || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash)
+    throw new Error('OPENCLAW_CONTROL_UI_DISCOVERY_INVALID');
+  return `https://${host}${httpsPort === 443 ? '' : ':' + httpsPort}${path}`;
 }
 
 function retryableBootstrapStatus(status: number): boolean {
@@ -51,7 +57,7 @@ async function bootstrapControlUi(
       if (networkFailures >= MAX_NETWORK_FAILURES) {
         throw new ApiErrorType(
           'OPENCLAW_CONTROL_UI_NETWORK',
-          'El navegador no puede conectar con openclaw.victor.claw. Comprueba el dominio y el certificado de Control UI.',
+          'El navegador no puede conectar con la Control UI de esta instalación. Comprueba su dominio y certificado.',
         );
       }
       options.onProgress?.(`Reconectando con Control UI (${networkFailures}/${MAX_NETWORK_FAILURES})…`);
@@ -114,16 +120,17 @@ export async function openOpenclawControlUi(): Promise<void> {
       import('../stores/auth.store'),
     ]);
     const discovery = await api.post<ControlUiDiscovery>('/auth/openclaw-control-ui');
-    const { host, bootstrap_path: bootstrapPath, ready } = discovery.data;
-    if (!ready) throw new ApiError('OPENCLAW_CONTROL_UI_UNAVAILABLE', 'La Control UI todavía no está disponible.');
+    const { host, bootstrap_path: bootstrapPath, ready, https_port: httpsPort } = discovery.data;
+    if (ready !== true) throw new ApiError('OPENCLAW_CONTROL_UI_UNAVAILABLE', 'La Control UI todavía no está disponible.');
+    const bootstrapUrl = controlUiUrl(host, bootstrapPath, httpsPort), homeUrl = controlUiUrl(host, '/', httpsPort);
     await bootstrapControlUi(
-      controlUiUrl(host, bootstrapPath),
+      bootstrapUrl,
       () => useAuthStore.getState().tokens?.accessToken,
       ApiError,
       { isClosed: () => popup.closed, onProgress: (message) => showPopupStatus(popup, message) },
     );
     showPopupStatus(popup, 'Abriendo Control UI…');
-    popup.location.replace(controlUiUrl(host, '/'));
+    popup.location.replace(homeUrl);
   } catch (error) {
     showPopupStatus(popup, error instanceof Error ? error.message : 'No se pudo abrir Control UI.');
     throw error;

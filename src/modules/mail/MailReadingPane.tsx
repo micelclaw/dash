@@ -33,6 +33,7 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
+import { useI18n } from '@/i18n';
 import { MailThread } from './MailThread';
 import { MailComposer } from './MailComposer';
 import { MailAIActionsMenu, InventoryProposalsBanner } from './MailAIActionsMenu';
@@ -81,6 +82,7 @@ function buildReplyData(email: Email, mode: 'reply' | 'reply_all' | 'forward'): 
 }
 
 export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigate, composerData, onSend, onCloseComposer, accounts }: MailReadingPaneProps) {
+  const { t } = useI18n();
   useCoNavigation('email', emailId);
   const [email, setEmail] = useState<Email | null>(null);
   const [threadEmails, setThreadEmails] = useState<Email[]>([]);
@@ -139,14 +141,14 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
         }
       })
       .catch(() => {
-        if (!cancelled) setError('Email not found');
+        if (!cancelled) setError(t('mail.emailNotFound'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [emailId]);
+  }, [emailId, t]);
 
   const activeEmailId = useRef(emailId);
   useEffect(() => { activeEmailId.current = emailId; }, [emailId]);
@@ -245,10 +247,10 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
       });
       // Delete the draft after sending
       await api.delete(`/emails/${email.id}`).catch(() => {});
-      toast.success('Email sent');
+      toast.success(t('mail.sentSuccess'));
       onBack?.();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send');
+      toast.error(err?.message || t('mail.sendFailed'));
     }
   };
 
@@ -277,11 +279,11 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     if (!email) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Could not open print window. Check your popup blocker.');
+      toast.error(t('mail.printBlocked'));
       return;
     }
     const content = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>${email.subject || 'Email'}</title>
+<html><head><meta charset="UTF-8"><title>${email.subject || t('mail.emailPrint')}</title>
 <style>
 body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #000; }
 .header { border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
@@ -293,11 +295,11 @@ body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; marg
 @media print { body { margin: 0; } }
 </style></head><body>
 <div class="header">
-<div class="subject">${email.subject || '(no subject)'}</div>
-<div class="meta"><strong>From:</strong> ${email.from_name || ''} &lt;${email.from_address}&gt;</div>
-<div class="meta"><strong>To:</strong> ${(email.to_addresses ?? []).map(t => `${t.name || ''} <${t.address}>`).join(', ')}</div>
-${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong> ${(email.cc_addresses ?? []).map(c => c.address).join(', ')}</div>` : ''}
-<div class="meta"><strong>Date:</strong> ${new Date(email.received_at).toLocaleString()}</div>
+<div class="subject">${email.subject || t('mail.noSubject')}</div>
+<div class="meta"><strong>${t('mail.fromPrint')}:</strong> ${email.from_name || ''} &lt;${email.from_address}&gt;</div>
+<div class="meta"><strong>${t('mail.toField')}</strong> ${(email.to_addresses ?? []).map(t => `${t.name || ''} <${t.address}>`).join(', ')}</div>
+${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>${t('mail.ccField')}</strong> ${(email.cc_addresses ?? []).map(c => c.address).join(', ')}</div>` : ''}
+<div class="meta"><strong>${t('mail.datePrint')}:</strong> ${new Date(email.received_at).toLocaleString()}</div>
 </div>
 <div class="body">${cuerpo?.cuerpoHtml ?? `<pre>${email.body_plain || ''}</pre>`}</div>
 </body></html>`;
@@ -319,10 +321,10 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     if (!email) return;
     try {
       await api.delete(`/emails/${email.id}`);
-      toast.success('Email deleted');
+      toast.success(t('mail.deletedSuccess'));
       onBack?.();
     } catch {
-      toast.error('Failed to delete email');
+      toast.error(t('mail.deleteFailed'));
     }
   };
 
@@ -337,12 +339,25 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     const targetFolder = email.status === 'draft' ? 'DRAFTS'
       : email.status === 'sent' ? 'SENT'
       : email.pre_snooze_folder ?? 'INBOX';
+    const folderLabelKey: Record<string, string> = {
+      INBOX: 'mail.folderInbox',
+      SNOOZED: 'mail.folderSnoozed',
+      SENT: 'mail.folderSent',
+      DRAFTS: 'mail.folderDrafts',
+      ARCHIVE: 'mail.folderArchive',
+      Archive: 'mail.folderArchive',
+      TRASH: 'mail.folderTrash',
+      SPAM: 'mail.folderSpam',
+    };
+    const targetFolderLabel = folderLabelKey[targetFolder]
+      ? t(folderLabelKey[targetFolder]!)
+      : targetFolder;
     try {
       await api.patch(`/emails/${email.id}`, { folder: targetFolder });
-      toast.success(`Moved back to ${targetFolder}`);
+      toast.success(t('mail.movedBack', { folder: targetFolderLabel }));
       onBack?.();
     } catch {
-      toast.error('Failed to unarchive');
+      toast.error(t('mail.unarchiveFailed'));
     }
     setMoreOpen(false);
   };
@@ -352,9 +367,9 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     if (!confirm(`Block all emails from ${email.from_address}? Existing emails from this sender will be moved to Spam.`)) return;
     try {
       await api.post('/emails/block-sender', { email_address: email.from_address });
-      toast.success(`${email.from_address} blocked`);
+      toast.success(t('mail.senderBlocked', { sender: email.from_address }));
     } catch {
-      toast.error('Failed to block sender');
+      toast.error(t('mail.blockFailed'));
     }
     setMoreOpen(false);
   };
@@ -363,10 +378,10 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     if (!email) return;
     try {
       await api.post(`/emails/${email.id}/report-spam`);
-      toast.success('Reported as spam');
+      toast.success(t('mail.reportedSpam'));
       onBack?.();
     } catch {
-      toast.error('Failed to report spam');
+      toast.error(t('mail.reportSpamFailed'));
     }
     setMoreOpen(false);
   };
@@ -397,9 +412,9 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     try {
       setPermitidos(await recordarRemitente(email.from_address));
       setMostrarRemotas(true);
-      toast.success(`Imágenes permitidas siempre para ${remitenteNormalizado(email.from_address)}`);
+      toast.success(t('mail.remoteAllowedAlways', { sender: remitenteNormalizado(email.from_address) }));
     } catch {
-      toast.error('No se pudo guardar la preferencia');
+      toast.error(t('mail.remotePreferenceFailed'));
     }
   };
 
@@ -463,7 +478,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         )}
         <BookOpen size={32} style={{ color: 'var(--text-muted)' }} />
         <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-          {error || 'Email not found'}
+          {error || t('mail.emailNotFound')}
         </span>
       </div>
     );
@@ -533,7 +548,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     try {
       await api.patch(`/emails/${email.id}`, { labels });
     } catch {
-      toast.error('No se pudieron actualizar las etiquetas');
+      toast.error(t('mail.labelsUpdateFailed'));
     }
   };
 
@@ -575,7 +590,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
             lineHeight: 1.3,
           }}
         >
-          {email.subject ?? '(no subject)'}
+          {email.subject ?? t('mail.noSubject')}
         </h2>
 
         {/* From */}
@@ -624,8 +639,8 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           {email.has_attachments && (
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               {email.attachments
-                ? `${email.attachments.length} attachment${email.attachments.length !== 1 ? 's' : ''}`
-                : 'Has attachments'}
+                ? t('mail.attachmentsCount', { count: email.attachments.length })
+                : t('mail.hasAttachments')}
             </span>
           )}
         </div>
@@ -663,7 +678,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
             // La CSP de un documento YA cargado no se re-evalúa al cambiar el
             // srcDoc: sin re-montar el iframe, «Mostrar» sería un botón muerto.
             key={`${email.id}:${mostrandoRemotas ? 'show' : 'block'}`}
-            title={email.subject || 'Email content'}
+            title={email.subject || t('mail.emailContent')}
             srcDoc={cuerpo.doc}
             sandbox="allow-same-origin"
             style={{ width: '100%', border: 'none', minHeight: 300, background: 'var(--bg)' }}
@@ -755,14 +770,14 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                       fontFamily: 'var(--font-sans)',
                     }}
                   >
-                    {bajando === idx ? 'Bajando…' : 'Download'}
+                    {bajando === idx ? t('mail.downloading') : t('mail.download')}
                   </button>
                 ) : (
                   <span
-                    title="De este adjunto solo se guardó el nombre y el tamaño. Vuelve a sincronizar la cuenta."
+                    title={t('mail.attachmentStoredOnly')}
                     style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}
                   >
-                    no disponible
+                    {t('mail.attachmentUnavailable')}
                   </span>
                 )}
               </div>
@@ -795,14 +810,14 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
       >
         {isDraft ? (
           <>
-            <ActionButton icon={Pencil} label="Edit" onClick={handleEditDraft} />
-            <ActionButton icon={Send} label="Send" onClick={handleSendDraft} />
+            <ActionButton icon={Pencil} label={t('mail.edit')} onClick={handleEditDraft} />
+            <ActionButton icon={Send} label={t('mail.send')} onClick={handleSendDraft} />
           </>
         ) : (
           <>
-            <ActionButton icon={Reply} label="Reply" onClick={handleReply} />
-            <ActionButton icon={ReplyAll} label="Reply All" onClick={handleReplyAll} />
-            <ActionButton icon={Forward} label="Forward" onClick={handleForward} />
+            <ActionButton icon={Reply} label={t('mail.reply')} onClick={handleReply} />
+            <ActionButton icon={ReplyAll} label={t('mail.replyAll')} onClick={handleReplyAll} />
+            <ActionButton icon={Forward} label={t('mail.forward')} onClick={handleForward} />
           </>
         )}
 
@@ -823,7 +838,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           }}
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          title={email.is_starred ? 'Unstar' : 'Star'}
+          title={email.is_starred ? t('mail.unstarTitle') : t('mail.starTitle')}
         >
           <Star
             size={14}
@@ -850,7 +865,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           }}
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          title="Print"
+          title={t('mail.print')}
         >
           <Printer size={14} />
         </button>
@@ -873,7 +888,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           }}
           onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          title="Open in new window"
+          title={t('mail.openNewWindow')}
         >
           <ExternalLink size={14} />
         </button>
@@ -882,6 +897,8 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         <div ref={moreRef} style={{ position: 'relative', marginLeft: 'auto' }}>
           <button
             onClick={() => setMoreOpen(prev => !prev)}
+            title={t('mail.moreActions')}
+            aria-label={t('mail.moreActions')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -921,12 +938,12 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                   <button onClick={() => { handleEditDraft(); setMoreOpen(false); }} style={menuItemStyle}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <Pencil size={14} /> Edit draft
+                    <Pencil size={14} /> {t('mail.edit')}
                   </button>
                   <button onClick={() => { handleSendDraft(); setMoreOpen(false); }} style={menuItemStyle}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <Send size={14} /> Send
+                    <Send size={14} /> {t('mail.send')}
                   </button>
                 </>
               ) : (
@@ -934,17 +951,17 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                   <button onClick={() => { handleReplyAll(); setMoreOpen(false); }} style={menuItemStyle}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <ReplyAll size={14} /> Reply all
+                    <ReplyAll size={14} /> {t('mail.replyAll')}
                   </button>
                   <button onClick={() => { handleForward(); setMoreOpen(false); }} style={menuItemStyle}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <Forward size={14} /> Forward
+                    <Forward size={14} /> {t('mail.forward')}
                   </button>
                   <button onClick={() => { setShareOpen(true); setMoreOpen(false); }} style={menuItemStyle}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <Share2 size={14} /> Compartir
+                    <Share2 size={14} /> {t('mail.share')}
                   </button>
                 </>
               )}
@@ -954,20 +971,20 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
               <button onClick={handleMarkUnread} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <BookOpen size={14} /> Mark unread
+                <BookOpen size={14} /> {t('mail.actionUnread')}
               </button>
               {isArchived && (
                 <button onClick={handleUnarchive} style={menuItemStyle}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <Undo2 size={14} /> Unarchive
+                  <Undo2 size={14} /> {t('mail.actionMoveInbox')}
                 </button>
               )}
               <button onClick={handleDelete}
                 style={{ ...menuItemStyle, color: 'var(--danger, #ef4444)' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Trash2 size={14} /> Delete
+                <Trash2 size={14} /> {t('mail.delete')}
               </button>
 
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
@@ -975,35 +992,35 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
               <button onClick={handleBlockSender} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Ban size={14} /> Block sender
+                <Ban size={14} /> {t('mail.blockSender')}
               </button>
               <button onClick={handleReportSpam} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <ShieldAlert size={14} /> Report spam
+                <ShieldAlert size={14} /> {t('mail.reportSpam')}
               </button>
               <button onClick={() => { handleReportSpam(); }} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <AlertTriangle size={14} /> Report phishing
+                <AlertTriangle size={14} /> {t('mail.reportPhishing')}
               </button>
 
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
 
-              <button onClick={() => { toast.info('Translate — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+              <button onClick={() => { toast.info(t('mail.translateComingSoon')); setMoreOpen(false); }} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Languages size={14} /> Translate
+                <Languages size={14} /> {t('mail.translate')}
               </button>
-              <button onClick={() => { toast.info('Show original — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+              <button onClick={() => { toast.info(t('mail.showOriginalComingSoon')); setMoreOpen(false); }} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Code size={14} /> Show original
+                <Code size={14} /> {t('mail.showOriginal')}
               </button>
               <button onClick={handleDownloadEml} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Download size={14} /> Download .eml
+                <Download size={14} /> {t('mail.downloadEml')}
               </button>
             </div>
           )}
@@ -1037,10 +1054,10 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         open={confirmingDelete}
         onClose={() => setConfirmingDelete(false)}
         onConfirm={() => { setConfirmingDelete(false); void performDelete(); }}
-        title="Delete email"
-        description="Delete this email? It can be restored from Trash."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={t('mail.deleteEmail')}
+        description={t('mail.deleteEmailConfirm')}
+        confirmLabel={t('mail.delete')}
+        cancelLabel={t('mail.cancel')}
         variant="danger"
       />
 

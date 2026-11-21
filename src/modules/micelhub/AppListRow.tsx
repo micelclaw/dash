@@ -1,143 +1,49 @@
-/**
- * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
- * All rights reserved.
- *
- * This file is part of Micelclaw OS and is proprietary software.
- * Unauthorized copying, modification, distribution, or use of this
- * file, via any medium, is strictly prohibited.
- *
- * See LICENSE in the root of this repository for full terms.
- * https://micelclaw.com
- */
-
-import type { MouseEvent } from 'react';
-import { Download, Power, Scan } from 'lucide-react';
+/** Copyright (c) 2026 Micelclaw (Víctor García Valdunciel). All rights reserved. */
+import type { CSSProperties } from 'react';
 import { AppIcon, resolveManifestIcon } from '@/components/shared/AppIcon';
 import type { InstalledApp } from '@/types/apps';
-import { useAppActions } from './useAppActions';
+import { useI18n } from '@/i18n';
+import { AppActionProgress, AppBadges, AppCatalogAction, AppLevelBadge, InstallationSize, type AppPrimaryAction, type CatalogView } from './AppCatalogPresentation';
 
-// Plantilla de columnas COMPARTIDA por la cabecera y las filas → alineación perfecta.
-// app | descripción | nivel | origen | tier | acciones. (Sin columna de Estado: en
-// Instaladas todas están instaladas y en Disponibles todas disponibles → sería redundante.)
-export const LIST_GRID = 'minmax(150px,1.5fr) minmax(130px,2fr) 48px 92px 48px minmax(112px,max-content)';
-
-const LEVEL_COLOR: Record<string, string> = { '1': 'var(--text-dim)', '2': '#3b82f6', '3': '#a855f7' };
-const ORIGIN_COLOR: Record<string, string> = {
-  Micelclaw: '#06b6d4', OpenClaw: '#9f1239', Tuya: '#f59e0b', Community: '#64748b',
-};
+// Shared column template keeps headings and rows aligned in every catalogue.
+export const LIST_GRID = 'minmax(170px,1.5fr) minmax(150px,2fr) 48px 96px 60px minmax(112px,max-content)';
 
 interface AppListRowProps {
   app: InstalledApp;
   origin?: string;
   selected?: boolean;
   onClick: () => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
+  catalogView?: CatalogView;
+  primaryAction?: AppPrimaryAction;
 }
 
-export function AppListHeader() {
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: LIST_GRID, gap: 10, alignItems: 'center',
-      padding: '6px 14px', fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase',
-      letterSpacing: '0.04em', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)',
-      position: 'sticky', top: 0, background: 'var(--bg, var(--card))', zIndex: 1,
-    }}>
-      <span>App</span>
-      <span>Descripción</span>
-      <span>Nivel</span>
-      <span>Origen</span>
-      <span>Tier</span>
-      <span>Acciones</span>
-    </div>
-  );
+export function AppListHeader({ catalogView }: { catalogView?: CatalogView } = {}) {
+  const { t } = useI18n();
+  return <div data-catalog-view={catalogView} className="sticky top-0 z-[1] hidden items-center gap-2.5 border-b border-[var(--border)] bg-[var(--card)] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)] min-[769px]:grid" style={{ gridTemplateColumns: LIST_GRID }}>
+    <span>{t('micelhub.appColumn')}</span><span>{t('micelhub.descriptionColumn')}</span><span>{t('micelhub.level')}</span><span>{t('micelhub.origin')}</span><span>{t('micelhub.tier')}</span><span className="text-right">{t('micelhub.actions')}</span>
+  </div>;
 }
 
-export function AppListRow({ app, origin, selected, onClick, onRefresh }: AppListRowProps) {
-  const manifest = app.manifest;
-  const { handleScan, handleExport, handleToggleStatus } = useAppActions(app, onRefresh);
-
-  const dotColor = app.status === 'error' ? '#ef4444'
-    : app.status === 'disabled' ? 'var(--text-muted)'
-    : manifest?.tags?.includes('unsupported') ? '#ef4444'
-    : manifest?.tags?.includes('needs-setup') ? 'var(--amber)'
-    : '#22c55e';
-
-  const tier = manifest?.tier_required === 'pro' ? 'Pro'
-    : manifest?.tier_required === 'plus' ? 'Plus' : 'Free';
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'grid', gridTemplateColumns: LIST_GRID, gap: 10, alignItems: 'center',
-        padding: '8px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)',
-        background: selected ? 'var(--surface-hover)' : 'transparent',
-        transition: 'background var(--transition-fast)',
-      }}
-      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'var(--surface)'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
-    >
-      {/* App: punto + icono + nombre */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: dotColor }} title={app.status} />
-        <span style={{ display: 'inline-flex', flexShrink: 0 }}><AppIcon {...resolveManifestIcon(manifest)} size={16} /></span>
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {manifest?.name || app.app_name}
-        </span>
-      </div>
-
-      {/* Descripción (recortada) */}
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {manifest?.description || '—'}
+export function AppListRow({ app, origin, selected, onClick, catalogView = app.status === 'active' ? 'installed' : 'available', primaryAction }: AppListRowProps) {
+  const name = app.manifest?.name || app.app_name;
+  return <article aria-label={name} data-app-name={app.app_name} data-app-version={app.version} data-catalog-view={catalogView}
+    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-b border-[var(--border)] px-3.5 py-3 text-xs transition-colors hover:bg-[var(--surface)] min-[769px]:grid-cols-[var(--app-list-columns)]"
+    style={{ '--app-list-columns': LIST_GRID, background: selected ? 'var(--surface-hover)' : undefined } as CSSProperties}>
+    <button type="button" onClick={onClick} aria-pressed={!!selected} className="col-start-1 row-start-1 flex min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] min-[769px]:col-auto min-[769px]:row-auto">
+      <span className="mt-0.5 inline-flex shrink-0"><AppIcon {...resolveManifestIcon(app.manifest)} size={20} /></span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <span className="truncate text-[13px] font-semibold text-[var(--text)]" title={name}>{name}</span>
+        <span className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--text-dim)]"><span>v{app.version}</span>{catalogView === 'installed' && <InstallationSize app={app} />}</span>
+        <AppBadges app={app} showOrigin={false} showPlan={false} />
       </span>
-
-      {/* Nivel */}
-      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: LEVEL_COLOR[String(app.app_level)] ?? 'var(--text-dim)' }}>
-        L{app.app_level}
-      </span>
-
-      {/* Origen */}
-      <span style={{ fontSize: '0.6875rem', color: origin ? (ORIGIN_COLOR[origin] ?? 'var(--text-dim)') : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {origin ?? '—'}
-      </span>
-
-      {/* Tier */}
-      <span style={{ fontSize: '0.6875rem', color: tier === 'Free' ? '#22c55e' : tier === 'Pro' ? 'var(--amber)' : '#3b82f6' }}>
-        {tier}
-      </span>
-
-      {/* Acciones — para toda app (L1/L2/L3) */}
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-        <IconBtn icon={<Scan size={13} />} title="Scan" onClick={handleScan} />
-        <IconBtn icon={<Download size={13} />} title="Export" onClick={handleExport} />
-        <IconBtn
-          icon={<Power size={13} />}
-          title={app.status === 'active' ? 'Desinstalar' : 'Instalar'}
-          warn={app.status === 'active'}
-          onClick={handleToggleStatus}
-        />
-      </div>
-    </div>
-  );
-}
-
-function IconBtn({ icon, title, warn, onClick }: {
-  icon: React.ReactNode; title: string; warn?: boolean; onClick: (e: MouseEvent) => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 24,
-        background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-        color: warn ? 'var(--warning)' : 'var(--text-dim)', cursor: 'pointer',
-        transition: 'color var(--transition-fast), border-color var(--transition-fast)',
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.color = warn ? 'var(--error)' : 'var(--text)'; e.currentTarget.style.borderColor = 'var(--border-hover)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.color = warn ? 'var(--warning)' : 'var(--text-dim)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-    >
-      {icon}
     </button>
-  );
+    <button type="button" onClick={onClick} className="col-span-2 row-start-2 line-clamp-2 min-w-0 break-words text-left leading-relaxed text-[var(--text-dim)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] min-[769px]:col-span-1 min-[769px]:row-auto">{app.manifest?.description || '—'}</button>
+    <div className="col-span-2 row-start-3 flex min-w-0 flex-wrap items-center gap-2 min-[769px]:contents">
+      <AppLevelBadge level={app.app_level} />
+      <AppBadges app={app} origin={origin} showPlan={false} showDistinctions={false} />
+      <AppBadges app={app} showOrigin={false} showDistinctions={false} />
+    </div>
+    <div className="col-start-2 row-start-1 flex min-w-0 max-w-[45vw] flex-col items-end gap-2 min-[769px]:col-auto min-[769px]:row-auto min-[769px]:max-w-none"><AppActionProgress action={primaryAction} /><AppCatalogAction view={catalogView} action={primaryAction} /></div>
+  </article>;
 }

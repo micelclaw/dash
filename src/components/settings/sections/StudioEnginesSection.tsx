@@ -158,7 +158,7 @@ export function StudioEnginesSection() {
           <span style={{ flex: 1 }}>Reload the Gateway so the acpx runtime picks up the change.</span>
           <button
             type="button"
-            onClick={() => { void gwService.restartGateway().then(() => { toast.success('Gateway reloading…'); setShowReload(false); }).catch((err) => toast.error(describeError(err, 'Reload failed'))); }}
+            onClick={() => { if (!window.confirm('¿Reiniciar Gateway? La conexión se interrumpirá brevemente. Comprueba que no haya cambios pendientes o sin confirmar; Micelclaw no puede verificarlos todos.')) return; void gwService.restartGateway().then(() => toast.success('Gateway responde. No se ha comprobado si los cambios se han aplicado.')).catch(() => toast.error('No se pudo confirmar el reinicio. Abre Gateway para revisar el estado o solicita ayuda a un administrador.')); }}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
               fontSize: '0.75rem', fontWeight: 600, background: 'var(--amber)', color: '#000',

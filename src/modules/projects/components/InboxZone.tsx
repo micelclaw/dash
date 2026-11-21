@@ -32,17 +32,18 @@ import { getPreviewUrl } from '@/lib/file-utils';
 import { ConnectButton } from '@/components/shared/ConnectButton';
 import { Link } from 'react-router';
 import type { Card, ChecklistItem } from '../types';
+import { useI18n } from '@/i18n';
 
 function esVencida(c: Card): boolean {
   return !!c.due_date && !c.completed_at && new Date(c.due_date) < new Date(new Date().toDateString());
 }
 
 /** Colores de prioridad, alineados con el punto que ya usa el tablero. */
-const PRIORIDAD: Record<string, { color: string; label: string }> = {
-  urgent: { color: 'var(--red, #e5484d)', label: 'urgente' },
-  high:   { color: 'var(--orange, #f5a524)', label: 'alta' },
-  medium: { color: 'var(--amber)', label: 'media' },
-  low:    { color: 'var(--green, #46a758)', label: 'baja' },
+const PRIORIDAD: Record<string, { color: string; key: string }> = {
+  urgent: { color: 'var(--red, #e5484d)', key: 'projects.inboxZone.priority.urgent' },
+  high:   { color: 'var(--orange, #f5a524)', key: 'projects.inboxZone.priority.high' },
+  medium: { color: 'var(--amber)', key: 'projects.inboxZone.priority.medium' },
+  low:    { color: 'var(--green, #46a758)', key: 'projects.inboxZone.priority.low' },
 };
 
 /** El checklist EMBEBIDO viaja en el listado (`[{id,text,checked}]`): "0/3" sale gratis. */
@@ -62,13 +63,13 @@ function iniciales(nombre: string): string {
   return (primera.charAt(0) + (partes[1] ?? '').charAt(0)).toUpperCase();
 }
 
-function fechaCorta(iso: string): string {
+function fechaCorta(iso: string, t: (key: string) => string): string {
   const d = new Date(iso);
   const hoy = new Date(new Date().toDateString());
   const dia = new Date(new Date(iso).toDateString());
   const diff = Math.round((dia.getTime() - hoy.getTime()) / 86400000);
-  if (diff === 0) return 'hoy';
-  if (diff === 1) return 'mañana';
+  if (diff === 0) return t('projects.inboxZone.date.today');
+  if (diff === 1) return t('projects.inboxZone.date.tomorrow');
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
@@ -79,6 +80,7 @@ export function InboxZone({
   selectedTaskId: string | null;
   onSelectTask: (cardId: string) => void;
 }) {
+  const { t } = useI18n();
   const cards = useProjectsStore((s) => s.inboxCards);
   const loading = useProjectsStore((s) => s.inboxLoading);
   const total = useProjectsStore((s) => s.inboxTotal);
@@ -135,10 +137,10 @@ export function InboxZone({
   const finHoy = inicioHoy + 86400000;
   const contar = (f: (c: Card) => boolean) => cards.filter(f).length;
   const VISTAS = [
-    { id: 'todas' as const, label: 'Todas', filtro: () => true },
-    { id: 'hoy' as const, label: 'Hoy', filtro: (c: Card) => !!c.due_date && new Date(c.due_date).getTime() >= inicioHoy && new Date(c.due_date).getTime() < finHoy },
-    { id: 'vencidas' as const, label: 'Vencidas', filtro: (c: Card) => esVencida(c) },
-    { id: 'sin_fecha' as const, label: 'Sin fecha', filtro: (c: Card) => !c.due_date },
+    { id: 'todas' as const, labelKey: 'projects.inboxZone.view.all', filtro: () => true },
+    { id: 'hoy' as const, labelKey: 'projects.inboxZone.view.today', filtro: (c: Card) => !!c.due_date && new Date(c.due_date).getTime() >= inicioHoy && new Date(c.due_date).getTime() < finHoy },
+    { id: 'vencidas' as const, labelKey: 'projects.inboxZone.view.overdue', filtro: (c: Card) => esVencida(c) },
+    { id: 'sin_fecha' as const, labelKey: 'projects.inboxZone.view.noDate', filtro: (c: Card) => !c.due_date },
   ];
   const filtroActivo = VISTAS.find((v) => v.id === vista)!.filtro;
   const visibles = cards.filter(filtroActivo);
@@ -159,7 +161,7 @@ export function InboxZone({
     >
       <div style={{ padding: '16px 16px 8px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <span style={{ color: 'var(--text)', fontSize: 12, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          Sin tablero
+          {t('projects.inboxZone.heading')}
         </span>
         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{total}</span>
       </div>
@@ -183,7 +185,7 @@ export function InboxZone({
                 border: `1px solid ${activa ? 'var(--amber)' : 'var(--border)'}`,
               }}
             >
-              {v.label} {n}
+              {t(v.labelKey)} {n}
             </button>
           );
         })}
@@ -197,8 +199,8 @@ export function InboxZone({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void submit(); } }}
-            placeholder="Añadir tarea…"
-            aria-label="Añadir tarea"
+            placeholder={t('projects.inboxZone.add.placeholder')}
+            aria-label={t('projects.inboxZone.add.label')}
             style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-sans)' }}
           />
         </div>
@@ -210,13 +212,13 @@ export function InboxZone({
         {parsed.trozos.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6, alignItems: 'center' }}>
             <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
-              Se guardará: «{parsed.titulo || '…'}»
+              {t('projects.inboxZone.preview.willSave', { title: parsed.titulo || '…' })}
             </span>
-            {parsed.trozos.map((t) => (
+            {parsed.trozos.map((trozo) => (
               <button
-                key={t.id}
-                onClick={() => setDescartados((d) => new Set(d).add(t.id))}
-                title="Quitar (vuelve al título)"
+                key={trozo.id}
+                onClick={() => setDescartados((d) => new Set(d).add(trozo.id))}
+                title={t('projects.inboxZone.preview.remove')}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                   padding: '1px 6px', borderRadius: 999, fontSize: 11, cursor: 'pointer',
@@ -224,7 +226,7 @@ export function InboxZone({
                   border: '1px solid var(--border)', fontFamily: 'var(--font-sans)',
                 }}
               >
-                {t.etiqueta}
+                {trozo.etiqueta}
                 <X size={9} style={{ color: 'var(--text-dim)' }} />
               </button>
             ))}
@@ -234,14 +236,14 @@ export function InboxZone({
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 16px' }}>
         {loading && cards.length === 0 ? (
-          <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Cargando…</div>
+          <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>{t('projects.inboxZone.loading')}</div>
         ) : visibles.length === 0 ? (
           <div style={{ padding: '24px 16px', color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5 }}>
             {vista === 'todas'
-              ? 'Nada suelto. Lo que apuntes aquí —o lo que te apunte el agente— aparece en esta lista.'
+              ? t('projects.inboxZone.empty.all')
               : cards.length === 0
-              ? 'Nada suelto todavía.'
-              : `Nada en «${VISTAS.find((v) => v.id === vista)!.label}». Hay ${cards.length} en Todas.`}
+              ? t('projects.inboxZone.empty.none')
+              : t('projects.inboxZone.empty.filtered', { view: t(VISTAS.find((v) => v.id === vista)!.labelKey), count: cards.length })}
           </div>
         ) : (
           visibles.map((c) => {
@@ -256,7 +258,7 @@ export function InboxZone({
             if (prio) señales.push(
               <span key="p" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                 <span style={{ width: 6, height: 6, borderRadius: 999, background: prio.color, display: 'inline-block' }} />
-                {prio.label}
+                {t(prio.key)}
               </span>);
             if (check) señales.push(
               <span key="c" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: check.hechos === check.total ? 'var(--green, #46a758)' : undefined }}>
@@ -317,7 +319,7 @@ export function InboxZone({
                     <EntitySource entity={c} domain="tasks" />
                     {c.due_date && (
                       <span style={{ color: vencida ? 'var(--red, #e5484d)' : 'var(--text-dim)', fontSize: 11, flexShrink: 0 }}>
-                        {fechaCorta(c.due_date)}
+                        {fechaCorta(c.due_date, t)}
                       </span>
                     )}
                   </div>
@@ -351,7 +353,7 @@ export function InboxZone({
           to="/settings/sync#dav-access"
           style={{ display: 'block', padding: '4px 10px', color: 'var(--text-muted)', fontSize: 11, textDecoration: 'none' }}
         >
-          Conectar una app a Micelclaw
+          {t('projects.inboxZone.connectApp')}
         </Link>
       </div>
     </div>

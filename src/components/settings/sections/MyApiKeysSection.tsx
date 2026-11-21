@@ -15,8 +15,10 @@ import { KeyRound, RefreshCw } from 'lucide-react';
 import * as apiKeysSvc from '@/services/api-keys.service';
 import type { ApiKey } from '@/services/api-keys.service';
 import { SettingSection } from '../SettingSection';
+import { useI18n } from '@/i18n';
 
 export function MyApiKeysSection() {
+  const { t, locale } = useI18n();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,10 +36,10 @@ export function MyApiKeysSection() {
 
   return (
     <SettingSection
-      title="My API Keys"
-      description="API keys assigned to your account (read-only)."
+      title={t('settings.myApiKeys.title')}
+      description={t('settings.myApiKeys.description')}
       action={
-        <button onClick={load} className="p-1.5 rounded hover:bg-[var(--surface-hover)]" title="Refresh">
+        <button onClick={load} className="p-1.5 rounded hover:bg-[var(--surface-hover)]" title={t('settings.myApiKeys.refresh')} aria-label={t('settings.myApiKeys.refresh')}>
           <RefreshCw size={14} className={`text-[var(--text-muted)] ${loading ? 'animate-spin' : ''}`} />
         </button>
       }
@@ -45,7 +47,7 @@ export function MyApiKeysSection() {
       {loading ? null : keys.length === 0 ? (
         <div className="text-center py-8 text-sm text-[var(--text-muted)]">
           <KeyRound size={24} className="mx-auto mb-2 opacity-40" />
-          No API keys assigned to your account
+          {t('settings.myApiKeys.empty')}
         </div>
       ) : (
         <div className="space-y-2">
@@ -53,18 +55,15 @@ export function MyApiKeysSection() {
             <div key={key.id} className="flex items-center gap-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
               <KeyRound size={14} className="text-[var(--text-muted)] flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-[var(--text)]">{key.name}</div>
+                <div className="text-xs font-medium text-[var(--text)]">{key.label}</div>
                 <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
-                  <span className="font-mono">{key.prefix}...</span>
-                  {key.scopes.length > 0 && (
+                  <span className="font-mono">{key.key_prefix}...</span>
+                  {key.scope && (
                     <span className="flex gap-1">
-                      {key.scopes.slice(0, 3).map(s => (
-                        <span key={s} className="px-1.5 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)]">{s}</span>
-                      ))}
-                      {key.scopes.length > 3 && <span>+{key.scopes.length - 3}</span>}
+                      <span className="px-1.5 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)]">{key.scope}</span>
                     </span>
                   )}
-                  {key.last_used_at && <span>Last used: {new Date(key.last_used_at).toLocaleDateString()}</span>}
+                  {key.last_used_at && <span>{t('settings.myApiKeys.lastUsed', { date: new Date(key.last_used_at).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US') })}</span>}
                 </div>
               </div>
             </div>

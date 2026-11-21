@@ -82,7 +82,7 @@ function SecurityPinCard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex gap-3">
           <KeyRound size={18} className="mt-0.5 shrink-0 text-[var(--amber)]" />
-          <div><h3 id="security-pin-title" className="m-0 text-sm font-semibold text-[var(--text)]">Security PIN</h3><p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">Required by secure-confirmation actions and emergency access.</p></div>
+          <div><h3 id="security-pin-title" className="m-0 text-sm font-semibold text-[var(--text)]">Your PIN</h3><p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">Personal verification for secure actions and temporary access.</p></div>
         </div>
         {config && mode === 'closed' && (
           <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ function CoreActionLevels() {
   if (!config?.operation_defaults?.length) return null;
   return (
     <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby="core-action-levels-title">
-      <h3 id="core-action-levels-title" className="m-0 text-sm font-semibold text-[var(--text)]">Core action confirmation</h3>
+      <h3 id="core-action-levels-title" className="m-0 text-sm font-semibold text-[var(--text)]">Action confirmation</h3>
       <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">Confirmation levels for native Micelclaw actions. Command execution is controlled by profiles, not by these levels.</p>
       <div className="mt-3 divide-y divide-[var(--border)]">
         {config.operation_defaults.map((operation) => {
@@ -196,7 +196,7 @@ export function ProtectedActionsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><LockKeyhole size={19} className="text-[var(--amber)]" />Protected actions</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Platform floors cannot be weakened by command profiles, agent overrides or approvals.</p></div>
+        <div><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><LockKeyhole size={19} className="text-[var(--amber)]" />Protections</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Your security PIN and the minimum safeguards for actions across the system.</p></div>
         <Button type="button" size="sm" variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} />Refresh</Button>
       </div>
       <SecurityPinCard />
@@ -206,6 +206,7 @@ export function ProtectedActionsPanel() {
         <div className="flex items-center gap-2 py-10 text-sm text-[var(--text-muted)]"><Loader2 size={15} className="animate-spin" />Loading protected categories…</div>
       ) : (
         <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]" aria-label="Protected action categories">
+          <div className="border-b border-[var(--border)] p-4"><h3 className="m-0 text-sm font-semibold text-[var(--text)]">Mandatory protections</h3><p className="mt-1 text-xs text-[var(--text-muted)]">Global safeguards. Agent settings and command profiles cannot weaken these limits.</p></div>
           <div className="divide-y divide-[var(--border)]">
             {categories.map((category) => {
               const floor = FLOOR_META[category.floor];

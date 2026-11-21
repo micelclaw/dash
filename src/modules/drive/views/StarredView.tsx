@@ -12,6 +12,7 @@
 
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { officeFileTarget } from '@/modules/office/office-file-target';
 import { Star, StarOff, Trash2, Tags, UserPlus, FolderInput, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { ViewToggle } from '@/components/shared/ViewToggle';
@@ -223,6 +224,8 @@ export function StarredView() {
   // ─── Open in My Drive ───────────────────────────────────
 
   const handleItemDoubleClick = useCallback((file: FileRecord) => {
+    const office = officeFileTarget(file);
+    if (office) { navigate(office); return; }
     if (file.is_directory) {
       const path = file.filepath.endsWith('/') ? file.filepath : file.filepath + '/';
       navigate(`/drive?tab=my-drive&path=${encodeURIComponent(path)}`);

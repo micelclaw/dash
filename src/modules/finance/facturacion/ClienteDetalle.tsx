@@ -38,18 +38,19 @@ import {
 } from '@/stores/finance-billing.store';
 import { STATUS_META, tintedPillStyle, statusLabel } from './statusMeta';
 import { fmtMoney } from '../lib/format';
+import { useI18n } from '@/i18n';
 
 const ROLE_LABEL: Record<FinanceRole, string> = {
-  customer: 'Customer',
-  supplier: 'Supplier',
+  customer: 'finance.billing.customer',
+  supplier: 'finance.billing.supplier',
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
-  invoice: 'Invoice',
-  quote: 'Quote',
-  bill: 'Factura recibida',
-  receipt: 'Recibo',
-  credit_note: 'Credit note',
+  invoice: 'finance.billing.contact.invoice',
+  quote: 'finance.billing.contact.quote',
+  bill: 'finance.billing.contact.receivedBill',
+  receipt: 'finance.billing.contact.receipt',
+  credit_note: 'finance.billing.contact.creditNote',
 };
 
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
@@ -72,6 +73,7 @@ export function ClienteDetalle({
   contactId: string;
   onOpenInvoice: (docId: string) => void;
 }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { contacts, fetchContactDetail, saveFinanceContact } = useFinanceBillingStore();
   const contactFromList = contacts.find((c) => c.id === contactId) ?? null;
@@ -132,9 +134,9 @@ export function ClienteDetalle({
 
   const save = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { toast.error('The name can\'t be empty'); return; }
+    if (!trimmed) { toast.error(t('finance.billing.contact.enterName')); return; }
     const pt = paymentTerms.trim();
-    if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error('Payment terms: enter a valid number of days'); return; }
+    if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error(t('finance.billing.contact.termsInvalid')); return; }
     setSaving(true);
     try {
       const cleanAddr = Object.fromEntries(
@@ -158,16 +160,16 @@ export function ClienteDetalle({
       const fresh = await fetchContactDetail(contactId).catch(() => null);
       setDetail(fresh ?? detail);
       setEditing(false);
-      toast.success('Contacto actualizado');
+      toast.success(t('finance.billing.contact.updated', { role: t(isSupplier ? 'finance.billing.supplier' : 'finance.billing.customer').toLocaleLowerCase() }));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.contact.saveFailed'));
     } finally {
       setSaving(false);
     }
   };
 
   if (!contact) {
-    return <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: 13 }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Cargando…</div>;
+    return <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: 13 }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> {t('finance.loading')}</div>;
   }
 
   return (
@@ -186,7 +188,7 @@ export function ClienteDetalle({
               <div style={{ fontSize: 19, fontWeight: 600, color: 'var(--text)' }}>{contact.name}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 {contact.roles.map((r) => (
-                  <span key={r} style={tintedPillStyle(r === 'supplier' ? 'var(--amber)' : 'var(--info)')}>{ROLE_LABEL[r]}</span>
+                  <span key={r} style={tintedPillStyle(r === 'supplier' ? 'var(--amber)' : 'var(--info)')}>{t(ROLE_LABEL[r])}</span>
                 ))}
                 {contact.legal_name && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· {contact.legal_name}</span>}
               </div>
@@ -195,13 +197,13 @@ export function ClienteDetalle({
         </div>
         {!editing ? (
           <button onClick={startEdit} style={btnGhost}>
-            <Pencil size={13} /> Edit
+            <Pencil size={13} /> {t('finance.billing.edit')}
           </button>
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={cancelEdit} disabled={saving} style={btnGhost}><XCircle size={13} /> Cancelar</button>
+            <button onClick={cancelEdit} disabled={saving} style={btnGhost}><XCircle size={13} /> {t('finance.cancel')}</button>
             <button onClick={save} disabled={saving} style={btnPrimary}>
-              {saving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} Guardar
+              {saving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} {t('finance.save')}
             </button>
           </div>
         )}
@@ -212,48 +214,48 @@ export function ClienteDetalle({
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
           {isCustomer && (
             <>
-              <Kpi label="Invoiced" value={fmtMoney(balances.invoiced, contact.currency)} accent="var(--amber)" />
-              <Kpi label="Receivable" value={fmtMoney(balances.receivable, contact.currency)} accent="var(--info)" muted={Number(balances.receivable) <= 0} />
+              <Kpi label={t('finance.billing.contact.invoiced')} value={fmtMoney(balances.invoiced, contact.currency)} accent="var(--amber)" />
+              <Kpi label={t('finance.billing.contact.receivable')} value={fmtMoney(balances.receivable, contact.currency)} accent="var(--info)" muted={Number(balances.receivable) <= 0} />
             </>
           )}
           {isSupplier && (
             <>
-              <Kpi label="Comprado" value={fmtMoney(balances.billed, contact.currency)} accent="var(--error)" muted={Number(balances.billed) <= 0} />
-              <Kpi label="To pay" value={fmtMoney(balances.payable, contact.currency)} accent="var(--warning)" muted={Number(balances.payable) <= 0} />
+              <Kpi label={t('finance.billing.contact.billed')} value={fmtMoney(balances.billed, contact.currency)} accent="var(--error)" muted={Number(balances.billed) <= 0} />
+              <Kpi label={t('finance.billing.contact.payable')} value={fmtMoney(balances.payable, contact.currency)} accent="var(--warning)" muted={Number(balances.payable) <= 0} />
             </>
           )}
         </div>
       )}
 
       {/* Datos fiscales / de pago */}
-      <Section icon={<Wallet size={14} />} title="Details">
+      <Section icon={<Wallet size={14} />} title={t('finance.billing.contact.details')}>
         {editing ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 10 }}>
-            <Field label="Name"><input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field>
-            <Field label="Legal name"><input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Nombre legal completo" style={inputStyle} /></Field>
+            <Field label={t('finance.billing.contact.name')}><input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field>
+            <Field label={t('finance.billing.contact.legalName')}><input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder={t('finance.billing.contact.fullLegalName')} style={inputStyle} /></Field>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <Field label="Tax ID" style={{ flex: '1 1 160px' }}>
+              <Field label={t('finance.billing.contact.taxId')} style={{ flex: '1 1 160px' }}>
                 <input value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="B12345678" style={{ ...inputStyle, fontFamily: 'var(--font-mono, monospace)' }} />
               </Field>
-              <Field label="Currency" style={{ width: 110 }}>
+              <Field label={t('finance.billing.contact.currency')} style={{ width: 110 }}>
                 <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={inputStyle}>
                   {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
-              <Field label="Vencimiento (días)" style={{ width: 150 }}>
+              <Field label={`${t('finance.billing.contact.paymentTerms')} (${t('finance.billing.contact.days')})`} style={{ width: 150 }}>
                 <input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} inputMode="numeric" placeholder="p.ej. 30" style={{ ...inputStyle, fontFamily: 'var(--font-mono, monospace)' }} />
               </Field>
             </div>
-            <Field label="Website"><input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" style={inputStyle} /></Field>
+            <Field label={t('finance.billing.contact.website')}><input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" style={inputStyle} /></Field>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 10 }}>
-            <InfoCard label="Tax ID" value={contact.tax_id || '—'} mono />
-            <InfoCard label="Currency" value={contact.currency || 'EUR'} mono />
-            <InfoCard label="Payment terms" value={contact.payment_terms != null ? `${contact.payment_terms} días` : '—'} />
+            <InfoCard label={t('finance.billing.contact.taxId')} value={contact.tax_id || '—'} mono />
+            <InfoCard label={t('finance.billing.contact.currency')} value={contact.currency || 'EUR'} mono />
+            <InfoCard label={t('finance.billing.contact.paymentTerms')} value={contact.payment_terms != null ? `${contact.payment_terms} ${t('finance.billing.contact.days')}` : '—'} />
             {contact.website && (
               <div style={{ flex: '1 1 150px', minWidth: 150, padding: '10px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Website</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{t('finance.billing.contact.website')}</div>
                 <a href={contact.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, fontWeight: 600, color: 'var(--info)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Globe size={13} /> {contact.website.replace(/^https?:\/\//, '')}
                 </a>
@@ -265,7 +267,7 @@ export function ClienteDetalle({
 
       {/* Emails (del contacto del CRM) */}
       {!editing && emails.length > 0 && (
-        <Section icon={<Mail size={14} />} title="Emails">
+        <Section icon={<Mail size={14} />} title={t('finance.billing.contact.emails')}>
           <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {emails.map((e) => (
               <a key={e} href={`mailto:${e}`} style={{ fontSize: 13, color: 'var(--info)', textDecoration: 'none' }}>{e}</a>
@@ -275,7 +277,7 @@ export function ClienteDetalle({
       )}
 
       {/* Dirección de facturación (objeto único) */}
-      <Section icon={<MapPin size={14} />} title="Billing address">
+      <Section icon={<MapPin size={14} />} title={t('finance.billing.contact.billingAddress')}>
         {editing ? (
           <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {(['line1', 'line2', 'postal_code', 'city', 'region', 'country'] as (keyof BillingAddress)[]).map((f) => (
@@ -283,7 +285,7 @@ export function ClienteDetalle({
                 key={f}
                 value={(addr[f] as string) ?? ''}
                 onChange={(e) => setAddr((prev) => ({ ...prev, [f]: e.target.value }))}
-                placeholder={ADDR_PLACEHOLDER[f]}
+                placeholder={t(ADDR_PLACEHOLDER[f])}
                 style={inputStyle}
               />
             ))}
@@ -291,7 +293,7 @@ export function ClienteDetalle({
         ) : (
           <div style={{ paddingTop: 6 }}>
             {!contact.billing_address || fmtAddress(contact.billing_address) === '' ? (
-              <div style={emptyStyle}>No address.</div>
+              <div style={emptyStyle}>{t('finance.billing.contact.noAddress')}</div>
             ) : (
               <div style={{ padding: '7px 0', fontSize: 13, color: 'var(--text)' }}>{fmtAddress(contact.billing_address)}</div>
             )}
@@ -300,18 +302,18 @@ export function ClienteDetalle({
       </Section>
 
       {/* Notas + Tags */}
-      <Section icon={<StickyNote size={14} />} title="Notes">
+      <Section icon={<StickyNote size={14} />} title={t('finance.billing.contact.notes')}>
         {editing ? (
           <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Internal notes about this contact…" style={{ ...inputStyle, resize: 'vertical' }} />
-            <Field label="Etiquetas (separadas por coma)">
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder={t('finance.billing.contact.internalNotes', { role: t('finance.billing.contact.contact') })} style={{ ...inputStyle, resize: 'vertical' }} />
+            <Field label={`${t('finance.billing.contact.tags')} (${t('finance.billing.contact.commaSeparated')})`}>
               <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="vip, recurrente, moroso" style={inputStyle} />
             </Field>
           </div>
         ) : (
           <div style={{ paddingTop: 8 }}>
             <div style={{ fontSize: 13, color: contact.notes ? 'var(--text)' : 'var(--text-muted)', whiteSpace: 'pre-wrap', marginBottom: (contact.tags ?? []).length ? 10 : 0 }}>
-              {contact.notes || 'No notes.'}
+              {contact.notes || t('finance.billing.contact.noNotes')}
             </div>
             {(contact.tags ?? []).length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -332,16 +334,16 @@ export function ClienteDetalle({
             onClick={() => navigate(`/contacts?id=${contact.id}`)}
             style={{ ...btnGhost, fontSize: 12 }}
           >
-            <FileText size={13} /> Open in CRM
+            <FileText size={13} /> {t('finance.billing.contact.openCrm')}
           </button>
         </div>
       )}
 
       {/* Documentos del contacto — lista clicable */}
-      <Section icon={<FileText size={14} />} title={`Documents (${docs?.length ?? 0})`}>
+      <Section icon={<FileText size={14} />} title={t('finance.billing.contact.documents', { count: docs?.length ?? 0 })}>
         <div style={{ paddingTop: 6 }}>
-          {docs === null && <div style={emptyStyle}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Cargando…</div>}
-          {docs !== null && docs.length === 0 && <div style={emptyStyle}>This contact has no documents yet.</div>}
+          {docs === null && <div style={emptyStyle}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('finance.loading')}</div>}
+          {docs !== null && docs.length === 0 && <div style={emptyStyle}>{t('finance.billing.contact.noDocuments')}</div>}
           {(docs ?? []).map((d) => (
             <div
               key={d.id}
@@ -355,12 +357,12 @@ export function ClienteDetalle({
             >
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                 <span style={{ color: 'var(--text)' }}>
-                  {DOC_TYPE_LABEL[d.type]}{' '}
+                  {t(DOC_TYPE_LABEL[d.type])}{' '}
                   {d.number
                     ? <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--mod-finance)' }}>{d.number}</span>
-                    : <span style={{ color: 'var(--text-muted)' }}>(sin número)</span>}
+                    : <span style={{ color: 'var(--text-muted)' }}>{t('finance.billing.contact.noNumber')}</span>}
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.issue_date}{d.due_date ? ` · vence ${d.due_date}` : ''}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.issue_date}{d.due_date ? t('finance.billing.contact.dueDate', { date: d.due_date }) : ''}</span>
               </span>
               <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
                 <StatusBadge status={d.status} docType={d.type} />
@@ -384,13 +386,13 @@ export function ClienteDetalle({
 // ─── Sub-componentes / estilos ───────────────────────────────────────────
 
 const ADDR_PLACEHOLDER: Record<keyof BillingAddress, string> = {
-  label: 'Etiqueta',
-  line1: 'Street and number',
-  line2: 'Piso / puerta',
-  postal_code: 'C.P.',
-  city: 'City',
-  region: 'Provincia',
-  country: 'Country',
+  label: 'finance.billing.contact.address.label',
+  line1: 'finance.billing.contact.address.line1',
+  line2: 'finance.billing.contact.address.line2',
+  postal_code: 'finance.billing.contact.address.postalCode',
+  city: 'finance.billing.contact.address.city',
+  region: 'finance.billing.contact.address.region',
+  country: 'finance.billing.contact.address.country',
 };
 
 const inputStyle: React.CSSProperties = {

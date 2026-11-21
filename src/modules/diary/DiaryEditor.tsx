@@ -34,18 +34,12 @@ import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useDiaryLinks } from './hooks/use-diary-links';
 import { useDayContext } from './hooks/use-day-context';
 import { DayContext } from './DayContext';
-import { formatDateLong } from '@/lib/date-helpers';
 import type { DiaryEntry, MoodLevel } from './types';
+import { useI18n } from '@/i18n';
+import { formatDate } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 
 const lowlight = createLowlight(common);
-
-const DIARY_PLACEHOLDERS = [
-  'How was your day?',
-  'What did you learn today?',
-  'What are you grateful for?',
-  'What was the highlight of your day?',
-  'What challenged you today?',
-];
 
 interface DiaryEditorProps {
   entry: DiaryEntry;
@@ -54,6 +48,8 @@ interface DiaryEditorProps {
 }
 
 export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   useCoNavigation('diary', entry.id);
   const { links, loading: linksLoading } = useDiaryLinks(entry.id);
   const isPro = useAuthStore(s => s.user?.tier !== 'free');
@@ -67,7 +63,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   const dayOfYear = Math.floor(
     (new Date(entry.entry_date + 'T12:00:00').getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000,
   );
-  const placeholder = DIARY_PLACEHOLDERS[Math.abs(dayOfYear) % DIARY_PLACEHOLDERS.length]!;
+  const placeholder = [t('diary.prompt.day'), t('diary.prompt.learned'), t('diary.prompt.grateful'), t('diary.prompt.highlight'), t('diary.prompt.challenge')][Math.abs(dayOfYear) % 5]!;
 
   const editor = useEditor({
     extensions: [
@@ -141,33 +137,33 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
     setGenerating(true);
     try {
       await api.post(`/diary/${entry.entry_date}/narrative`);
-      toast.success('Narrative generated');
+      toast.success(t('diary.narrativeGenerated'));
       onBack?.();
     } catch (err: any) {
       const code = err?.response?.data?.error?.code;
-      if (code === 'TIER_RESTRICTED') toast.error('Photo Narrative is a Pro feature');
-      else if (code === 'INSUFFICIENT_PHOTOS') toast.error('Need at least 3 processed photos');
-      else if (code === 'NARRATIVE_EXISTS') toast.error('A narrative already exists for this day');
-      else toast.error(err?.message || 'Failed to generate narrative');
+      if (code === 'TIER_RESTRICTED') toast.error(t('diary.narrativePro'));
+      else if (code === 'INSUFFICIENT_PHOTOS') toast.error(t('diary.needProcessedPhotos'));
+      else if (code === 'NARRATIVE_EXISTS') toast.error(t('diary.narrativeExists'));
+      else toast.error(err?.message || t('diary.generateFailed'));
     } finally {
       setGenerating(false);
     }
-  }, [entry.entry_date, onBack]);
+  }, [entry.entry_date, onBack, t]);
 
   const handleSaveNarrative = useCallback(async () => {
     await onUpdate(entry.id, { is_draft: false });
-    toast.success('Narrative saved');
-  }, [entry.id, onUpdate]);
+    toast.success(t('diary.narrativeSaved'));
+  }, [entry.id, onUpdate, t]);
 
   const handleDiscardNarrative = useCallback(async () => {
     try {
       await api.delete(`/diary/${entry.id}`);
-      toast.success('Narrative discarded');
+      toast.success(t('diary.narrativeDiscarded'));
       onBack?.();
     } catch {
-      toast.error('Failed to discard');
+      toast.error(t('diary.discardFailed'));
     }
-  }, [entry.id, onBack]);
+  }, [entry.id, onBack, t]);
 
   const handleRegenerateNarrative = useCallback(async () => {
     try {
@@ -176,7 +172,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
     await handleGenerateNarrative();
   }, [entry.id, handleGenerateNarrative]);
 
-  const dateFormatted = formatDateLong(new Date(entry.entry_date + 'T12:00:00'));
+  const dateFormatted = formatDate(new Date(entry.entry_date + 'T12:00:00'), locale, general);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
@@ -197,14 +193,14 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
           </span>
           {saving && (
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-              Saving...
+              {t('diary.saving')}
             </span>
           )}
         </div>
 
         {/* Mood + tags row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Mood:</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('diary.mood')}</span>
           <MoodSelector value={entry.mood} onChange={handleMoodChange} />
 
           <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 4px' }} />
@@ -216,7 +212,8 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
           <button
             disabled={!canGenerate}
             onClick={handleGenerateNarrative}
-            title={!isPro ? 'Pro feature' : photoCount < 3 ? 'Need at least 3 photos' : 'Generate photo narrative'}
+            title={!isPro ? t('diary.proFeature') : photoCount < 3 ? t('diary.needPhotos') : t('diary.generateNarrative')}
+            aria-label={t('diary.generateNarrative')}
             style={{
               marginLeft: 'auto',
               display: 'flex',
@@ -235,7 +232,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
             }}
           >
             {generating ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={12} />}
-            {generating ? 'Generating...' : 'Auto-generate'}
+            {generating ? t('diary.generating') : t('diary.generate')}
             {!isPro && (
               <span style={{ fontSize: '0.625rem', padding: '0 4px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
                 Pro
@@ -259,7 +256,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
           flexShrink: 0,
         }}>
           <Sparkles size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-          <span style={{ color: 'var(--text-dim)', flex: 1 }}>AI-generated draft — review and edit before saving</span>
+          <span style={{ color: 'var(--text-dim)', flex: 1 }}>{t('diary.draftNotice')}</span>
           <button
             onClick={handleSaveNarrative}
             style={{
@@ -267,7 +264,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
               border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
               fontFamily: 'var(--font-sans)', cursor: 'pointer', fontWeight: 500,
             }}
-          >Save</button>
+          >{t('diary.save')}</button>
           <button
             onClick={handleDiscardNarrative}
             style={{
@@ -275,7 +272,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
               border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
               fontFamily: 'var(--font-sans)', cursor: 'pointer',
             }}
-          >Discard</button>
+          >{t('diary.discard')}</button>
           <button
             onClick={handleRegenerateNarrative}
             style={{
@@ -283,7 +280,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
               border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
               fontFamily: 'var(--font-sans)', cursor: 'pointer',
             }}
-          >Regenerate</button>
+          >{t('diary.regenerate')}</button>
         </div>
       )}
 

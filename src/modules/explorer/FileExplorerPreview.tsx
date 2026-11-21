@@ -15,6 +15,7 @@ import { ExternalLink, Star, Users, User, FileText } from 'lucide-react';
 import { FileDetailsContent } from '@/components/shared/FileDetailsContent';
 import { formatRelative } from '@/lib/date-helpers';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 interface FileExplorerPreviewProps {
   file: FileRecord;
@@ -45,28 +46,29 @@ export function FileExplorerPreview({ file, isWritable, onClose, onDelete }: Fil
 }
 
 function GDriveDetails({ meta, createdAt }: { meta: Record<string, any>; createdAt: string }) {
+  const { t } = useI18n();
   const rows: Array<{ label: string; value: string; icon?: React.ReactNode; link?: string }> = [];
 
   if (meta.drive_type) {
-    rows.push({ label: 'Type', value: formatDriveType(meta.drive_type), icon: <FileText size={12} /> });
+    rows.push({ label: t('explorer.preview.type'), value: formatDriveType(meta.drive_type), icon: <FileText size={12} /> });
   }
   if (meta.owner) {
-    rows.push({ label: 'Owner', value: meta.owner, icon: <User size={12} /> });
+    rows.push({ label: t('explorer.preview.owner'), value: meta.owner, icon: <User size={12} /> });
   }
   if (meta.last_modifying_user) {
-    rows.push({ label: 'Last modified by', value: meta.last_modifying_user });
+    rows.push({ label: t('explorer.preview.modifiedBy'), value: meta.last_modifying_user });
   }
   if (meta.shared) {
-    rows.push({ label: 'Sharing', value: 'Shared', icon: <Users size={12} /> });
+    rows.push({ label: t('explorer.preview.sharing'), value: t('explorer.preview.shared'), icon: <Users size={12} /> });
   }
   if (createdAt) {
-    rows.push({ label: 'Created', value: formatRelative(new Date(createdAt)) });
+    rows.push({ label: t('explorer.preview.created'), value: formatRelative(new Date(createdAt)) });
   }
   if (meta.description) {
-    rows.push({ label: 'Description', value: meta.description });
+    rows.push({ label: t('explorer.preview.description'), value: meta.description });
   }
   if (meta.web_view_link) {
-    rows.push({ label: 'Open in Drive', value: 'View', icon: <ExternalLink size={12} />, link: meta.web_view_link });
+    rows.push({ label: t('explorer.preview.openDrive'), value: t('explorer.preview.view'), icon: <ExternalLink size={12} />, link: meta.web_view_link });
   }
 
   if (rows.length === 0) return null;
@@ -90,7 +92,7 @@ function GDriveDetails({ meta, createdAt }: { meta: Record<string, any>; created
         gap: 4,
       }}>
         {meta.starred && <Star size={10} style={{ color: '#f59e0b', fill: '#f59e0b' }} />}
-        Google Drive Details
+        {t('explorer.preview.driveDetails')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {rows.map(row => (

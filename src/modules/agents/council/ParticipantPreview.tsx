@@ -11,6 +11,7 @@
  */
 
 import { getAgentColor } from '../agent-colors';
+import { useI18n } from '@/i18n';
 import type { ManagedAgent } from '../types';
 
 interface ParticipantPreviewProps {
@@ -25,13 +26,14 @@ interface ParticipantPreviewProps {
  * lista de checkboxes para dar feedback inmediato de quién asistirá.
  */
 export function ParticipantPreview({ agents, selectedIds, userParticipates }: ParticipantPreviewProps) {
+  const { t } = useI18n();
   const selected = agents.filter((a) => selectedIds.has(a.id));
   const total = selected.length + (userParticipates ? 1 : 0);
 
   if (total === 0) {
     return (
       <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '6px 2px' }}>
-        Selecciona al menos un participante.
+        {t('council.preview.noParticipants')}
       </div>
     );
   }
@@ -64,7 +66,7 @@ export function ParticipantPreview({ agents, selectedIds, userParticipates }: Pa
       {selected.map((a) => (
         <Avatar key={a.id} emoji={a.avatar ?? '🤖'} color={getAgentColor(a.name, a.color)} label={a.display_name} />
       ))}
-      {userParticipates && <Avatar emoji="👤" color="var(--amber)" label="Tú" />}
+      {userParticipates && <Avatar emoji="👤" color="var(--amber)" label={t('council.preview.you')} />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Copy, Plus, Link2, Upload } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { useI18n } from '@/i18n';
 import type { Album } from '@/types/files';
 
 interface AlbumShareModalProps {
@@ -36,6 +37,7 @@ interface ContactResult {
 }
 
 export function AlbumShareModal({ open, album, onClose, requestMode = false }: AlbumShareModalProps) {
+  const { t } = useI18n();
   const [access, setAccess] = useState<'public' | 'private'>('public');
   const [password, setPassword] = useState('');
   const [permission, setPermission] = useState<'read' | 'edit'>('read');
@@ -112,20 +114,20 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
         people: people.map(p => ({ email: p.email, permission: p.permission })),
       });
       setShareLink(res.data.url);
-      toast.success('Share link created');
+      toast.success(t('photos.share.created'));
     } catch {
-      toast.error('Failed to create share link');
+      toast.error(t('photos.share.failed'));
     }
     setSharing(false);
-  }, [album, access, password, permission, uploadOnly, people]);
+  }, [album, access, password, permission, uploadOnly, people, t]);
 
   const handleCopy = useCallback(async () => {
     if (!shareLink) return;
     try {
       await navigator.clipboard.writeText(shareLink);
-      toast.success('Link copied to clipboard');
+      toast.success(t('photos.share.copied'));
     } catch { /* fallback */ }
-  }, [shareLink]);
+  }, [shareLink, t]);
 
   if (!open || !album) return null;
 
@@ -161,9 +163,9 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
           padding: '16px 20px', borderBottom: '1px solid var(--border)',
         }}>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-            {requestMode ? 'Request Files' : 'Share'}: {album.name}
+            {t(requestMode ? 'photos.share.request' : 'photos.share.share')}: {album.name}
           </h3>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label={t('photos.share.close')} style={{
             background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2,
           }}>
             <X size={16} />
@@ -172,56 +174,58 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
 
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Upload-only toggle */}
-          <Section title="Mode">
+          <Section title={t('photos.share.mode')}>
             <label style={radioLabelStyle}>
               <input type="radio" name="mode" checked={!uploadOnly}
                 onChange={() => setUploadOnly(false)} style={radioStyle} />
-              Share album
+              {t('photos.share.album')}
             </label>
             <label style={radioLabelStyle}>
               <input type="radio" name="mode" checked={uploadOnly}
                 onChange={() => setUploadOnly(true)} style={radioStyle} />
               <Upload size={14} style={{ marginRight: 4 }} />
-              Request files (upload only)
+              {t('photos.share.uploadOnly')}
             </label>
           </Section>
 
           {/* Access */}
-          <Section title="Access">
+          <Section title={t('photos.share.access')}>
             <label style={radioLabelStyle}>
               <input type="radio" name="access" checked={access === 'public'}
                 onChange={() => setAccess('public')} style={radioStyle} />
-              Public link (anyone with the link)
+              {t('photos.share.public')}
             </label>
             <label style={radioLabelStyle}>
               <input type="radio" name="access" checked={access === 'private'}
                 onChange={() => setAccess('private')} style={radioStyle} />
-              Private link (requires password)
+              {t('photos.share.private')}
             </label>
             {access === 'private' && (
               <input type="text" value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder={t('photos.share.password')}
+                aria-label={t('photos.share.password')}
                 style={{ ...inputStyle, marginLeft: 24, width: 'calc(100% - 24px)' }}
               />
             )}
 
             {!uploadOnly && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Permission:</span>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('photos.share.permission')}</span>
                 <select value={permission}
+                  aria-label={t('photos.share.permission')}
                   onChange={e => setPermission(e.target.value as 'read' | 'edit')}
                   style={selectStyle}
                 >
-                  <option value="read">Read only</option>
-                  <option value="edit">Can edit</option>
+                  <option value="read">{t('photos.share.read')}</option>
+                  <option value="edit">{t('photos.share.edit')}</option>
                 </select>
               </div>
             )}
           </Section>
 
           {/* Share with people */}
-          <Section title="Share with people">
+          <Section title={t('photos.share.people')}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', position: 'relative' }}>
               <input
                 value={personInput}
@@ -229,11 +233,13 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
                 onKeyDown={e => { if (e.key === 'Enter') handleAddFromInput(); }}
                 onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                placeholder="Enter email or name..."
+                placeholder={t('photos.share.enterPerson')}
+                aria-label={t('photos.share.enterPerson')}
                 style={{ ...inputStyle, flex: 1 }}
               />
               <button
                 onClick={handleAddFromInput}
+                aria-label={t('photos.share.addPerson')}
                 onMouseEnter={() => setAddHover(true)}
                 onMouseLeave={() => setAddHover(false)}
                 style={{
@@ -301,7 +307,7 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
                         {p.name || p.email}
                       </span>
                     </div>
-                    <button onClick={() => removePerson(p.email)} style={{
+                    <button onClick={() => removePerson(p.email)} aria-label={t('photos.share.removePerson', { name: p.name || p.email })} style={{
                       background: 'transparent', border: 'none', cursor: 'pointer',
                       color: 'var(--text-muted)', padding: 2,
                     }}>
@@ -335,7 +341,7 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
                 fontFamily: 'var(--font-sans)', cursor: 'pointer', flexShrink: 0,
               }}>
                 <Copy size={12} />
-                Copy
+                {t('photos.share.copy')}
               </button>
             </div>
           )}
@@ -351,7 +357,7 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
             borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)',
             fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
           }}>
-            Cancel
+            {t('photos.cancel')}
           </button>
           <button
             onClick={handleShare}
@@ -369,7 +375,7 @@ export function AlbumShareModal({ open, album, onClose, requestMode = false }: A
               opacity: shareHover && !sharing ? 0.9 : 1,
             }}
           >
-            {sharing ? 'Creating...' : uploadOnly ? 'Create Upload Link' : 'Share'}
+            {t(sharing ? 'photos.share.creating' : uploadOnly ? 'photos.share.createUpload' : 'photos.share.share')}
           </button>
         </div>
       </div>

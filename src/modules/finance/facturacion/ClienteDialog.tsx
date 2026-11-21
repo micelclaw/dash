@@ -22,19 +22,20 @@ import { X, Users, Search, Loader2 } from 'lucide-react';
 import { useFinanceBillingStore, type FinanceRole } from '@/stores/finance-billing.store';
 import { api } from '@/services/api';
 import { useEscapeClose } from '../use-escape-close';
+import { useI18n } from '@/i18n';
 
 interface CrmContact { id: string; display_name: string; company: string | null }
 
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
 
 export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'customer' }: { open: boolean; onClose: () => void; contactId?: string; role?: FinanceRole }) {
+  const { t } = useI18n();
   const { contacts, saveFinanceContact, tagContact } = useFinanceBillingStore();
   const editing = contacts.find((c) => c.id === contactId) ?? null;
 
   // ¿Es un alta de proveedor? Determina los textos contextuales del diálogo.
   const isSupplier = roleProp === 'supplier';
-  const entityLabel = isSupplier ? 'supplier' : 'customer';
-  const entityLabelCap = isSupplier ? 'Supplier' : 'Customer';
+  const entityLabel = t(isSupplier ? 'finance.billing.supplier' : 'finance.billing.customer').toLocaleLowerCase();
 
   // Roles del contacto (multi-selección): cliente y/o proveedor.
   const [isCustomer, setIsCustomer] = useState(false);
@@ -88,10 +89,10 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
       // Marca el contacto del CRM existente con el rol activo (o el de la prop).
       const role: FinanceRole = isSupplierRole && !isCustomer ? 'supplier' : isCustomer && !isSupplierRole ? 'customer' : roleProp;
       await tagContact(c.id, role);
-      toast.success(`${role === 'supplier' ? 'Supplier' : 'Customer'} vinculado: ${c.company || c.display_name}`);
+      toast.success(t('finance.billing.contact.linked', { role: t(role === 'supplier' ? 'finance.billing.supplier' : 'finance.billing.customer').toLocaleLowerCase(), name: c.company || c.display_name }));
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t link the contact');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.contact.linkFailed'));
     } finally {
       setSaving(false);
     }
@@ -149,13 +150,13 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
 
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { toast.error('Enter the name'); return; }
+    if (!trimmed) { toast.error(t('finance.billing.contact.enterName')); return; }
     const roles: FinanceRole[] = [];
     if (isCustomer) roles.push('customer');
     if (isSupplierRole) roles.push('supplier');
-    if (roles.length === 0) { toast.error('Tick at least one role (Customer or Supplier)'); return; }
+    if (roles.length === 0) { toast.error(t('finance.billing.contact.roleRequired')); return; }
     const pt = paymentTerms.trim();
-    if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error('Due date: enter a valid number of days'); return; }
+    if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error(t('finance.billing.contact.termsInvalid')); return; }
     setSaving(true);
     try {
       // Dirección de facturación (objeto único). Vacíos → null.
@@ -184,10 +185,10 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         ...(editing ? {} : { email: email.trim() || undefined }),
       });
-      toast.success(editing ? `${entityLabelCap} actualizado` : `${entityLabelCap} creado`);
+      toast.success(t(editing ? 'finance.billing.contact.updated' : 'finance.billing.contact.created', { role: entityLabel }));
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.contact.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -213,8 +214,8 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 400, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '8vh' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 480, maxWidth: '92vw', maxHeight: '84vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{editing ? `Editar ${entityLabel}` : `Nuevo ${entityLabel}`}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{t(editing ? 'finance.billing.contact.edit' : 'finance.billing.contact.new', { role: entityLabel })}</h2>
+          <button onClick={onClose} aria-label={t('finance.close')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
         {/* Alta desde un contacto del CRM (cruce sin duplicar) */}
@@ -222,13 +223,13 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
           <div style={{ marginBottom: 14 }}>
             {!crmOpen ? (
               <button onClick={() => setCrmOpen(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--mod-finance)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                <Users size={14} /> Usar un contacto del CRM
+                <Users size={14} /> {t('finance.billing.contact.link')}
               </button>
             ) : (
               <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 10, background: 'var(--card)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>Marcar contacto del CRM como {entityLabel}</span>
-                  <button onClick={() => setCrmOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}>Type it in</button>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>{t('finance.billing.contact.markRole', { role: entityLabel })}</span>
+                  <button onClick={() => setCrmOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}>{t('finance.billing.contact.typeManually')}</button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                   <Search size={14} style={{ color: 'var(--text-muted)' }} />
@@ -238,7 +239,7 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
                   {crmLoading ? (
                     <div style={{ padding: '12px 0', textAlign: 'center', color: 'var(--text-muted)' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /></div>
                   ) : crmResults.length === 0 ? (
-                    <div style={{ padding: '12px 0', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>No contacts.</div>
+                    <div style={{ padding: '12px 0', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>{t('finance.billing.contact.none')}</div>
                   ) : crmResults.map((c) => (
                     <button key={c.id} onClick={() => pickContact(c)} disabled={saving} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '7px 10px', background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm, 4px)', cursor: saving ? 'wait' : 'pointer', textAlign: 'left', width: '100%' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
@@ -255,57 +256,57 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Name</label>
+            <label style={labelStyle}>{t('finance.billing.contact.name')}</label>
             <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="p.ej. Acme S.L." style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Legal name <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
-            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Nombre legal completo" style={fieldStyle} />
+            <label style={labelStyle}>{t('finance.billing.contact.legalName')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.optional')})</span></label>
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder={t('finance.billing.contact.fullLegalName')} style={fieldStyle} />
           </div>
 
           {/* Dirección de facturación (sale en el PDF de la factura) */}
           <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 12, background: 'var(--card)', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>
-              Dirección de facturación <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>(opcional)</span>
+              {t('finance.billing.contact.billingAddress')} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({t('finance.billing.contact.optional')})</span>
             </span>
             <div>
-              <label style={labelStyle}>Street</label>
-              <input value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="Street and number" style={fieldStyle} />
+              <label style={labelStyle}>{t('finance.billing.contact.street')}</label>
+              <input value={line1} onChange={(e) => setLine1(e.target.value)} placeholder={t('finance.billing.contact.streetPlaceholder')} style={fieldStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Line 2 <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
+              <label style={labelStyle}>{t('finance.billing.contact.line2')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.optional')})</span></label>
               <input value={line2} onChange={(e) => setLine2(e.target.value)} placeholder="Piso, puerta, etc." style={fieldStyle} />
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ width: 130 }}>
-                <label style={labelStyle}>Postcode</label>
+                <label style={labelStyle}>{t('finance.billing.contact.postcode')}</label>
                 <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="28001" style={fieldStyle} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>City</label>
+                <label style={labelStyle}>{t('finance.billing.contact.city')}</label>
                 <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Madrid" style={fieldStyle} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>Province / Region</label>
+                <label style={labelStyle}>{t('finance.billing.contact.region')}</label>
                 <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="Madrid" style={fieldStyle} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>Country</label>
-                <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Spain" style={fieldStyle} />
+                <label style={labelStyle}>{t('finance.billing.contact.country')}</label>
+                <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder={t('finance.billing.contact.country')} style={fieldStyle} />
               </div>
             </div>
           </div>
 
           <div>
-            <label style={labelStyle}>Sitio web <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
+            <label style={labelStyle}>{t('finance.billing.contact.website')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.optional')})</span></label>
             <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" style={fieldStyle} />
           </div>
 
           {!editing && (
             <div>
-              <label style={labelStyle}>Contact email <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
+              <label style={labelStyle}>{t('finance.billing.contact.email')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.optional')})</span></label>
               <input
                 type="email"
                 value={email}
@@ -314,17 +315,17 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
                 style={fieldStyle}
               />
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Se creará un contacto del CRM con este {entityLabel}.
+                {t('finance.billing.contact.crmCreated', { role: entityLabel })}
               </div>
             </div>
           )}
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Tax ID</label>
+              <label style={labelStyle}>{t('finance.billing.contact.taxId')}</label>
               <input value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="B12345678" style={{ ...fieldStyle, fontFamily: 'var(--font-mono, monospace)' }} />
             </div>
             <div style={{ width: 120 }}>
-              <label style={labelStyle}>Currency</label>
+              <label style={labelStyle}>{t('finance.billing.contact.currency')}</label>
               <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={fieldStyle}>
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -332,31 +333,31 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Rol <span style={{ color: 'var(--text-muted)' }}>(uno o ambos)</span></label>
+              <label style={labelStyle}>{t('finance.billing.contact.role')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.oneOrBoth')})</span></label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <RoleCheck checked={isCustomer} onToggle={() => setIsCustomer((v) => !v)} label="Customer" />
-                <RoleCheck checked={isSupplierRole} onToggle={() => setIsSupplierRole((v) => !v)} label="Supplier" />
+                <RoleCheck checked={isCustomer} onToggle={() => setIsCustomer((v) => !v)} label={t('finance.billing.customer')} />
+                <RoleCheck checked={isSupplierRole} onToggle={() => setIsSupplierRole((v) => !v)} label={t('finance.billing.supplier')} />
               </div>
             </div>
             <div style={{ width: 130 }}>
-              <label style={labelStyle}>Vencimiento <span style={{ color: 'var(--text-muted)' }}>(días)</span></label>
+              <label style={labelStyle}>{t('finance.billing.contact.paymentTerms')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.days')})</span></label>
               <input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} inputMode="numeric" placeholder="30" style={{ ...fieldStyle, fontFamily: 'var(--font-mono, monospace)' }} />
             </div>
           </div>
           <div>
-            <label style={labelStyle}>Notas <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={`Notas internas sobre el ${entityLabel}…`} style={{ ...fieldStyle, resize: 'vertical' }} />
+            <label style={labelStyle}>{t('finance.billing.contact.notes')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.optional')})</span></label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder={t('finance.billing.contact.internalNotes', { role: entityLabel })} style={{ ...fieldStyle, resize: 'vertical' }} />
           </div>
           <div>
-            <label style={labelStyle}>Etiquetas <span style={{ color: 'var(--text-muted)' }}>(separadas por coma)</span></label>
+            <label style={labelStyle}>{t('finance.billing.contact.tags')} <span style={{ color: 'var(--text-muted)' }}>({t('finance.billing.contact.commaSeparated')})</span></label>
             <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="vip, recurrente" style={fieldStyle} />
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.cancel')}</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : editing ? 'Save changes' : `Crear ${entityLabel}`}
+            {saving ? t('finance.saving') : editing ? t('finance.billing.contact.saveChanges') : t('finance.billing.contact.create', { role: entityLabel })}
           </button>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

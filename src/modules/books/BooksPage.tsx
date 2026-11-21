@@ -19,6 +19,7 @@ import { ReaderView } from './reader/ReaderView';
 import { LibraryView } from './views/LibraryView';
 import { AudiobooksView } from './views/AudiobooksView';
 import { ManageView } from './views/ManageView';
+import { useI18n } from '@/i18n';
 
 /**
  * Books module — EPUB library (disk-based, foliate-js reader overlay) +
@@ -27,6 +28,7 @@ import { ManageView } from './views/ManageView';
  * books.store (initScrobbleWatcher pattern).
  */
 export function BooksPage() {
+  const { t } = useI18n();
   const activeTab = useBooksStore((s) => s.activeTab);
   const search = useBooksStore((s) => s.search);
   const aiSearch = useBooksStore((s) => s.aiSearch);
@@ -53,9 +55,9 @@ export function BooksPage() {
   }, [searchParams, setSearchParams]);
 
   const tabs: { id: BooksTab; label: string }[] = [
-    { id: 'library', label: 'Library' },
-    { id: 'audiobooks', label: 'Audiobooks' },
-    ...(isAdmin ? [{ id: 'manage' as BooksTab, label: 'Manage' }] : []),
+    { id: 'library', label: t('books.library') },
+    { id: 'audiobooks', label: t('books.audiobooks') },
+    ...(isAdmin ? [{ id: 'manage' as BooksTab, label: t('books.manage') }] : []),
   ];
 
   let content: React.ReactNode;
@@ -83,12 +85,12 @@ export function BooksPage() {
             <MediaToolbar
               search={search}
               onSearchChange={(q) => useBooksStore.getState().setSearch(q)}
-              searchPlaceholder="Search books…"
+              searchPlaceholder={t('books.search')}
               {...(activeTab === 'library' ? {
                 aiSlot: true,
                 aiActive: aiSearch,
                 onAiToggle: () => useBooksStore.getState().toggleAiSearch(),
-                aiPlaceholder: 'Describe a book…',
+                aiPlaceholder: t('books.describeBook'),
               } : {})}
             />
           ) : undefined

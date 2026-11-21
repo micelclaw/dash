@@ -12,7 +12,8 @@
 
 // ─── Gateway API service — wraps /api/v1/gateway/* endpoints ────────
 
-import { api } from './api';
+import { api, ApiError } from './api';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   sanitizeCanvasConfigPayload,
   sanitizeLoggingConfigPayload,
@@ -23,13 +24,14 @@ import {
 } from './openclaw-94-config';
 import type {
   GatewayStatus,
+  GatewayConfiguration,
+  GatewayOperation,
   GatewayHealth,
   GatewayChannel,
   GatewayModel,
   GatewaySession,
   GatewayUsage,
   ConfigHealthReport,
-  AutoFixResult,
   SandboxImageStatus,
   CronJob,
   CronRun,
@@ -47,15 +49,17 @@ import type {
 export interface GatewaySnapshot {
   status: GatewayStatus;
   health: GatewayHealth;
-  channels: { channels: GatewayChannel[]; auth_providers: unknown[] };
-  models: { models: GatewayModel[]; default_model?: string; fallbacks?: string[]; aliases?: Record<string, string> };
-  sessions: { count: number; sessions: GatewaySession[] };
+  channels?: { channels: GatewayChannel[]; auth_providers: unknown[] };
+  models?: { models: GatewayModel[]; default_model?: string; fallbacks?: string[]; aliases?: Record<string, string> };
+  sessions?: { count: number; sessions: GatewaySession[] };
+  configuration?: GatewayConfiguration;
+  operation?: GatewayOperation | null;
   configured?: boolean | null;
   _runtime_ready?: boolean;
 }
 
-export async function getSnapshot(): Promise<GatewaySnapshot> {
-  const res = await api.get<{ data: GatewaySnapshot }>('/gateway/snapshot');
+export async function getSnapshot(signal?: AbortSignal): Promise<GatewaySnapshot> {
+  const res = await api.get<{ data: GatewaySnapshot }>('/gateway/snapshot', undefined, { signal });
   return res.data;
 }
 
@@ -90,16 +94,65 @@ export async function getGatewayHealth(): Promise<GatewayHealth> {
 
 // ─── Actions ────────────────────────────────────────────────────────
 
-export async function startGateway(): Promise<void> {
-  await api.post('/gateway/start');
+export async function startGateway(requestId?: string): Promise<GatewayOperation> {
+  return gatewayAction('start', requestId);
 }
 
-export async function stopGateway(): Promise<void> {
-  await api.post('/gateway/stop');
+export async function recoverGateway(requestId?: string): Promise<GatewayOperation> {
+  return gatewayAction('recover', requestId);
 }
 
-export async function restartGateway(): Promise<void> {
-  await api.post('/gateway/restart');
+export async function stopGateway(requestId?: string): Promise<GatewayOperation> {
+  return gatewayAction('stop', requestId);
+}
+
+export async function restartGateway(requestId?: string): Promise<GatewayOperation> {
+  return gatewayAction('restart', requestId);
+}
+
+// Older callers await a completed action and then display success. Preserve that
+// contract: only an observed succeeded receipt resolves, never HTTP acceptance.
+async function gatewayAction(action: GatewayOperation['action'], requestId?: string): Promise<GatewayOperation> {
+  const send = async (id: string) => {
+    const res = await api.post<{ data: GatewayOperation }>(`/gateway/${action}`, { request_id: id });
+    const operation = validateGatewayOperation(res.data);
+    if (operation.action !== action || operation.request_id !== id) throw new Error('La respuesta no corresponde a esta operación. Comprueba el resultado antes de repetir.');
+    return operation;
+  };
+  if (requestId) return send(requestId);
+  const session = useAuthStore.getState();
+  const sameSession = () => {
+    const current = useAuthStore.getState();
+    return current.isAuthenticated && session.isAuthenticated && !!session.user?.id && !!session.user.role && current.sessionGeneration === session.sessionGeneration
+      && current.user?.id === session.user?.id && current.user?.role === session.user?.role;
+  };
+  // Lazy import prevents a module-initialization cycle: the store imports this
+  // service for the explicit-ID transport branch above.
+  const { useGatewayStore } = await import('@/stores/gateway.store');
+  if (!sameSession()) throw new Error('La sesión cambió durante la recuperación.');
+  const store = useGatewayStore.getState();
+  const operation = await (action === 'start' ? store.gatewayStart() : action === 'recover' ? store.gatewayRecover()
+    : action === 'stop' ? store.gatewayStop() : store.gatewayRestart());
+  if (!sameSession()) throw new Error('La sesión cambió durante la recuperación.');
+  const observed = useGatewayStore.getState();
+  if (operation?.state === 'succeeded' && operation.action === action && observed.gatewayOperation?.id === operation.id
+    && !observed.operationUncertain && !observed.pendingGatewayRequestId) return operation;
+  if (observed.operationUncertain || observed.pendingGatewayRequestId || operation?.state === 'running')
+    throw new Error('La recuperación todavía no está confirmada. Abre Gateway y usa Comprobar de nuevo antes de repetir la acción.');
+  if (observed.operationPermissionDenied) throw new Error('No tienes permiso para esta acción. Solicita ayuda a un administrador.');
+  throw new Error('No se pudo completar la recuperación. Abre Gateway para comprobar el estado.');
+}
+
+export async function getGatewayOperation(requestId?: string): Promise<GatewayOperation | null> {
+  const res = await api.get<{ data: GatewayOperation | null }>('/gateway/operation', { request_id: requestId });
+  return res.data === null ? null : validateGatewayOperation(res.data);
+}
+
+function validateGatewayOperation(value: GatewayOperation): GatewayOperation {
+  if (!value || typeof value.id !== 'string' || !['running', 'succeeded', 'failed'].includes(value.state) || typeof value.message !== 'string' || !['start', 'recover', 'stop', 'restart'].includes(value.action)) {
+    throw new Error('El resultado de recuperación todavía no está disponible. Comprueba de nuevo tras actualizar Core.');
+  }
+  return value;
 }
 
 // ─── Channels ───────────────────────────────────────────────────────
@@ -237,18 +290,8 @@ export async function getConfigHealth(opts?: { checkAgentAuth?: boolean }): Prom
   return res.data;
 }
 
-/**
- * Single-shot saneo for orphan references in openclaw.json. The backend
- * reassigns user-scoped orphan agents to the default primary (saneado), prunes
- * orphan fallbacks, unsets orphan allow-list keys, swaps a broken primary, and
- * propagates auth profiles from a donor. Returns a per-fix breakdown plus the
- * `remaining_issues` audit (non-empty when something couldn't be auto-resolved,
- * typically because the system has zero valid models left).
- */
-export async function autoFixConfigHealth(): Promise<AutoFixResult> {
-  const res = await api.post<{ data: AutoFixResult }>('/gateway/config-health/auto-fix', {});
-  return res.data;
-}
+/** Repair attempts require an explicit stable ID and return an observed receipt. */
+export { startConfigRepair as autoFixConfigHealth, readConfigRepair } from './gateway-config-repair.service';
 
 /**
  * Check whether the Docker sandbox image (`openclaw-sandbox:bookworm-slim`)
@@ -347,6 +390,30 @@ export async function migrateLegacyProvider(provider: string): Promise<{
   return res.data;
 }
 
+export interface ModelAddReceipt {
+  id: string;
+  model: string;
+  kind: 'add' | 'add-with-config';
+  state: 'queued' | 'checking' | 'succeeded' | 'failed' | 'uncertain';
+  phase: string;
+  started_at: string;
+  code?: string;
+  can_reconcile?: boolean;
+}
+export interface ModelAddOperationRead { server_time_ms: number; operation: ModelAddReceipt | null; current?: 'present' | 'unknown' | null }
+export async function readModelAddOperation(requestId?: string): Promise<ModelAddOperationRead> {
+  const response = await api.get<{ data: ModelAddOperationRead }>('/gateway/models/add-operation', requestId ? { request_id: requestId } : undefined);
+  return response.data;
+}
+export async function startModelAddOperation(model: string, requestId: string, custom?: {
+  provider_id: string; model_id: string; name: string;
+}): Promise<ModelAddReceipt> {
+  const response = await api.post<{ data: ModelAddReceipt }>(custom ? '/gateway/models/add-with-config' : '/gateway/models/add', {
+    model, request_id: requestId, ...custom,
+  });
+  return response.data;
+}
+
 export async function addModel(model: string): Promise<void> {
   await api.post('/gateway/models/add', { model });
 }
@@ -372,6 +439,25 @@ export async function addModelWithConfig(params: {
   // por encima del peor caso (23s) para que el cliente reciba el error code real
   // (MODEL_NOT_SERVING) en lugar de abortarse con un "signal timed out" genérico.
   await api.post('/gateway/models/add-with-config', params, { timeout: 25_000 });
+}
+
+export interface ModelRemoveReceipt {
+  id: string;
+  models: string[];
+  state: 'queued' | 'checking' | 'succeeded' | 'failed' | 'uncertain';
+  phase: string;
+  started_at: string;
+  code?: string;
+  can_reconcile?: boolean;
+}
+export interface ModelRemoveOperationRead { server_time_ms: number; operation: ModelRemoveReceipt | null; current?: 'absent' | 'unknown' | null }
+export async function readModelRemoveOperation(requestId?: string): Promise<ModelRemoveOperationRead> {
+  const response = await api.get<{ data: ModelRemoveOperationRead }>('/gateway/models/remove-operation', requestId ? { request_id: requestId } : undefined);
+  return response.data;
+}
+export async function startModelRemoveOperation(models: string[], requestId: string): Promise<ModelRemoveReceipt> {
+  const response = await api.post<{ data: ModelRemoveReceipt }>('/gateway/models/remove', { models, request_id: requestId });
+  return response.data;
 }
 
 export async function removeModel(model: string): Promise<void> {
@@ -1400,13 +1486,32 @@ export interface EnvConfig {
   vars?: Record<string, string>;
 }
 
+export interface EnvConfigSnapshot { config: EnvConfig; configuration_revision: string | null }
+export interface EnvConfigMutationIntent { removed_vars: readonly string[]; expected_revision: string }
+export interface EnvConfigMutationReceipt { configuration_revision: string }
+function envConfigurationRevision(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+/** The revision belongs to this exact configured GET; no second source read. */
+export async function getEnvSnapshot(): Promise<EnvConfigSnapshot> {
+  const res = await api.get<{ data: EnvConfig; meta?: { configuration_revision?: unknown } }>('/gateway/env-config');
+  return { config: res.data, configuration_revision: envConfigurationRevision(res.meta?.configuration_revision) };
+}
+
 export async function getEnvConfig(): Promise<EnvConfig> {
   const res = await api.get<{ data: EnvConfig }>('/gateway/env-config');
   return res.data;
 }
 
-export async function updateEnvConfig(config: EnvConfig): Promise<void> {
-  await api.patch('/gateway/env-config', config);
+export function updateEnvConfig(config: EnvConfig): Promise<void>;
+export function updateEnvConfig(config: EnvConfig, intent: EnvConfigMutationIntent): Promise<EnvConfigMutationReceipt>;
+export async function updateEnvConfig(config: EnvConfig, intent?: EnvConfigMutationIntent): Promise<void | EnvConfigMutationReceipt> {
+  const res = await api.patch<{ data?: { ok?: boolean }; meta?: { configuration_revision?: unknown } }>('/gateway/env-config',
+    intent ? { ...config, removed_vars: [...intent.removed_vars], expected_revision: intent.expected_revision } : config);
+  if (!intent) return; // Existing callers retain their legacy no-metadata contract.
+  const revision = envConfigurationRevision(res?.meta?.configuration_revision);
+  if (res?.data?.ok !== true || !revision) throw new ApiError('ENV_CONFIG_UNCERTAIN', 'The configured environment save could not be confirmed.', undefined, 409);
+  return { configuration_revision: revision };
 }
 
 // ─── Canvas Host Config (Ola 7) ────────────────────────────────────

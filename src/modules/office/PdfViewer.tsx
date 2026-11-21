@@ -24,6 +24,8 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/services/api';
+import { OfficeEditorRouter } from './OfficeEditorRouter';
+import {useI18n} from '@/i18n';
 
 // Wire up the pdf.js worker via the Vite-emitted URL (module worker).
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -67,7 +69,8 @@ interface FileInfo {
   size_bytes: number;
 }
 
-export function Component() {
+function LegacyPdfViewer() {
+  const {t}=useI18n(); const tRef=useRef(t); useEffect(()=>{tRef.current=t;},[t]);
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
   const [file, setFile] = useState<FileInfo | null>(null);
@@ -117,7 +120,7 @@ export function Component() {
         blobUrlRef.current = url;
         setBlobUrl(url);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load PDF');
+        if (!cancelled) setError(err instanceof Error ? err.message : tRef.current('office.pdf.loadError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -197,7 +200,7 @@ export function Component() {
         if (!cancelled) setRendering(false);
       } catch (err) {
         if (!cancelled) {
-          setRenderError(err instanceof Error ? err.message : 'Failed to render PDF');
+          setRenderError(err instanceof Error ? err.message : tRef.current('office.pdf.renderError'));
           setRendering(false);
         }
       }
@@ -220,7 +223,7 @@ export function Component() {
     return (
       <div style={centerStyle}>
         <Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ fontSize: 14 }}>Loading PDF...</span>
+        <span style={{ fontSize: 14 }}>{t('office.pdf.loading')}</span>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -230,9 +233,9 @@ export function Component() {
     return (
       <div style={centerStyle}>
         <AlertTriangle size={32} style={{ color: 'var(--error)' }} />
-        <span style={{ fontSize: 14 }}>Failed to load PDF</span>
+        <span style={{ fontSize: 14 }}>{t('office.pdf.loadError')}</span>
         {error && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{error}</span>}
-        <button onClick={() => navigate('/office')} style={btnStyle}>Back to Office</button>
+        <button onClick={() => navigate('/office')} style={btnStyle}>{t('office.router.office')}</button>
       </div>
     );
   }
@@ -253,17 +256,17 @@ export function Component() {
         background: 'var(--surface)', gap: 8, fontSize: 12,
         color: 'var(--text-dim)', flexShrink: 0,
       }}>
-        <button onClick={() => navigate('/office')} style={iconBtnStyle} title="Back">
+        <button onClick={() => navigate('/office')} style={iconBtnStyle} title={t('office.pdf.back')} aria-label={t('office.pdf.back')}>
           <ArrowLeft size={14} />
         </button>
         <span style={{ fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>
           {file.filename}
         </span>
         <div style={{ flex: 1 }} />
-        <button onClick={handleDownload} style={iconBtnStyle} title="Download">
+        <button onClick={handleDownload} style={iconBtnStyle} title={t('office.pdf.download')} aria-label={t('office.pdf.download')}>
           <Download size={14} />
         </button>
-        <button onClick={() => navigate('/office/pdf/tools')} style={iconBtnStyle} title="Open in PDF Tools">
+        <button onClick={() => navigate('/office/pdf/tools')} style={iconBtnStyle} title={t('office.pdf.tools')} aria-label={t('office.pdf.tools')}>
           <Wrench size={14} />
         </button>
       </div>
@@ -277,7 +280,7 @@ export function Component() {
         {rendering && !renderError && (
           <div style={overlayStyle}>
             <Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: 13 }}>Rendering PDF...</span>
+            <span style={{ fontSize: 13 }}>{t('office.pdf.rendering')}</span>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
@@ -285,13 +288,17 @@ export function Component() {
         {renderError && (
           <div style={overlayStyle}>
             <AlertTriangle size={28} style={{ color: 'var(--error)' }} />
-            <span style={{ fontSize: 13 }}>Failed to render PDF</span>
+            <span style={{ fontSize: 13 }}>{t('office.pdf.renderError')}</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{renderError}</span>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+export function Component() {
+  return <OfficeEditorRouter legacy={LegacyPdfViewer} />;
 }
 
 const centerStyle: React.CSSProperties = {

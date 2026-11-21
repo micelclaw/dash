@@ -17,6 +17,7 @@ import * as syncSvc from '@/services/sync.service';
 import { CollectionsEditor } from './connect/CollectionsEditor';
 import { MappingEditor } from './connect/MappingEditor';
 import * as emailAccountsSvc from '@/services/email-accounts.service';
+import { useI18n } from '@/i18n';
 
 interface EditConnectorModalProps {
   connectorId: string | null;
@@ -51,6 +52,7 @@ interface EmailAccountDetail {
 }
 
 export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnectorModalProps) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -187,7 +189,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
         });
       }
 
-      toast.success('Settings saved');
+      toast.success(t('settings.connectors.settingsSaved'));
       onSaved();
       onClose();
     } catch (err: any) {
@@ -309,38 +311,38 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
           ) : (
             <>
               <div>
-                <label style={labelStyle}>Display Name</label>
+                <label style={labelStyle}>{t('settings.connectors.displayName')}</label>
                 <input style={inputStyle} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
               </div>
 
               {isImap && (
                 <>
                   <div>
-                    <label style={labelStyle}>Email Address</label>
+                    <label style={labelStyle}>{t('settings.connectors.email')}</label>
                     <input style={inputStyle} type="email" value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} />
                   </div>
                   <div style={rowStyle}>
                     <div>
-                      <label style={labelStyle}>IMAP Host</label>
+                      <label style={labelStyle}>{t('settings.connectors.imapHost')}</label>
                       <input style={inputStyle} value={imapHost} onChange={(e) => setImapHost(e.target.value)} />
                     </div>
                     <div>
-                      <label style={labelStyle}>Port</label>
+                      <label style={labelStyle}>{t('settings.connectors.port')}</label>
                       <input style={{ ...inputStyle, textAlign: 'center' }} type="number" value={imapPort} onChange={(e) => setImapPort(Number(e.target.value))} />
                     </div>
                   </div>
                   <div style={rowStyle}>
                     <div>
-                      <label style={labelStyle}>SMTP Host</label>
+                      <label style={labelStyle}>{t('settings.connectors.smtpHost')}</label>
                       <input style={inputStyle} value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
                     </div>
                     <div>
-                      <label style={labelStyle}>Port</label>
+                      <label style={labelStyle}>{t('settings.connectors.port')}</label>
                       <input style={{ ...inputStyle, textAlign: 'center' }} type="number" value={smtpPort} onChange={(e) => setSmtpPort(Number(e.target.value))} />
                     </div>
                   </div>
                   <div>
-                    <label style={labelStyle}>Username</label>
+                    <label style={labelStyle}>{t('settings.connectors.username')}</label>
                     <input style={inputStyle} value={username} onChange={(e) => setUsername(e.target.value)} />
                   </div>
 
@@ -360,7 +362,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                         {testResult === 'testing' ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> :
                          testResult === 'success' ? <CheckCircle2 size={12} style={{ color: '#22c55e' }} /> :
                          testResult === 'failed' ? <XCircle size={12} style={{ color: '#ef4444' }} /> : null}
-                        {testResult === 'testing' ? 'Testing...' : testResult === 'success' ? 'Connected' : testResult === 'failed' ? 'Failed' : 'Test Connection'}
+                        {testResult === 'testing' ? t('settings.connectors.testing') : testResult === 'success' ? t('settings.connectors.connected') : testResult === 'failed' ? t('settings.connectors.failed') : t('settings.connectors.testConnection')}
                       </button>
                     </div>
                   )}
@@ -370,11 +372,11 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
               {!isImap && !isOAuth && !isToken && (
                 <>
                   <div>
-                    <label style={labelStyle}>Server URL</label>
+                    <label style={labelStyle}>{t('settings.connectors.serverUrl')}</label>
                     <input style={inputStyle} value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} />
                   </div>
                   <div>
-                    <label style={labelStyle}>Username</label>
+                    <label style={labelStyle}>{t('settings.connectors.username')}</label>
                     <input style={inputStyle} value={username} onChange={(e) => setUsername(e.target.value)} />
                   </div>
                 </>
@@ -382,7 +384,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
 
               {!isOAuth && !isToken && (
                 <div>
-                  <label style={labelStyle}>Password <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(leave empty to keep current)</span></label>
+                  <label style={labelStyle}>{t('settings.connectors.password')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('settings.connectors.keepCurrentPassword')}</span></label>
                   <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
                 </div>
               )}
@@ -413,7 +415,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
 
               {isOAuth && (
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0' }}>
-                  Authenticated via Google OAuth. To re-authenticate, disconnect and reconnect.
+                  {t('settings.connectors.oauthGoogleHelp')}
                 </div>
               )}
               {isToken && (
@@ -423,12 +425,12 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
               )}
 
               <div>
-                <label style={labelStyle}>Sync Interval</label>
+                <label style={labelStyle}>{t('settings.connectors.syncInterval')}</label>
                 <select value={interval} onChange={(e) => setInterval(Number(e.target.value))} style={{ ...inputStyle, cursor: 'pointer' }}>
-                  <option value={5}>Every 5 minutes</option>
-                  <option value={15}>Every 15 minutes</option>
-                  <option value={30}>Every 30 minutes</option>
-                  <option value={60}>Every hour</option>
+                  <option value={5}>{t('settings.connectors.everyMinutesOption', { minutes: 5 })}</option>
+                  <option value={15}>{t('settings.connectors.everyMinutesOption', { minutes: 15 })}</option>
+                  <option value={30}>{t('settings.connectors.everyMinutesOption', { minutes: 30 })}</option>
+                  <option value={60}>{t('settings.connectors.everyHour')}</option>
                 </select>
               </div>
 
@@ -436,14 +438,14 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                 <div>
                   <label style={labelStyle}>Correos del primer sync</label>
                   <select value={maxMessages} onChange={(e) => setMaxMessages(Number(e.target.value))} style={{ ...inputStyle, cursor: 'pointer' }}>
-                    <option value={500}>500 emails</option>
-                    <option value={1000}>1,000 emails</option>
-                    <option value={2000}>2,000 emails</option>
-                    <option value={5000}>5,000 emails</option>
-                    <option value={10000}>10,000 emails (slow)</option>
+                    <option value={500}>{t('settings.connectors.emailCount', { count: '500' })}</option>
+                    <option value={1000}>{t('settings.connectors.emailCount', { count: '1,000' })}</option>
+                    <option value={2000}>{t('settings.connectors.emailCount', { count: '2,000' })}</option>
+                    <option value={5000}>{t('settings.connectors.emailCount', { count: '5,000' })}</option>
+                    <option value={10000}>{t('settings.connectors.emailCountSlow', { count: '10,000' })}</option>
                   </select>
                   <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                    Only affects the first sync. Subsequent syncs fetch new emails incrementally.
+                    {t('settings.connectors.firstSyncOnly')}
                   </div>
                 </div>
               )}

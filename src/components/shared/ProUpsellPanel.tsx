@@ -11,6 +11,7 @@
  */
 
 import { Lock } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface ProUpsellPanelProps {
   feature: string;
@@ -37,6 +38,7 @@ function markShown(feature: string) {
 }
 
 export function ProUpsellPanel({ feature, description }: ProUpsellPanelProps) {
+  const { t } = useI18n();
   if (hasShownThisSession(feature)) return null;
   markShown(feature);
 
@@ -71,7 +73,7 @@ export function ProUpsellPanel({ feature, description }: ProUpsellPanelProps) {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          Upgrade to Pro
+          {t('shared.pro.upgrade')}
         </button>
       </div>
     </div>

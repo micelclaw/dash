@@ -25,15 +25,16 @@ import { TagInput } from '@/components/shared/TagInput';
 import { DEFAULT_CALENDAR_COLORS } from '../types';
 import { AttendeesField } from './AttendeesField';
 import { fieldLabelStyle, type EventFormState } from './event-form';
+import { useI18n } from '@/i18n';
 
 type Reminder = { type: string; minutes_before: number };
 const REMINDER_PRESETS = [0, 15, 30, 60, 120, 1440];
 
-function reminderLabel(m: number): string {
-  if (m <= 0) return 'At start';
-  if (m % 1440 === 0) { const d = m / 1440; return `${d} day${d > 1 ? 's' : ''} before`; }
-  if (m % 60 === 0) { const h = m / 60; return `${h} hour${h > 1 ? 's' : ''} before`; }
-  return `${m} min before`;
+function reminderLabel(m: number, t: ReturnType<typeof useI18n>['t']): string {
+  if (m <= 0) return t('calendar.atStart');
+  if (m % 1440 === 0) { const d = m / 1440; return t(d === 1 ? 'calendar.dayBefore.one' : 'calendar.dayBefore', { count: d }); }
+  if (m % 60 === 0) { const h = m / 60; return t(h === 1 ? 'calendar.hourBefore.one' : 'calendar.hourBefore', { count: h }); }
+  return t('calendar.minBefore', { count: m });
 }
 
 interface EventFormFieldsProps {
@@ -45,6 +46,7 @@ interface EventFormFieldsProps {
 
 /** Campos del formulario de creación/edición de evento (modo edit/create del EventModal) */
 export function EventFormFields({ form, onChange, calendarNames }: EventFormFieldsProps) {
+  const { t } = useI18n();
   // Los calendarios REALES del usuario mandan; los defaults hardcodeados solo son el
   // fallback sin datos (antes era imposible crear un evento en un calendario propio).
   const calendarOptions = calendarNames?.length
@@ -55,18 +57,18 @@ export function EventFormFields({ form, onChange, calendarNames }: EventFormFiel
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Title */}
       <div>
-        <label style={fieldLabelStyle}>Title</label>
+        <label style={fieldLabelStyle}>{t('calendar.title')}</label>
         <Input
           value={form.title}
           onChange={(e) => onChange({ title: e.target.value })}
-          placeholder="Event title"
+          placeholder={t('calendar.eventTitle')}
         />
       </div>
 
       {/* Date inputs */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <label style={fieldLabelStyle}>Start</label>
+          <label style={fieldLabelStyle}>{t('calendar.start')}</label>
           <Input
             type={form.allDay ? 'date' : 'datetime-local'}
             value={form.allDay ? form.startAt.slice(0, 10) : form.startAt}
@@ -74,7 +76,7 @@ export function EventFormFields({ form, onChange, calendarNames }: EventFormFiel
           />
         </div>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <label style={fieldLabelStyle}>End</label>
+          <label style={fieldLabelStyle}>{t('calendar.end')}</label>
           <Input
             type={form.allDay ? 'date' : 'datetime-local'}
             value={form.allDay ? form.endAt.slice(0, 10) : form.endAt}
@@ -98,25 +100,25 @@ export function EventFormFields({ form, onChange, calendarNames }: EventFormFiel
           checked={form.allDay}
           onCheckedChange={(checked) => onChange({ allDay: checked === true })}
         />
-        All day
+        {t('calendar.allDay')}
       </label>
 
       {/* Location */}
       <div>
-        <label style={fieldLabelStyle}>Location</label>
+        <label style={fieldLabelStyle}>{t('calendar.location')}</label>
         <Input
           value={form.location}
           onChange={(e) => onChange({ location: e.target.value })}
-          placeholder="Add location"
+          placeholder={t('calendar.addLocation')}
         />
       </div>
 
       {/* Calendar dropdown */}
       <div>
-        <label style={fieldLabelStyle}>Calendar</label>
+        <label style={fieldLabelStyle}>{t('calendar.calendar')}</label>
         <Select value={form.calendarName} onValueChange={(v) => onChange({ calendarName: v })}>
           <SelectTrigger>
-            <SelectValue placeholder="Calendar" />
+            <SelectValue placeholder={t('calendar.calendar')} />
           </SelectTrigger>
           <SelectContent>
             {calendarOptions.map((name) => (
@@ -134,19 +136,19 @@ export function EventFormFields({ form, onChange, calendarNames }: EventFormFiel
       {/* Reminders */}
       <div>
         <label style={{ ...fieldLabelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Bell size={13} /> Reminders
+          <Bell size={13} /> {t('calendar.reminders')}
         </label>
         <ReminderField value={form.reminders} onChange={(reminders) => onChange({ reminders })} />
       </div>
 
       {/* Description */}
       <div>
-        <label style={fieldLabelStyle}>Description</label>
+        <label style={fieldLabelStyle}>{t('calendar.description')}</label>
         <textarea
           value={form.description}
           onChange={(e) => onChange({ description: e.target.value })}
           rows={3}
-          placeholder="Add description"
+          placeholder={t('calendar.addDescription')}
           style={{
             width: '100%',
             padding: '6px 10px',
@@ -169,7 +171,7 @@ export function EventFormFields({ form, onChange, calendarNames }: EventFormFiel
 
       {/* Tags */}
       <div>
-        <label style={fieldLabelStyle}>Tags</label>
+        <label style={fieldLabelStyle}>{t('calendar.tags')}</label>
         <div>
           <TagInput tags={form.tags} onChange={(tags) => onChange({ tags })} />
         </div>
@@ -185,6 +187,7 @@ export function EventFormFields({ form, onChange, calendarNames }: EventFormFiel
  * minutes_before }[]` — delivered by the calendar-reminders job.
  */
 function ReminderField({ value, onChange }: { value: Reminder[]; onChange: (r: Reminder[]) => void }) {
+  const { t } = useI18n();
   const [customVal, setCustomVal] = useState('10');
   const [customUnit, setCustomUnit] = useState<'min' | 'hours' | 'days'>('min');
 
@@ -211,7 +214,7 @@ function ReminderField({ value, onChange }: { value: Reminder[]; onChange: (r: R
           const active = has(m);
           return (
             <button key={m} type="button" onClick={() => toggle(m)} style={chip(active)}>
-              {reminderLabel(m)}
+              {reminderLabel(m, t)}
             </button>
           );
         })}
@@ -243,7 +246,7 @@ function ReminderField({ value, onChange }: { value: Reminder[]; onChange: (r: R
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {customs.map((m) => (
             <span key={m} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              {reminderLabel(m)}
+              {reminderLabel(m, t)}
               <X size={12} style={{ cursor: 'pointer' }} onClick={() => remove(m)} />
             </span>
           ))}

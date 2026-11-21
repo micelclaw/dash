@@ -61,6 +61,12 @@ export function Component() {
     fetchSnapshot();
   }, [fetchSnapshot]);
 
+  // Recovery links and browser history may change the query without remounting.
+  useEffect(() => {
+    const requested = searchParams.get('tab');
+    setActiveTab(TABS.find(tab => tab.key === requested)?.key ?? 'overview');
+  }, [searchParams]);
+
   // Sync tab to URL
   const handleTabChange = (tab: GatewayTab) => {
     setActiveTab(tab);

@@ -24,6 +24,7 @@ import { getPreviewUrl, getFaceCropUrl } from '@/lib/file-utils';
 import { usePhotoAiStore, type FaceCluster } from '@/stores/photo-ai.store';
 import { ContactLinkDialog } from './ContactLinkDialog';
 import { useDndFaceMerge } from './hooks/use-dnd-face-merge';
+import { useI18n } from '@/i18n';
 
 interface PhotosPeopleProps {
   onPhotoClick: (index: number) => void;
@@ -46,6 +47,7 @@ function ClusterCard({
   onLinkContact: () => void;
   allClusters: FaceCluster[];
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(cluster.name ?? '');
@@ -90,14 +92,14 @@ function ClusterCard({
   };
 
   const contextItems: ContextMenuItem[] = [
-    { label: 'Rename', icon: Pencil, onClick: () => setEditing(true) },
+    { label: t('photos.extra.rename'), icon: Pencil, onClick: () => setEditing(true) },
     {
-      label: cluster.linked_contact_id ? 'Change Contact' : 'Link Contact',
+      label: cluster.linked_contact_id ? t('photos.extra.changeContact') : t('photos.extra.linkContact'),
       icon: UserPlus,
       onClick: onLinkContact,
     },
     { label: '', separator: true, onClick: () => {} },
-    { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' },
+    { label: t('photos.extra.delete'), icon: Trash2, onClick: onDelete, variant: 'danger' },
   ];
 
   const previewUrl = cluster.representative_file_id
@@ -143,7 +145,7 @@ function ClusterCard({
               <>
                 <img
                   src={previewUrl}
-                  alt={cluster.name ?? 'Face'}
+                  alt={cluster.name ?? t('photos.extra.unknownFace')}
                   loading="lazy"
                   onLoad={() => setImgLoaded(true)}
                   onError={() => setImgError(true)}
@@ -184,7 +186,8 @@ function ClusterCard({
                   padding: 0,
                   zIndex: 2,
                 }}
-                title={cluster.linked_contact_id ? 'Change linked contact' : 'Link to contact'}
+                title={cluster.linked_contact_id ? t('photos.extra.changeLinkedContact') : t('photos.extra.linkToContact')}
+                aria-label={cluster.linked_contact_id ? t('photos.extra.changeLinkedContact') : t('photos.extra.linkToContact')}
               >
                 <UserPlus size={12} style={{ color: '#000' }} />
               </button>
@@ -313,7 +316,7 @@ function ClusterCard({
                 whiteSpace: 'nowrap',
               }}
             >
-              {cluster.name ?? '???'}
+              {cluster.name ?? t('photos.extra.unknown')}
             </span>
           )}
 
@@ -325,9 +328,9 @@ function ClusterCard({
               fontFamily: 'var(--font-sans)',
             }}
           >
-            {cluster.photo_count} photo{cluster.photo_count !== 1 ? 's' : ''}
+            {cluster.photo_count === 1 ? t('photos.extra.photoCountOne') : t('photos.extra.photoCount', { count: cluster.photo_count })}
             {cluster.linked_contact_id && (
-              <span style={{ color: 'var(--amber)', marginLeft: 4 }}> (linked)</span>
+              <span style={{ color: 'var(--amber)', marginLeft: 4 }}> ({t('photos.extra.linked')})</span>
             )}
           </span>
         </div>
@@ -385,6 +388,7 @@ function DraggableClusterCard(props: {
 }
 
 function ClusterCardPreview({ cluster }: { cluster: FaceCluster }) {
+  const { t } = useI18n();
   const previewUrl = cluster.representative_file_id ? getFaceCropUrl(cluster.id) : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: 0.85 }}>
@@ -396,7 +400,7 @@ function ClusterCardPreview({ cluster }: { cluster: FaceCluster }) {
         )}
       </div>
       <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-        {cluster.name ?? '???'}
+        {cluster.name ?? t('photos.extra.unknown')}
       </span>
     </div>
   );
@@ -413,6 +417,7 @@ function ClusterDetail({
   onPhotoClick: (index: number) => void;
   onRename: (name: string) => void;
 }) {
+  const { t } = useI18n();
   const clusterPhotos = usePhotoAiStore((s) => s.clusterPhotos);
   const clusterPhotosLoading = usePhotoAiStore((s) => s.clusterPhotosLoading);
   const [editing, setEditing] = useState(false);
@@ -491,7 +496,7 @@ function ClusterDetail({
               cursor: 'text',
             }}
           >
-            {cluster.name ?? '???'}
+            {cluster.name ?? t('photos.extra.unknown')}
           </span>
         )}
         <span
@@ -501,7 +506,7 @@ function ClusterDetail({
             fontFamily: 'var(--font-sans)',
           }}
         >
-          {cluster.photo_count} photo{cluster.photo_count !== 1 ? 's' : ''}
+          {cluster.photo_count === 1 ? t('photos.extra.photoCountOne') : t('photos.extra.photoCount', { count: cluster.photo_count })}
         </span>
       </div>
 
@@ -509,7 +514,7 @@ function ClusterDetail({
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {clusterPhotosLoading ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            Loading...
+            {t('photos.extra.loadingCluster')}
           </div>
         ) : clusterPhotos && clusterPhotos.length > 0 ? (
           <div
@@ -525,7 +530,7 @@ function ClusterDetail({
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            No photos in this cluster.
+            {t('photos.extra.noClusterPhotos')}
           </div>
         )}
       </div>
@@ -588,6 +593,7 @@ function ClusterPhotoThumb({ photo, onClick }: { photo: OriginEntity & { id: str
 }
 
 export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
+  const { t } = useI18n();
   const faceClusters = usePhotoAiStore((s) => s.faceClusters);
   const faceClustersLoading = usePhotoAiStore((s) => s.faceClustersLoading);
   const selectedClusterId = usePhotoAiStore((s) => s.selectedClusterId);
@@ -609,47 +615,47 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
   const handleRename = useCallback(async (clusterId: string, name: string) => {
     try {
       await renameFaceCluster(clusterId, name);
-      toast.success('Cluster renamed');
+      toast.success(t('photos.extra.clusterRenamed'));
     } catch {
-      toast.error('Failed to rename cluster');
+      toast.error(t('photos.extra.clusterRenameFailed'));
     }
-  }, [renameFaceCluster]);
+  }, [renameFaceCluster, t]);
 
   const handleMerge = useCallback(async (targetId: string, sourceId: string) => {
     try {
       await mergeFaceClusters(targetId, sourceId);
-      toast.success('Clusters merged');
+      toast.success(t('photos.extra.clustersMerged'));
     } catch {
-      toast.error('Failed to merge clusters');
+      toast.error(t('photos.extra.clusterMergeFailed'));
     }
-  }, [mergeFaceClusters]);
+  }, [mergeFaceClusters, t]);
 
   const handleDelete = useCallback(async (clusterId: string) => {
     try {
       await deleteFaceCluster(clusterId);
-      toast.success('Cluster deleted');
+      toast.success(t('photos.extra.clusterDeleted'));
     } catch {
-      toast.error('Failed to delete cluster');
+      toast.error(t('photos.extra.clusterDeleteFailed'));
     }
-  }, [deleteFaceCluster]);
+  }, [deleteFaceCluster, t]);
 
   const handleLinkContact = useCallback(async (clusterId: string, contactId: string) => {
     try {
       await linkFaceToContact(clusterId, contactId);
-      toast.success('Contact linked');
+      toast.success(t('photos.extra.contactLinked'));
     } catch {
-      toast.error('Failed to link contact');
+      toast.error(t('photos.extra.contactLinkFailed'));
     }
-  }, [linkFaceToContact]);
+  }, [linkFaceToContact, t]);
 
   const handleUnlinkContact = useCallback(async (clusterId: string) => {
     try {
       await linkFaceToContact(clusterId, null);
-      toast.success('Contact unlinked');
+      toast.success(t('photos.extra.contactUnlinked'));
     } catch {
-      toast.error('Failed to unlink contact');
+      toast.error(t('photos.extra.contactUnlinkFailed'));
     }
-  }, [linkFaceToContact]);
+  }, [linkFaceToContact, t]);
 
   const handleCreateAndLink = useCallback(async (clusterId: string, displayName: string) => {
     try {
@@ -657,12 +663,12 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
       const contactId = res.data?.id;
       if (contactId) {
         await linkFaceToContact(clusterId, contactId);
-        toast.success(`Contact "${displayName}" created and linked`);
+        toast.success(t('photos.extra.contactCreatedAndLinked', { name: displayName }));
       }
     } catch {
-      toast.error('Failed to create contact');
+      toast.error(t('photos.extra.contactCreateFailed'));
     }
-  }, [linkFaceToContact]);
+  }, [linkFaceToContact, t]);
 
   // Show cluster detail if a cluster is selected
   if (selectedCluster) {
@@ -680,7 +686,7 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
   if (faceClustersLoading && !faceClusters) {
     return (
       <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-        Loading face clusters...
+        {t('photos.extra.loadingFaceClusters')}
       </div>
     );
   }
@@ -691,8 +697,8 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <EmptyState
           icon={Users}
-          title="No faces detected yet"
-          description="Face detection runs automatically on your photos. Check back later."
+          title={t('photos.extra.noFaces')}
+          description={t('photos.extra.faceDetectionDescription')}
         />
       </div>
     );
@@ -749,10 +755,10 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
         open={confirmDeleteCluster !== null}
         onClose={() => setConfirmDeleteCluster(null)}
         onConfirm={() => { if (confirmDeleteCluster) void handleDelete(confirmDeleteCluster.id); setConfirmDeleteCluster(null); }}
-        title="Delete person group"
-        description={`Delete the face group${confirmDeleteCluster?.name ? ` "${confirmDeleteCluster.name}"` : ''}? The photos stay; only this grouping of faces is removed.`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={t('photos.extra.deletePersonGroup')}
+        description={t('photos.extra.deleteFaceGroupConfirm', { namedPart: confirmDeleteCluster?.name ? t('photos.extra.namedPart', { name: confirmDeleteCluster.name }) : '' })}
+        confirmLabel={t('photos.extra.delete')}
+        cancelLabel={t('photos.extra.cancel')}
         variant="danger"
       />
     </div>

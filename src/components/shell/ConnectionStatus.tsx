@@ -28,7 +28,7 @@ interface Composite {
  * Combines WS connection status (dash↔Core) with Gateway health
  * (Core↔OpenClaw). Worst state wins. Gateway health is loaded
  * periodically by Shell.tsx (every 30s). Until the first health
- * fetch resolves, falls back to wsStatus alone (no false yellow).
+ * fetch resolves, Core remains connected but Gateway is explicitly unchecked.
  */
 function compute(
   wsStatus: ReturnType<typeof useWebSocketStore.getState>['status'],
@@ -45,7 +45,10 @@ function compute(
     return { color: 'var(--warning)', label: 'Reconnecting…', tooltip: 'Reconnecting to Core…' };
   }
   // wsStatus === 'connected' from here. Now factor Gateway health.
-  if (gwHealth?.status === 'down') {
+  if (!gwHealth || gwHealth.stale || gwHealth.status === 'unknown' || gwHealth.status === 'loading') {
+    return { color: 'var(--warning)', label: 'Gateway sin comprobar', tooltip: 'Core está conectado. Todavía no hay una comprobación actual de Gateway.' };
+  }
+  if (gwHealth.status === 'down') {
     const why = gwHealth.error ?? gwHealth.checks.find(c => c.status === 'fail')?.message ?? 'Unknown reason';
     return { color: 'var(--error)', label: 'Gateway down', tooltip: `Gateway unreachable. ${why}` };
   }
@@ -54,7 +57,7 @@ function compute(
     const why = failed ? `${failed.name}: ${failed.message ?? 'check failed'}` : 'one or more checks failed';
     return { color: 'var(--warning)', label: 'Gateway degraded', tooltip: `Gateway is degraded — ${why}.` };
   }
-  // gwHealth healthy OR not yet loaded → trust wsStatus.
+  // Only a current successful Gateway observation may appear connected.
   return { color: 'var(--success)', label: 'Connected', tooltip: 'Connected to Core and Gateway.' };
 }
 

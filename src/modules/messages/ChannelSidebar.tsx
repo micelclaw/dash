@@ -21,6 +21,7 @@ import { usePlatformCapabilitiesStore } from '@/stores/platform-capabilities.sto
 import { PlatformIcon } from '@/components/shared/platform-icons';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useI18n } from '@/i18n';
 import {
   getChatPrefs, updateChatPref, setChannelObserved, deleteChannel,
   type Channel, type ChatPrefs, type ChatPref,
@@ -49,17 +50,17 @@ interface ChannelSidebarProps {
   onRefetch?: () => void;
 }
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: ReturnType<typeof useI18n>['t'], locale: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'now';
+  if (mins < 1) return t('messages.now');
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
-  if (days === 1) return 'Yesterday';
+  if (days === 1) return t('messages.yesterday');
   if (days < 7) return `${days}d`;
-  return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return new Date(dateStr).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' });
 }
 
 const chatKey = (ch: Channel) => `${ch.platform}:${ch.platform_channel_id}`;
@@ -68,6 +69,7 @@ export function ChannelSidebar({
   channels, selectedChannelId, platformFilter, search,
   onSelectChannel, onPlatformFilter, onSearchChange, onAddChats, onStartChat, onRefetch,
 }: ChannelSidebarProps) {
+  const { t, locale } = useI18n();
   const [prefs, setPrefs] = useState<ChatPrefs>({});
   const [showArchived, setShowArchived] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Channel | null>(null);
@@ -92,9 +94,9 @@ export function ChannelSidebar({
       setPrefs((p) => ({ ...p, [key]: saved }));
     } catch {
       setPrefs((p) => ({ ...p, [key]: prev }));
-      toast.error('No se pudo guardar');
+      toast.error(t('messages.errorSaving'));
     }
-  }, [prefs]);
+  }, [prefs, t]);
 
   const toggleObserve = useCallback(async (ch: Channel) => {
     const next = ch.observed === false;
@@ -102,36 +104,36 @@ export function ChannelSidebar({
       await setChannelObserved(ch.platform, ch.platform_channel_id, next, {
         name: ch.channel_name ?? undefined, type: ch.channel_type ?? undefined,
       });
-      toast.success(next ? 'Observando este chat' : 'Ya no se sincroniza este chat');
+      toast.success(next ? t('messages.observing') : t('messages.noLongerSyncing'));
       onRefetch?.();
     } catch {
-      toast.error('No se pudo cambiar');
+      toast.error(t('messages.errorChanging'));
     }
-  }, [onRefetch]);
+  }, [onRefetch, t]);
 
   const doDelete = useCallback(async (ch: Channel) => {
     try {
       await deleteChannel(ch.platform, ch.platform_channel_id);
-      toast.success('Chat eliminado');
+      toast.success(t('messages.chatDeleted'));
       onRefetch?.();
     } catch {
-      toast.error('No se pudo eliminar');
+      toast.error(t('messages.errorDeleting'));
     } finally {
       setConfirmDelete(null);
     }
-  }, [onRefetch]);
+  }, [onRefetch, t]);
 
   const menuItems = useCallback((ch: Channel): ContextMenuItem[] => {
     const p = prefOf(ch);
     return [
-      { label: p.pinned ? 'Desfijar' : 'Fijar arriba', icon: p.pinned ? PinOff : Pin, onClick: () => patchPref(ch, { pinned: !p.pinned }) },
-      { label: p.muted ? 'Activar notificaciones' : 'Silenciar', icon: p.muted ? Bell : BellOff, onClick: () => patchPref(ch, { muted: !p.muted }) },
-      { label: p.archived ? 'Desarchivar' : 'Archivar', icon: p.archived ? ArchiveRestore : Archive, onClick: () => patchPref(ch, { archived: !p.archived }) },
-      { label: ch.observed === false ? 'Marcar observable' : 'Dejar de observar', icon: ch.observed === false ? Eye : EyeOff, onClick: () => toggleObserve(ch) },
+      { label: p.pinned ? t('messages.unpin') : t('messages.pin'), icon: p.pinned ? PinOff : Pin, onClick: () => patchPref(ch, { pinned: !p.pinned }) },
+      { label: p.muted ? t('messages.enableNotifications') : t('messages.mute'), icon: p.muted ? Bell : BellOff, onClick: () => patchPref(ch, { muted: !p.muted }) },
+      { label: p.archived ? t('messages.unarchive') : t('messages.archive'), icon: p.archived ? ArchiveRestore : Archive, onClick: () => patchPref(ch, { archived: !p.archived }) },
+      { label: ch.observed === false ? t('messages.startObserving') : t('messages.stopObserving'), icon: ch.observed === false ? Eye : EyeOff, onClick: () => toggleObserve(ch) },
       { label: '', separator: true, onClick: () => {} },
-      { label: 'Eliminar chat', icon: Trash2, variant: 'danger', onClick: () => setConfirmDelete(ch) },
+      { label: t('messages.deleteChat'), icon: Trash2, variant: 'danger', onClick: () => setConfirmDelete(ch) },
     ];
-  }, [prefOf, patchPref, toggleObserve]);
+  }, [prefOf, patchPref, toggleObserve, t]);
 
   // Get platforms that have messages
   const platforms = useMemo(() => {
@@ -190,7 +192,7 @@ export function ChannelSidebar({
           aria-pressed={platformFilter === null}
           style={pillStyle(platformFilter === null)}
         >
-          All
+          {t('messages.all')}
         </button>
         {platforms.map(p => {
           const meta = platformMeta(p);
@@ -219,29 +221,29 @@ export function ChannelSidebar({
         {platformFilter && onAddChats && (
           <button
             onClick={() => onAddChats(platformFilter)}
-            title={`Add ${platformMeta(platformFilter).label} chats to sync`}
-            aria-label={`Add ${platformMeta(platformFilter).label} chats`}
+            title={t('messages.addChatsToSync', { platform: platformMeta(platformFilter).label })}
+            aria-label={t('messages.addChats', { platform: platformMeta(platformFilter).label })}
             style={{
               ...pillStyle(false),
               display: 'inline-flex', alignItems: 'center', gap: 4,
               borderColor: 'var(--amber)', color: 'var(--amber)',
             }}
           >
-            <Plus size={12} /> Add chats
+            <Plus size={12} /> {t('messages.addChatsButton')}
           </button>
         )}
         {canStartChat && (
           <button
             onClick={() => onStartChat!(platformFilter!)}
-            title="Escribir a un contacto nuevo"
-            aria-label="Escribir a un contacto nuevo"
+            title={t('messages.newContact')}
+            aria-label={t('messages.newContact')}
             style={{
               ...pillStyle(false),
               display: 'inline-flex', alignItems: 'center', gap: 4,
               borderColor: 'var(--amber)', color: 'var(--amber)',
             }}
           >
-            <MessageSquarePlus size={12} /> Nuevo chat
+            <MessageSquarePlus size={12} /> {t('messages.newChat')}
           </button>
         )}
       </div>
@@ -256,7 +258,8 @@ export function ChannelSidebar({
           type="text"
           value={search}
           onChange={e => onSearchChange(e.target.value)}
-          placeholder="Search channels..."
+          placeholder={t('messages.search')}
+          aria-label={t('messages.search')}
           style={{
             width: '100%', padding: '6px 10px 6px 28px',
             background: 'var(--surface)', border: '1px solid var(--border)',
@@ -319,7 +322,7 @@ export function ChannelSidebar({
                           </span>
                         </span>
                         <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>
-                          {timeAgo(ch.last_message_at)}
+                          {timeAgo(ch.last_message_at, t, locale)}
                         </span>
                       </div>
                       <div style={{
@@ -328,7 +331,7 @@ export function ChannelSidebar({
                         marginTop: 2,
                       }}>
                         {ch.last_message_sender && <span style={{ fontWeight: 500 }}>{ch.last_message_sender}: </span>}
-                        {(ch.last_message_content ?? '').substring(0, 40) || '(no content)'}
+                        {(ch.last_message_content ?? '').substring(0, 40) || t('messages.noContent')}
                       </div>
                     </div>
                   }
@@ -365,7 +368,7 @@ export function ChannelSidebar({
         onClose={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && doDelete(confirmDelete)}
         title="Eliminar chat"
-        description={confirmDelete ? `Se borrará "${confirmDelete.channel_name ?? confirmDelete.platform_channel_id}" y dejará de sincronizarse. Podrás volver a añadirlo desde "Add chats".` : ''}
+        description={confirmDelete ? t('messages.confirmDeleteDescription', { chat: confirmDelete.channel_name ?? confirmDelete.platform_channel_id }) : ''}
         confirmLabel="Eliminar"
         variant="danger"
       />

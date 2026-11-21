@@ -25,7 +25,7 @@ interface FleetTableProps {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  active: 'var(--success)',
+  active: 'var(--text-muted)',
   idle: 'var(--text-muted)',
   error: 'var(--error)',
 };
@@ -121,7 +121,7 @@ export function FleetTable({ agents, onSelect }: FleetTableProps) {
                 <td style={{ padding: '7px 10px' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.6875rem', color: STATUS_COLOR[a.status] ?? 'var(--text-dim)' }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_COLOR[a.status] ?? 'var(--text-muted)' }} />
-                    {a.status}
+                    {a.status === 'active' ? 'Habilitado · disponibilidad sin comprobar' : a.status}
                   </span>
                 </td>
                 <td style={{ padding: '7px 10px', fontSize: '0.6875rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }} title={a.model}>

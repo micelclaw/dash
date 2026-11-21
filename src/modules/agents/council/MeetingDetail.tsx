@@ -11,6 +11,9 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
+import { formatGridDateTime } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, RotateCcw, Loader2, ArrowDown, MessagesSquare } from 'lucide-react';
 import { ContinueMeetingModal } from './ContinueMeetingModal';
 import { MeetingMessage } from './MeetingMessage';
@@ -46,25 +49,13 @@ interface MeetingDetailProps {
 
 type ControlAction = 'start' | 'end' | 'archive' | 'unarchive' | 'reset' | 'delete';
 
-function formatMeetingDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }) + ' \u2014 ' + date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
 export function MeetingDetail({
   meeting, agents, onBack,
   onStart, onEnd, onArchive, onUnarchive, onReset, onDelete, onCycleItemStatus,
   awaitingUser, onSendUserMessage, onSkipIntervention, onContinue, onAddToWorkboard, onEditMeeting,
 }: MeetingDetailProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const [backHover, setBackHover] = useState(false);
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -144,7 +135,7 @@ export function MeetingDetail({
             transition: 'var(--transition-fast)',
           }}
         >
-          &larr; Back to Archive
+          {t('council.detail.backToArchive')}
         </button>
 
         {/* Meeting header card */}
@@ -181,7 +172,7 @@ export function MeetingDetail({
             color: 'var(--text-dim)',
             marginBottom: 12,
           }}>
-            {formatMeetingDate(dateStr)}
+            {formatGridDateTime(new Date(dateStr), locale, general)}
           </div>
 
           {/* Controls (start/end/edit/archive/reset/delete) */}
@@ -241,7 +232,7 @@ export function MeetingDetail({
                   }}
                 >
                   <span>👤</span>
-                  You
+                  {t('council.detail.you')}
                 </span>
               )}
             </div>
@@ -277,9 +268,9 @@ export function MeetingDetail({
             gap: 10,
           }}>
             <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: 'var(--amber)' }} />
-            <span role="img" aria-label="council" style={{ fontSize: '1.25rem' }}>🎙️</span>
-            <div style={{ fontWeight: 600, color: 'var(--text)' }}>Preparando el council…</div>
-            <div>Los agentes están arrancando. El primer turno puede tardar unos segundos.</div>
+            <span role="img" aria-label={t('council.detail.councilLabel')} style={{ fontSize: '1.25rem' }}>🎙️</span>
+            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{t('council.detail.preparing')}</div>
+            <div>{t('council.detail.starting')}</div>
           </div>
         )}
 
@@ -290,7 +281,7 @@ export function MeetingDetail({
             color: 'var(--text-dim)',
             fontSize: '0.875rem',
           }}>
-            No messages in this meeting yet.
+            {t('council.detail.noMessages')}
           </div>
         )}
 
@@ -317,24 +308,25 @@ export function MeetingDetail({
         }}>
           {awaitingUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', color: 'var(--amber)', fontWeight: 600 }}>
-              🖐 El council espera tu intervención
+              🖐 {t('council.detail.awaitingIntervention')}
               <button
                 onClick={() => { if (onSkipIntervention) void onSkipIntervention(); }}
                 style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-dim)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}
               >
-                Continuar sin mí
+                {t('council.detail.skipIntervention')}
               </button>
             </div>
           ) : (
             <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-              El council está deliberando — podrás intervenir en la próxima pausa. Puedes dejar escrito tu mensaje.
+              {t('council.detail.deliberating')}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
             <textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
-              placeholder="Tu intervención en el council…"
+              placeholder={t('council.detail.interventionPlaceholder')}
+              aria-label={t('council.detail.interventionPlaceholder')}
               rows={2}
               style={{
                 flex: 1, resize: 'vertical', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
@@ -352,7 +344,7 @@ export function MeetingDetail({
                 }).finally(() => setSending(false));
               }}
               disabled={!awaitingUser || sending || !draft.trim()}
-              title={awaitingUser ? 'Enviar tu intervención' : 'El council está deliberando; podrás intervenir en la próxima pausa'}
+              title={awaitingUser ? t('council.detail.sendIntervention') : t('council.detail.waitIntervention')}
               style={{
                 padding: '9px 16px', borderRadius: 8, border: 'none', fontSize: '0.8125rem', fontWeight: 600,
                 background: awaitingUser && draft.trim() ? 'var(--amber)' : 'var(--border)',
@@ -361,7 +353,7 @@ export function MeetingDetail({
                 opacity: sending ? 0.6 : 1, flexShrink: 0,
               }}
             >
-              {sending ? 'Enviando…' : 'Intervenir'}
+              {sending ? t('council.detail.sending') : t('council.detail.intervene')}
             </button>
           </div>
         </div>
@@ -381,7 +373,9 @@ export function MeetingDetail({
           }}
         >
           <ArrowDown size={14} />
-          {newCount > 0 ? `${newCount} mensaje${newCount !== 1 ? 's' : ''} nuevo${newCount !== 1 ? 's' : ''}` : 'Ir al final'}
+          {newCount > 0
+            ? t(`council.detail.newMessages.${newCount === 1 ? 'one' : 'other'}`, { count: newCount })
+            : t('council.detail.goToEnd')}
         </button>
       )}
 
@@ -423,10 +417,10 @@ export function MeetingDetail({
             }}
           >
             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-              Reset &ldquo;{meeting.title}&rdquo;?
+              {t('council.detail.reset.title', { title: meeting.title })}
             </h3>
             <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              All messages and action items will be wiped. The meeting goes back to <strong>scheduled</strong> with the same advanced options as a starting point — you&rsquo;ll get the edit modal next so you can tweak before re-running.
+              {t('council.detail.reset.body')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button
@@ -439,7 +433,7 @@ export function MeetingDetail({
                   border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
                 }}
               >
-                Cancel
+                {t('council.detail.reset.cancel')}
               </button>
               <button
                 onClick={handleReset}
@@ -453,7 +447,7 @@ export function MeetingDetail({
                 }}
               >
                 {busyAction === 'reset' && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-                Reset &amp; edit
+                {t('council.detail.reset.action')}
               </button>
             </div>
           </div>
@@ -478,10 +472,10 @@ export function MeetingDetail({
             }}
           >
             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-              {meeting.status === 'scheduled' ? `Cancel "${meeting.title}"?` : `Delete "${meeting.title}"?`}
+              {t(meeting.status === 'scheduled' ? 'council.detail.delete.cancelTitle' : 'council.detail.delete.deleteTitle', { title: meeting.title })}
             </h3>
             <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              The meeting will be soft-deleted. Action items and message history are preserved in the database but hidden from the UI.
+              {t('council.detail.delete.body')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button
@@ -494,7 +488,7 @@ export function MeetingDetail({
                   border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
                 }}
               >
-                Keep
+                {t('council.detail.delete.keep')}
               </button>
               <button
                 onClick={async () => {
@@ -511,7 +505,7 @@ export function MeetingDetail({
                 }}
               >
                 {busyAction === 'delete' && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-                {meeting.status === 'scheduled' ? 'Cancel meeting' : 'Delete meeting'}
+                {t(meeting.status === 'scheduled' ? 'council.detail.delete.cancelAction' : 'council.detail.delete.deleteAction')}
               </button>
             </div>
           </div>
@@ -536,6 +530,7 @@ function MeetingControls({
   onRequestDelete: () => void;
   onContinue: () => void;
 }) {
+  const { t } = useI18n();
   const baseBtn: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     fontSize: '0.8125rem', fontWeight: 500,
@@ -559,16 +554,16 @@ function MeetingControls({
             }}
           >
             {busy === 'start' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="currentColor" />}
-            Start now
+            {t('council.detail.control.start')}
           </button>
           <button
             onClick={onEdit}
             disabled={busy !== null}
-            title="Edit title, description, participants or schedule"
+            title={t('council.detail.control.editTitle')}
             style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
           >
             <Pencil size={13} />
-            Edit
+            {t('council.detail.control.edit')}
           </button>
         </>
       )}
@@ -583,7 +578,7 @@ function MeetingControls({
           }}
         >
           {busy === 'end' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Square size={13} fill="currentColor" />}
-          End meeting
+          {t('council.detail.control.end')}
         </button>
       )}
       {status === 'completed' && (
@@ -591,29 +586,29 @@ function MeetingControls({
           <button
             onClick={onContinue}
             disabled={busy !== null}
-            title="Retomar el debate con más rondas o preguntar al council (conserva todo lo anterior)"
+            title={t('council.detail.control.continueTitle')}
             style={{ ...baseBtn, borderColor: 'var(--amber)', color: 'var(--amber)', cursor: busy ? 'wait' : 'pointer' }}
           >
             <MessagesSquare size={13} />
-            Continuar
+            {t('council.detail.control.continue')}
           </button>
           <button
             onClick={onRequestReset}
             disabled={busy !== null}
-            title="Wipe messages and action items, return to scheduled, and edit options to re-run"
+            title={t('council.detail.control.resetTitle')}
             style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
           >
             {busy === 'reset' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={13} />}
-            Reset &amp; re-run
+            {t('council.detail.control.reset')}
           </button>
           <button
             onClick={onArchive}
             disabled={busy !== null}
-            title="Move this meeting to the archived list"
+            title={t('council.detail.control.archiveTitle')}
             style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
           >
             {busy === 'archive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Archive size={13} />}
-            Archive
+            {t('council.detail.control.archive')}
           </button>
         </>
       )}
@@ -622,20 +617,20 @@ function MeetingControls({
           <button
             onClick={onUnarchive}
             disabled={busy !== null}
-            title="Restore this meeting to the active list"
+            title={t('council.detail.control.unarchiveTitle')}
             style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
           >
             {busy === 'unarchive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <ArchiveRestore size={13} />}
-            Unarchive
+            {t('council.detail.control.unarchive')}
           </button>
           <button
             onClick={onRequestReset}
             disabled={busy !== null}
-            title="Wipe messages and action items, return to scheduled, and edit options to re-run"
+            title={t('council.detail.control.resetTitle')}
             style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
           >
             {busy === 'reset' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={13} />}
-            Reset &amp; re-run
+            {t('council.detail.control.reset')}
           </button>
         </>
       )}
@@ -650,7 +645,7 @@ function MeetingControls({
         }}
       >
         {busy === 'delete' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={13} />}
-        {status === 'scheduled' ? 'Cancel meeting' : 'Delete'}
+        {t(status === 'scheduled' ? 'council.detail.control.cancel' : 'council.detail.control.delete')}
       </button>
     </div>
   );

@@ -11,6 +11,7 @@
  */
 
 import { Loader2, Play, Square, ExternalLink } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface AppStatus {
   name: string;
@@ -45,6 +46,7 @@ function formatUptime(seconds: number | null): string {
 }
 
 export function MultimediaStatusCard({ app, loading, starting = false, stopping = false, icon: Icon, color, description, onInstall, onStart, onStop, onNavigate }: Props) {
+  const { t } = useI18n();
   const installed = app?.installed ?? false;
   const running = app?.running ?? false;
 
@@ -67,38 +69,38 @@ export function MultimediaStatusCard({ app, loading, starting = false, stopping 
         <div className="mm-card-meta">
           {running && app?.ram_mb != null && <span>RAM: {app.ram_mb} MB</span>}
           {running && app?.uptime_seconds != null && <span>Up: {formatUptime(app.uptime_seconds)}</span>}
-          {!running && !starting && <span style={{ color: 'var(--text-muted)' }}>Stopped</span>}
+          {!running && !starting && <span style={{ color: 'var(--text-muted)' }}>{t('multimedia.stopped')}</span>}
         </div>
       )}
 
       <div className="mm-card-actions">
         {!installed && !loading && (
           <button className="mm-btn mm-btn-install" style={{ background: color }} onClick={onInstall}>
-            Install
+            {t('multimedia.install')}
           </button>
         )}
         {installed && !running && !starting && (
           <button className="mm-btn mm-btn-start" onClick={onStart}>
-            <Play size={12} /> Start
+            <Play size={12} /> {t('multimedia.start')}
           </button>
         )}
         {starting && (
           <button className="mm-btn" style={{ color: '#eab308', borderColor: 'rgba(234,179,8,0.3)', cursor: 'wait' }} disabled>
-            <Loader2 size={12} className="mm-spin" /> Starting
+            <Loader2 size={12} className="mm-spin" /> {t('multimedia.starting')}
           </button>
         )}
         {stopping && (
           <button className="mm-btn" style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)', cursor: 'wait' }} disabled>
-            <Loader2 size={12} className="mm-spin" /> Stopping
+            <Loader2 size={12} className="mm-spin" /> {t('multimedia.stopping')}
           </button>
         )}
         {installed && running && !stopping && (
           <>
             <button className="mm-btn mm-btn-open" onClick={onNavigate}>
-              <ExternalLink size={12} /> Open
+              <ExternalLink size={12} /> {t('multimedia.open')}
             </button>
             <button className="mm-btn mm-btn-stop" onClick={onStop}>
-              <Square size={12} /> Stop
+              <Square size={12} /> {t('multimedia.stop')}
             </button>
           </>
         )}

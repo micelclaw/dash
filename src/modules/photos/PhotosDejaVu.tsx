@@ -20,12 +20,14 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
 import { getPreviewUrl } from '@/lib/file-utils';
 import type { DejaVuCollection } from './types';
+import { useI18n } from '@/i18n';
 
 interface PhotosDejaVuProps {
   onViewPhoto?: (photoId: string) => void;
 }
 
 export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
+  const { t, locale } = useI18n();
   const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const [collections, setCollections] = useState<DejaVuCollection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +52,7 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
   if (!isPro) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <ProUpsellPanel feature="Visual Deja Vu" description="Discover visually similar photos taken at different times." />
+        <ProUpsellPanel feature={t('photos.extra.dejaVu')} description={t('photos.extra.dejaVuDescription')} />
       </div>
     );
   }
@@ -73,8 +75,8 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <EmptyState
           icon={Eye}
-          title="No Deja Vu yet"
-          description="As photos are processed, visually similar groups will appear here."
+          title={t('photos.extra.noDejaVu')}
+          description={t('photos.extra.dejaVuEmpty')}
         />
       </div>
     );
@@ -83,7 +85,9 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', marginBottom: 4 }}>
-        {collections.length} collection{collections.length !== 1 ? 's' : ''} of visually similar photos
+        {collections.length === 1
+          ? t('photos.extra.collectionsCountOne')
+          : t('photos.extra.collectionsCount', { count: collections.length })}
       </div>
 
       {collections.map(col => {
@@ -103,6 +107,7 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
             {/* Header */}
             <button
               onClick={() => setExpandedId(isExpanded ? null : col.id)}
+              aria-expanded={isExpanded}
               style={{
                 width: '100%',
                 display: 'flex',
@@ -128,10 +133,12 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
                 padding: '2px 8px', background: 'var(--bg)',
                 borderRadius: 'var(--radius-full)',
               }}>
-                {col.photo_count} photos
+                {col.photo_count === 1
+                  ? t('photos.extra.photosCountOne')
+                  : t('photos.extra.photosCount', { count: col.photo_count })}
               </span>
               <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                {formatDateRange(col.date_range.earliest, col.date_range.latest)}
+                {formatDateRange(col.date_range.earliest, col.date_range.latest, locale)}
               </span>
             </button>
 
@@ -193,10 +200,10 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
   );
 }
 
-function formatDateRange(earliest: string, latest: string): string {
+function formatDateRange(earliest: string, latest: string, locale: string): string {
   const e = new Date(earliest);
   const l = new Date(latest);
-  const eMonth = e.toLocaleDateString('en', { month: 'short', year: 'numeric' });
-  const lMonth = l.toLocaleDateString('en', { month: 'short', year: 'numeric' });
+  const eMonth = e.toLocaleDateString(locale, { month: 'short', year: 'numeric' });
+  const lMonth = l.toLocaleDateString(locale, { month: 'short', year: 'numeric' });
   return eMonth === lMonth ? eMonth : `${eMonth} — ${lMonth}`;
 }

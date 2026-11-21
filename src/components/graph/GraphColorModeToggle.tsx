@@ -12,29 +12,33 @@
 
 import { Palette, Flame, Boxes } from 'lucide-react';
 import type { GraphColorMode } from '@/types/intelligence';
+import { useI18n } from '@/i18n';
 
 interface GraphColorModeToggleProps {
   mode: GraphColorMode;
   onChange: (mode: GraphColorMode) => void;
 }
 
-const OPTIONS: Array<{ key: GraphColorMode; label: string; Icon: typeof Palette; active: string }> = [
-  { key: 'type', label: 'Tipo', Icon: Palette, active: 'var(--amber)' },
-  { key: 'heat', label: 'Calor', Icon: Flame, active: '#f43f5e' },
-  { key: 'community', label: 'Comunidad', Icon: Boxes, active: '#a78bfa' },
+const OPTIONS: Array<{ key: GraphColorMode; Icon: typeof Palette; active: string }> = [
+  { key: 'type', Icon: Palette, active: 'var(--amber)' },
+  { key: 'heat', Icon: Flame, active: '#f43f5e' },
+  { key: 'community', Icon: Boxes, active: '#a78bfa' },
 ];
 
 /** Segmented control para el coloreado del grafo: por tipo / por calor / por comunidad. */
 export function GraphColorModeToggle({ mode, onChange }: GraphColorModeToggleProps) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
-      {OPTIONS.map(({ key, label, Icon, active }) => {
+      {OPTIONS.map(({ key, Icon, active }) => {
         const isActive = mode === key;
+        const label = t(`graph.color.${key}`);
         return (
           <button
             key={key}
             onClick={() => onChange(key)}
-            title={`Colorear por ${label.toLowerCase()}`}
+            title={t('graph.color.by', { mode: label.toLowerCase() })}
+            aria-pressed={isActive}
             style={{
               display: 'flex',
               alignItems: 'center',

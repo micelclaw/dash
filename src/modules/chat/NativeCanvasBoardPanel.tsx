@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useAuthStore } from '@/stores/auth.store';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -68,12 +69,15 @@ export function NativeCanvasBoardPanel({ conversationId, onSelectConversation }:
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const load = async () => {
-    setLoading(conversationId);
-    try { setBoard(conversationId, await nativeCanvasService.board(conversationId)); }
+    const requestEpoch = setLoading(conversationId);
+    const generation = useAuthStore.getState().sessionGeneration;
+    const current = () => useAuthStore.getState().sessionGeneration === generation && useNativeCanvasBoardStore.getState().byConversation.get(conversationId)?.epoch === requestEpoch;
+    try { const board = await nativeCanvasService.board(conversationId); if (current()) setBoard(conversationId, board, requestEpoch); }
     catch (error) {
+      if (!current()) return;
       const status = typeof error === 'object' && error !== null && 'status' in error ? (error as { status?: number }).status : undefined;
       if (status === 403) revoke(conversationId);
-      else setError(conversationId, error instanceof Error ? error.message : 'No se pudo cargar el dashboard');
+      else setError(conversationId, error instanceof Error ? error.message : 'No se pudo cargar el dashboard', requestEpoch);
     }
   };
   // `canvas.board_changed` intentionally carries no board data. It clears the
@@ -118,6 +122,9 @@ export function NativeCanvasBoardPanel({ conversationId, onSelectConversation }:
     } catch (error) { setExportMessage(error instanceof Error ? error.message : 'No se pudo exportar el documento'); }
   };
   const mutateBoard = async (op: Record<string, unknown>) => {
+    const requestEpoch = useNativeCanvasBoardStore.getState().byConversation.get(conversationId)?.epoch ?? 0;
+    const generation = useAuthStore.getState().sessionGeneration;
+    const current = () => useAuthStore.getState().sessionGeneration === generation && useNativeCanvasBoardStore.getState().byConversation.get(conversationId)?.epoch === requestEpoch;
     if (!canEdit) { setMutationError('Solo tienes acceso de lectura a este Canvas.'); return; }
     let expectedRevision = revisionRef.current;
     setMutationError(null);
@@ -127,6 +134,7 @@ export function NativeCanvasBoardPanel({ conversationId, onSelectConversation }:
       // revision instead of silently dropping the user's second operation.
       if (expectedRevision === null) {
         const freshBoard = await nativeCanvasService.board(conversationId);
+        if (!current()) return;
         expectedRevision = typeof freshBoard.revision === 'number' ? freshBoard.revision : null;
         if (expectedRevision === null) {
           setMutationError('No se pudo confirmar la revisión actual del dashboard. Actualiza el panel e inténtalo de nuevo.');
@@ -134,12 +142,14 @@ export function NativeCanvasBoardPanel({ conversationId, onSelectConversation }:
           return;
         }
         revisionRef.current = expectedRevision;
-        setBoard(conversationId, freshBoard);
+        setBoard(conversationId, freshBoard, requestEpoch);
       }
       const board = await nativeCanvasService.updateBoard(conversationId, expectedRevision, [op]);
+      if (!current()) return;
       revisionRef.current = typeof board.revision === 'number' ? board.revision : null;
-      setBoard(conversationId, board);
+      setBoard(conversationId, board, requestEpoch);
     } catch (error) {
+      if (!current()) return;
       const status = typeof error === 'object' && error !== null && 'status' in error ? (error as { status?: number }).status : undefined;
       if (status === 409) {
         setMutationError('El dashboard cambió en otra pantalla. Se ha recargado antes de aplicar tu cambio.');
@@ -307,8 +317,8 @@ function NativeCanvasMembers({ conversationId }: { conversationId: string }) {
   </span>;
 }
 
-function NativeCanvasDocumentFrame({ document }: { document: NativeCanvasDocument }) {
-  const nonce = crypto.randomUUID();
+export function NativeCanvasDocumentFrame({ document }: { document: NativeCanvasDocument }) {
+  const nonce = useMemo(() => crypto.randomUUID(), [document.html]);
   const securedHtml = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">${document.html}`;
   // Two opaque browsing contexts: the outer frame owns the deliberately tiny
   // versioned bridge, while the document never gets a reference to Dash or an

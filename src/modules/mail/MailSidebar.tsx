@@ -11,6 +11,7 @@
  */
 
 import { EntitySource } from '@/components/shared/SourceBadge';
+import { useI18n } from '@/i18n';
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import {
   Pencil,
@@ -40,16 +41,16 @@ import { api } from '@/services/api';
 import { toast } from 'sonner';
 
 const ACCOUNT_COLORS: Array<{ value: string; name: string }> = [
-  { value: '#d4a017', name: 'Gold' },
-  { value: '#3B82F6', name: 'Blue' },
-  { value: '#EF4444', name: 'Red' },
-  { value: '#10B981', name: 'Green' },
-  { value: '#8B5CF6', name: 'Purple' },
-  { value: '#F97316', name: 'Orange' },
-  { value: '#EC4899', name: 'Pink' },
-  { value: '#06B6D4', name: 'Cyan' },
-  { value: '#84CC16', name: 'Lime' },
-  { value: '#F59E0B', name: 'Amber' },
+  { value: '#d4a017', name: 'mail.colorGold' },
+  { value: '#3B82F6', name: 'mail.colorBlue' },
+  { value: '#EF4444', name: 'mail.colorRed' },
+  { value: '#10B981', name: 'mail.colorGreen' },
+  { value: '#8B5CF6', name: 'mail.colorPurple' },
+  { value: '#F97316', name: 'mail.colorOrange' },
+  { value: '#EC4899', name: 'mail.colorPink' },
+  { value: '#06B6D4', name: 'mail.colorCyan' },
+  { value: '#84CC16', name: 'mail.colorLime' },
+  { value: '#F59E0B', name: 'mail.colorAmber' },
 ];
 
 // ─── El nombre que le pones a una cuenta ────────────────────────────────────
@@ -99,15 +100,15 @@ interface MailSidebarProps {
 }
 
 const FOLDERS = [
-  { key: 'INBOX', label: 'Inbox', icon: Inbox },
+  { key: 'INBOX', labelKey: 'mail.folderInbox', icon: Inbox },
   // Starred is NOT a folder: a starred message lives in Inbox or in Sent like any
   // other. It is a toggle in the list toolbar, combinable with the active folder.
-  { key: 'SNOOZED', label: 'Snoozed', icon: Clock },
-  { key: 'SENT', label: 'Sent', icon: Send },
-  { key: 'DRAFTS', label: 'Drafts', icon: FileText },
-  { key: 'ARCHIVE', label: 'Archive', icon: Archive },
-  { key: 'TRASH', label: 'Trash', icon: Trash2 },
-  { key: 'SPAM', label: 'Spam', icon: AlertTriangle },
+  { key: 'SNOOZED', labelKey: 'mail.folderSnoozed', icon: Clock },
+  { key: 'SENT', labelKey: 'mail.folderSent', icon: Send },
+  { key: 'DRAFTS', labelKey: 'mail.folderDrafts', icon: FileText },
+  { key: 'ARCHIVE', labelKey: 'mail.folderArchive', icon: Archive },
+  { key: 'TRASH', labelKey: 'mail.folderTrash', icon: Trash2 },
+  { key: 'SPAM', labelKey: 'mail.folderSpam', icon: AlertTriangle },
 ] as const;
 
 export function MailSidebar({
@@ -130,6 +131,7 @@ export function MailSidebar({
   customFolders,
   mailLabels,
 }: MailSidebarProps) {
+  const { t } = useI18n();
 
   // ─── Export modal state ───
   const [exportOpen, setExportOpen] = useState(false);
@@ -186,7 +188,7 @@ export function MailSidebar({
       .patch(`/email-accounts/${id}`, { name: trimmed })
       .then(() => onAccountRenamed?.())
       .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'No se pudo renombrar la cuenta');
+        toast.error(err instanceof Error ? err.message : t('mail.accountRenameFailed'));
       });
   }
 
@@ -195,10 +197,10 @@ export function MailSidebar({
 
   function getAccountMenuItems(acc: EmailAccount): ContextMenuItem[] {
     return [
-      { label: 'Rename', icon: Type, onClick: () => startRename(acc) },
-      { label: 'Change color', icon: Palette, onClick: () => setColorPickerTarget(acc.id) },
+      { label: t('mail.renameAccount'), icon: Type, onClick: () => startRename(acc) },
+      { label: t('mail.changeColor'), icon: Palette, onClick: () => setColorPickerTarget(acc.id) },
       { label: '', onClick: () => {}, separator: true },
-      { label: 'Unsync account', icon: Unplug, onClick: () => onUnsyncAccount?.(acc.id), variant: 'danger' as const },
+      { label: t('mail.unsyncAccount'), icon: Unplug, onClick: () => onUnsyncAccount?.(acc.id), variant: 'danger' as const },
     ];
   }
 
@@ -311,13 +313,13 @@ export function MailSidebar({
         }}
       >
         <Pencil size={collapsed ? 18 : 14} />
-        {!collapsed && <span>Compose</span>}
+        {!collapsed && <span>{t('mail.compose')}</span>}
       </button>
       {onSync && (
         <button
           onClick={onSync}
           disabled={syncing}
-          title="Sync emails"
+          title={t('mail.sync')}
           onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
           onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
           style={{
@@ -359,7 +361,7 @@ export function MailSidebar({
         {collapsed ? (
           <Tooltip delayDuration={0}>
             <TooltipTrigger asChild>{composeButton}</TooltipTrigger>
-            <TooltipContent side="right">Compose</TooltipContent>
+            <TooltipContent side="right">{t('mail.compose')}</TooltipContent>
           </Tooltip>
         ) : (
           composeButton
@@ -369,7 +371,7 @@ export function MailSidebar({
       {/* All / unified inbox */}
       <MailSidebarItem
         icon={<Mail size={18} />}
-        label="All"
+        label={t('mail.all')}
         count={totalUnread}
         total={totalEnEntrada}
         active={activeAccount === null}
@@ -393,7 +395,7 @@ export function MailSidebar({
                 marginBottom: 2,
               }}
             >
-              Accounts
+              {t('mail.accounts')}
             </div>
           )}
           {accounts.map((acc) => {
@@ -464,7 +466,7 @@ export function MailSidebar({
               marginBottom: 2,
             }}
           >
-            Folders
+              {t('mail.folders')}
           </div>
         )}
         {FOLDERS.map((folder) => {
@@ -473,7 +475,7 @@ export function MailSidebar({
             <MailSidebarItem
               key={folder.key}
               icon={<FolderIcon size={18} />}
-              label={folder.label}
+              label={t(folder.labelKey)}
               count={folderUnread[folder.key]}
               total={folderTotal[folder.key]}
               active={!activeLabel && activeFolder === folder.key}
@@ -501,7 +503,7 @@ export function MailSidebar({
                 }}
                 title={accounts.find((a) => a.id === accountId)?.email_address ?? undefined}
               >
-                {accounts.find((a) => a.id === accountId)?.email_address ?? 'Other'}
+                {accounts.find((a) => a.id === accountId)?.email_address ?? t('mail.other')}
               </div>
             )}
             {folders.map((row) => (
@@ -537,7 +539,7 @@ export function MailSidebar({
                 }}
                 title={accounts.find((a) => a.id === accountId)?.email_address ?? undefined}
               >
-                Labels · {accounts.find((a) => a.id === accountId)?.email_address ?? 'Other'}
+                {t('mail.labels')} · {accounts.find((a) => a.id === accountId)?.email_address ?? t('mail.other')}
               </div>
             )}
             {rows.map((row) => (
@@ -581,7 +583,7 @@ export function MailSidebar({
             }}
           >
             <Download size={16} />
-            Export emails
+            {t('mail.exportEmails')}
           </button>
         </div>
       )}
@@ -609,7 +611,7 @@ export function MailSidebar({
             }}
           >
             <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-sans)' }}>
-              Pick a color
+              {t('mail.pickColor')}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
               {ACCOUNT_COLORS.map((c) => {
@@ -618,7 +620,8 @@ export function MailSidebar({
                 return (
                   <button
                     key={c.value}
-                    title={c.name}
+                    title={t(c.name)}
+                    aria-label={t(c.name)}
                     onClick={() => {
                       onChangeAccountColor?.(colorPickerTarget, c.value);
                       setColorPickerTarget(null);
@@ -667,16 +670,16 @@ export function MailSidebar({
             }}
           >
             <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-              Export emails
+              {t('mail.exportEmails')}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 16 }}>
               {activeAccount
-                ? `Account: ${renames[activeAccount] || accounts.find(a => a.id === activeAccount)?.name || 'Selected'}`
-                : 'All accounts'}
+                ? t('mail.accountNamed', { name: renames[activeAccount] || accounts.find(a => a.id === activeAccount)?.name || t('mail.other') })
+                : t('mail.allAccounts')}
             </div>
 
             <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-              Folders to export
+              {t('mail.foldersToExport')}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
               {FOLDERS.map((f) => (
@@ -698,7 +701,7 @@ export function MailSidebar({
                     onChange={() => toggleExportFolder(f.key)}
                     style={{ accentColor: 'var(--amber)' }}
                   />
-                  {f.label}
+                  {t(f.labelKey)}
                 </label>
               ))}
             </div>
@@ -717,7 +720,7 @@ export function MailSidebar({
                   cursor: 'pointer',
                 }}
               >
-                Cancel
+                {t('mail.cancel')}
               </button>
               <button
                 onClick={handleExportConfirm}
@@ -734,7 +737,7 @@ export function MailSidebar({
                   cursor: exportFolders.size > 0 ? 'pointer' : 'not-allowed',
                 }}
               >
-                Export CSV
+                {t('mail.exportCsv')}
               </button>
             </div>
           </div>

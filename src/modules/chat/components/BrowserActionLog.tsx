@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import type { BrowserAction } from '@/stores/canvas.store';
 
 interface BrowserActionLogProps {
@@ -21,12 +22,18 @@ interface BrowserActionLogProps {
 const VISIBLE_COUNT = 2;
 
 export function BrowserActionLog({ actions }: BrowserActionLogProps) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
   if (actions.length === 0) return null;
 
   const visible = expanded ? actions : actions.slice(-VISIBLE_COUNT);
   const hasMore = actions.length > VISIBLE_COUNT;
+  const actionLabel = expanded
+    ? t('chat.browserActionLog.collapse')
+    : actions.length === 1
+      ? t('chat.browserActionLog.actions.one')
+      : t('chat.browserActionLog.actions.many', { count: actions.length });
 
   return (
     <div style={{
@@ -39,6 +46,8 @@ export function BrowserActionLog({ actions }: BrowserActionLogProps) {
       {hasMore && (
         <button
           onClick={() => setExpanded(!expanded)}
+          aria-label={actionLabel}
+          aria-expanded={expanded}
           style={{
             width: '100%',
             display: 'flex',
@@ -56,7 +65,7 @@ export function BrowserActionLog({ actions }: BrowserActionLogProps) {
           }}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-          {expanded ? 'Collapse' : `${actions.length} actions`}
+          {actionLabel}
         </button>
       )}
 

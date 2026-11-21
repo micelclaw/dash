@@ -29,6 +29,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Smartphone, Monitor, Trash2, LogOut, ShieldCheck, Shield, Copy, Download, Check } from 'lucide-react';
+import { useSignOut } from '@/hooks/use-sign-out';
 import { useAuthStore } from '@/stores/auth.store';
 import * as authSvc from '@/services/auth.service';
 import type { ActiveSession, TwoFactorStatus, TwoFactorSetupResult } from '@/services/auth.service';
@@ -479,7 +480,8 @@ type RevokeConfirm = { kind: 'self'; session: ActiveSession } | { kind: 'others'
 
 function ActiveSessionsBlock() {
   const tokens = useAuthStore((s) => s.tokens);
-  const logout = useAuthStore((s) => s.logout);
+  const clearSession = useAuthStore((s) => s.clearSession);
+  const { signOut } = useSignOut();
   const [expanded, setExpanded] = useState(false);
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -505,11 +507,10 @@ function ActiveSessionsBlock() {
   const performRevoke = async (s: ActiveSession) => {
     setRevokingId(s.id);
     try {
-      await authSvc.revokeSession(s.id);
       if (s.is_current) {
-        toast.success('Logged out');
-        logout();
+        if (await signOut()) toast.success('Logged out');
       } else {
+        await authSvc.revokeSession(s.id);
         toast.success('Session revoked');
         await fetchSessions();
       }
@@ -532,7 +533,8 @@ function ActiveSessionsBlock() {
       const { revoked } = await authSvc.revokeOtherSessions(tokens?.refreshTokenId ?? null);
       toast.success(`Revoked ${revoked} session${revoked === 1 ? '' : 's'}`);
       if (!knowsCurrent) {
-        logout();
+        await authSvc.logoutSession(tokens?.refreshToken ?? '');
+        clearSession();
       } else {
         await fetchSessions();
       }

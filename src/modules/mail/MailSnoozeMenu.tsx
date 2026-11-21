@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Clock, Calendar } from 'lucide-react';
 import { addDays, getNextWeekday } from '@/lib/date-helpers';
+import { useI18n } from '@/i18n';
 
 interface MailSnoozeMenuProps {
   open: boolean;
@@ -27,7 +28,7 @@ function toLocalISOString(d: Date): string {
 }
 
 interface Preset {
-  label: string;
+  labelKey: string;
   icon: typeof Clock | typeof Calendar;
   getDate: () => Date;
   show: () => boolean;
@@ -36,7 +37,7 @@ interface Preset {
 function buildPresets(): Preset[] {
   return [
     {
-      label: 'Later today',
+      labelKey: 'mail.todayLater',
       icon: Clock,
       getDate: () => {
         const d = new Date();
@@ -46,7 +47,7 @@ function buildPresets(): Preset[] {
       show: () => new Date().getHours() < 17,
     },
     {
-      label: 'Tomorrow',
+      labelKey: 'mail.tomorrow',
       icon: Calendar,
       getDate: () => {
         const d = addDays(new Date(), 1);
@@ -56,7 +57,7 @@ function buildPresets(): Preset[] {
       show: () => true,
     },
     {
-      label: 'Next Monday',
+      labelKey: 'mail.nextMonday',
       icon: Calendar,
       getDate: () => {
         const d = getNextWeekday(new Date(), 1);
@@ -66,7 +67,7 @@ function buildPresets(): Preset[] {
       show: () => true,
     },
     {
-      label: 'Next week',
+      labelKey: 'mail.nextWeek',
       icon: Calendar,
       getDate: () => {
         const d = addDays(new Date(), 7);
@@ -84,6 +85,7 @@ export function MailSnoozeMenu({
   onSnooze,
   anchorEl,
 }: MailSnoozeMenuProps) {
+  const { t } = useI18n();
   const [customValue, setCustomValue] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -173,7 +175,7 @@ export function MailSnoozeMenu({
           padding: '6px 12px 4px',
         }}
       >
-        Snooze until
+        {t('mail.snoozeUntil')}
       </div>
 
       {/* Presets */}
@@ -183,7 +185,7 @@ export function MailSnoozeMenu({
           const PresetIcon = preset.icon;
           return (
             <button
-              key={preset.label}
+              key={preset.labelKey}
               onClick={() => handlePreset(preset)}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'var(--surface-hover)';
@@ -208,7 +210,7 @@ export function MailSnoozeMenu({
               }}
             >
               <PresetIcon size={16} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-              <span>{preset.label}</span>
+              <span>{t(preset.labelKey)}</span>
             </button>
           );
         })}
@@ -240,7 +242,7 @@ export function MailSnoozeMenu({
             letterSpacing: '0.05em',
           }}
         >
-          Custom
+          {t('mail.custom')}
         </label>
         <input
           type="datetime-local"
@@ -282,7 +284,7 @@ export function MailSnoozeMenu({
             transition: 'opacity var(--transition-fast)',
           }}
         >
-          Snooze
+          {t('mail.snoozeButton')}
         </button>
       </div>
     </div>

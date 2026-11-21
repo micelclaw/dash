@@ -12,9 +12,11 @@
 
 import { ArrowLeft } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 /** Small "← Back" link used at the top of detail views. */
-export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; label?: string }) {
+export function BackButton({ onClick, label }: { onClick: () => void; label?: string }) {
+  const { t } = useI18n();
   return (
     <button
       onClick={onClick}
@@ -24,7 +26,7 @@ export function BackButton({ onClick, label = 'Back' }: { onClick: () => void; l
         color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
       }}
     >
-      <ArrowLeft size={14} /> {label}
+      <ArrowLeft size={14} /> {label ?? t('music.back')}
     </button>
   );
 }

@@ -22,13 +22,7 @@ import { RequestsView } from './views/RequestsView';
 import { SearchResults } from './views/SearchResults';
 import { ItemDetailView } from './views/ItemDetailView';
 import { UnavailableState } from './components/UnavailableState';
-
-const TABS: { id: VideoTab; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'movies', label: 'Movies' },
-  { id: 'series', label: 'Series' },
-  { id: 'requests', label: 'Requests' },
-];
+import { useI18n } from '@/i18n';
 
 /**
  * Video module — Jellyfin-backed movies & series browser (Home rails, poster
@@ -36,6 +30,7 @@ const TABS: { id: VideoTab; label: string }[] = [
  * on the shared media UI kit. Playback opens the fullscreen PlayerView.
  */
 export function VideoPage() {
+  const { t } = useI18n();
   const activeTab = useVideoStore((s) => s.activeTab);
   const search = useVideoStore((s) => s.search);
   const aiSearch = useVideoStore((s) => s.aiSearch);
@@ -77,18 +72,23 @@ export function VideoPage() {
     <>
       <MediaShell
         moduleVar="--mod-video"
-        tabs={TABS}
+        tabs={[
+          { id: 'home', label: t('video.home') },
+          { id: 'movies', label: t('video.movies') },
+          { id: 'series', label: t('video.series') },
+          { id: 'requests', label: t('video.requests') },
+        ]}
         activeTab={activeTab}
         onTabChange={(id) => useVideoStore.getState().setActiveTab(id as VideoTab)}
         toolbar={
           <MediaToolbar
             search={search}
             onSearchChange={(q) => useVideoStore.getState().setSearch(q)}
-            searchPlaceholder="Search movies & series…"
+            searchPlaceholder={t('video.search')}
             aiSlot
             aiActive={aiSearch}
             onAiToggle={() => useVideoStore.getState().toggleAiSearch()}
-            aiPlaceholder="Describe a movie or series…"
+            aiPlaceholder={t('video.aiSearch')}
           />
         }
       >

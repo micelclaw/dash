@@ -37,6 +37,7 @@ import { PLATFORM_PRIVACY } from './observers/privacy-data';
 import { PrivacyTags, PrivacyScore } from './observers/PrivacyTagList';
 import { ObserverStatusBadge } from './observers/ObserverStatusBadge';
 import { observerDisconnectTarget } from './observers/observer-disconnect';
+import { SlackChannelTabs } from '../slack-meetings/SlackChannelTabs';
 
 interface ConnectorInfo {
   id: string;
@@ -368,7 +369,7 @@ export function ChannelObserversSection() {
             const connectorId = cap?.connector?.id ?? null;
             const connector = connectorId ? connectorById.get(connectorId) : undefined;
             const progress = connectorId ? syncProgress[connectorId] : undefined;
-            return (
+            const row = (
               <PlatformRow
                 key={platform}
                 platform={platform}
@@ -385,6 +386,7 @@ export function ChannelObserversSection() {
                 onImport={platform === 'whatsapp' ? () => setShowImport(true) : undefined}
               />
             );
+            return platform === 'slack' ? <SlackChannelTabs key="slack" supported={cap?.meetings?.supported === true} messages={row} /> : row;
           })}
         </div>
       </SettingSection>

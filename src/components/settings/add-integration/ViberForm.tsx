@@ -22,12 +22,13 @@
  * "conectada" sin recibir nada.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Globe, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import * as syncSvc from '@/services/sync.service';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 const CALLOUT: React.CSSProperties = {
   display: 'flex', gap: 8, padding: '8px 10px', borderRadius: 'var(--radius-md)',
@@ -35,31 +36,30 @@ const CALLOUT: React.CSSProperties = {
 };
 
 export function ViberForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [token, setToken] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Viber connects as a <strong>bot</strong>, not as your personal account — Viber doesn&apos;t
-        let anything else in. You&apos;ll see conversations people start with your bot, not your own
-        chats.
+        {t('settings.viber.intro')}
       </p>
       <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
         <Bot size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          Create a bot at <strong>partners.viber.com</strong> and copy its authentication token.
+          {t('settings.viber.createBot')}
         </span>
       </div>
       <div style={{ ...CALLOUT, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#fbbf24' }}>
         <Globe size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          <strong>Viber needs to reach your server from the internet.</strong> Unlike every other
-          channel here, it only delivers messages by calling you — there&apos;s no way to ask it for
-          new ones. Sending works either way; receiving needs a public HTTPS address.
+          {t('settings.viber.webhookWarning')}
         </span>
       </div>
-      <Field label="Bot authentication token" hint="From partners.viber.com → your bot → Keys. It's stored encrypted.">
+      <Field label={t('settings.viber.token')} hint={t('settings.viber.tokenHint')}>
         <Input
           value={token}
           onChange={(e) => setToken(e.target.value)}
@@ -81,12 +81,12 @@ export function ViberForm({ onComplete, onCancel }: { onComplete: () => void; on
             });
             onComplete();
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Could not connect Viber');
+            toast.error(err instanceof Error ? err.message : tRef.current('settings.viber.connectFailed'));
           } finally {
             setSubmitting(false);
           }
         }}
-        submitLabel="Connect Viber"
+        submitLabel={t('settings.viber.connect')}
       />
     </div>
   );

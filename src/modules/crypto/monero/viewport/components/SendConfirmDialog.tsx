@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useI18n } from '@/i18n';
 import { AlertTriangle, Loader2, Shield, X } from 'lucide-react';
 import type { ConfirmationRequest } from '../hooks/useMoneroRpc';
 
@@ -27,6 +28,7 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 export function SendConfirmDialog({ confirmation, onConfirm, onDismiss }: Props) {
+  const { t } = useI18n();
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(confirmation.expires_in);
@@ -54,7 +56,7 @@ export function SendConfirmDialog({ confirmation, onConfirm, onDismiss }: Props)
     try {
       await onConfirm();
     } catch (err: any) {
-      setError(err?.message || 'Execution failed');
+      setError(err?.message || t('crypto.wallet.executionFailed'));
       setExecuting(false);
     }
   };
@@ -71,7 +73,7 @@ export function SendConfirmDialog({ confirmation, onConfirm, onDismiss }: Props)
       <div className="mw-confirm-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="mw-confirm-header">
           <Shield size={16} style={{ color: riskColor }} />
-          <span>Confirmation Required</span>
+          <span>{t('crypto.wallet.confirmationRequired')}</span>
           <div style={{ flex: 1 }} />
           <button className="mw-confirm-close" onClick={onDismiss}><X size={14} /></button>
         </div>
@@ -86,7 +88,7 @@ export function SendConfirmDialog({ confirmation, onConfirm, onDismiss }: Props)
           </div>
 
           <div className="mw-confirm-timer" style={{ color: expired ? '#ef4444' : 'var(--text-muted)' }}>
-            {expired ? 'Token expired — dismiss and retry' : `Expires in ${timeStr}`}
+            {expired ? t('crypto.wallet.tokenExpired') : t('crypto.wallet.expiresIn', { time: timeStr })}
           </div>
 
           {error && (
@@ -95,14 +97,14 @@ export function SendConfirmDialog({ confirmation, onConfirm, onDismiss }: Props)
         </div>
 
         <div className="mw-confirm-footer">
-          <button className="mw-confirm-btn-cancel" onClick={onDismiss}>Cancel</button>
+          <button className="mw-confirm-btn-cancel" onClick={onDismiss}>{t('crypto.wallet.cancel')}</button>
           <button
             className="mw-confirm-btn-ok"
             style={{ background: riskColor }}
             disabled={executing || expired}
             onClick={handleConfirm}
           >
-            {executing ? <><Loader2 size={13} className="spin" /> Executing...</> : 'Confirm'}
+            {executing ? <><Loader2 size={13} className="spin" /> {t('crypto.wallet.executing')}</> : t('crypto.wallet.confirm')}
           </button>
         </div>
       </div>

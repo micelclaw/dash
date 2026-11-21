@@ -13,8 +13,10 @@
 import { useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
+import { useI18n } from '@/i18n';
 
 export function VolumeControl() {
+  const { t } = useI18n();
   const volume = usePlayerStore((s) => s.volume);
   const isMuted = usePlayerStore((s) => s.isMuted);
   const setVolume = usePlayerStore((s) => s.setVolume);
@@ -37,7 +39,8 @@ export function VolumeControl() {
           display: 'flex',
           color: 'var(--text-muted)',
         }}
-        title={isMuted ? 'Unmute' : 'Mute'}
+        title={isMuted ? t('player.unmute') : t('player.mute')}
+        aria-label={isMuted ? t('player.unmute') : t('player.mute')}
       >
         {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
       </button>
@@ -45,6 +48,7 @@ export function VolumeControl() {
       {showSlider && (
         <input
           type="range"
+          aria-label={t('player.volume')}
           min={0}
           max={1}
           step={0.05}

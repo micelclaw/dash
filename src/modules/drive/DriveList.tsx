@@ -12,6 +12,7 @@
 
 import { useState, useMemo } from 'react';
 import { ChevronUp, ChevronDown, Folder, Star } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { ContextMenu } from '@/components/shared/ContextMenu';
@@ -45,11 +46,11 @@ interface DriveListProps {
   onEmptyNewFolder?: () => void;
 }
 
-const COLUMNS: { key: SortField; label: string; width?: string }[] = [
-  { key: 'filename', label: 'Name' },
-  { key: 'size_bytes', label: 'Size', width: '90px' },
-  { key: 'updated_at', label: 'Modified', width: '120px' },
-  { key: 'mime_type', label: 'Type', width: '100px' },
+const COLUMNS: { key: SortField; labelKey: string; width?: string }[] = [
+  { key: 'filename', labelKey: 'drive.list.column.name' },
+  { key: 'size_bytes', labelKey: 'drive.list.column.size', width: '90px' },
+  { key: 'updated_at', labelKey: 'drive.list.column.modified', width: '120px' },
+  { key: 'mime_type', labelKey: 'drive.list.column.type', width: '100px' },
 ];
 
 const GRID_COLS = '32px 1fr 90px 120px 100px';
@@ -63,6 +64,7 @@ export function DriveList({
   getContextMenuItems, onToggleStar, onDragToFolder, cutIds,
   onEmptyUpload, onEmptyNewFolder,
 }: DriveListProps) {
+  const { t } = useI18n();
   const [sortField, setSortField] = useState<SortField>('filename');
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
   // D6 — density toggle (persisted in drive.store): compact tightens rows.
@@ -115,11 +117,11 @@ export function DriveList({
     return (
       <EmptyState
         icon={Folder}
-        title="This folder is empty"
-        description="Drop files here or use the upload button"
+        title={t('drive.list.empty.title')}
+        description={t('drive.list.empty.description')}
         actions={[
-          ...(onEmptyUpload ? [{ label: 'Upload files', onClick: onEmptyUpload, variant: 'primary' as const }] : []),
-          ...(onEmptyNewFolder ? [{ label: 'New folder', onClick: onEmptyNewFolder, variant: 'secondary' as const }] : []),
+          ...(onEmptyUpload ? [{ label: t('drive.list.empty.upload'), onClick: onEmptyUpload, variant: 'primary' as const }] : []),
+          ...(onEmptyNewFolder ? [{ label: t('drive.list.empty.newFolder'), onClick: onEmptyNewFolder, variant: 'secondary' as const }] : []),
         ]}
       />
     );
@@ -147,12 +149,13 @@ export function DriveList({
           type="checkbox"
           checked={allChecked}
           onChange={onToggleAll}
+          aria-label={t('drive.list.selectAll')}
           style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
         />
         {visibleColumns.map(col => (
           <ColumnHeader
             key={col.key}
-            label={col.label}
+            label={t(col.labelKey)}
             active={sortField === col.key}
             direction={sortField === col.key ? sortDir : 'asc'}
             onClick={() => handleSort(col.key)}
@@ -161,7 +164,7 @@ export function DriveList({
       </div>
 
       {/* Rows */}
-      <div role="listbox" aria-multiselectable="true" aria-label="Files">
+      <div role="listbox" aria-multiselectable="true" aria-label={t('drive.list.files')}>
         {sortedFiles.map(file => (
           <ListRow
             key={file.id}
@@ -260,6 +263,7 @@ function ListRow({
   starred?: boolean;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const isDir = file.is_directory;
@@ -363,6 +367,7 @@ function ListRow({
           <input
             type="checkbox"
             checked={checked}
+            aria-label={t('drive.list.selectFile', { filename: file.filename })}
             onClick={(e) => { e.stopPropagation(); onToggleSelect(e.shiftKey); }}
             onChange={() => {}}
             style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
@@ -385,7 +390,8 @@ function ListRow({
             {onToggleStar && (starred || hovered) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
-                title={starred ? 'Unstar' : 'Star'}
+                title={t(starred ? 'drive.list.unstar' : 'drive.list.star')}
+                aria-label={t(starred ? 'drive.list.unstar' : 'drive.list.star')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

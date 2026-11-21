@@ -14,18 +14,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader2, FileText, Download, Link as LinkIcon } from 'lucide-react';
 import { api } from '@/services/api';
 import { listChannelMedia, type Message } from '@/services/messages.service';
+import { useI18n } from '@/i18n';
 
 type Kind = 'media' | 'files' | 'voice' | 'links';
-const TABS: { key: Kind; label: string }[] = [
-  { key: 'media', label: 'Media' },
-  { key: 'files', label: 'Files' },
-  { key: 'voice', label: 'Voice' },
-  { key: 'links', label: 'Links' },
+const TABS: { key: Kind; labelKey: string }[] = [
+  { key: 'media', labelKey: 'messages.tabMedia' },
+  { key: 'files', labelKey: 'messages.tabFiles' },
+  { key: 'voice', labelKey: 'messages.tabVoice' },
+  { key: 'links', labelKey: 'messages.tabLinks' },
 ];
 
 const URL_RE = /https?:\/\/[^\s<>()]+/g;
 
 export function ChatGallery({ channelId }: { channelId: string }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Kind>('media');
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -54,18 +56,18 @@ export function ChatGallery({ channelId }: { channelId: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-        {TABS.map((t) => (
+        {TABS.map((item) => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
+            key={item.key}
+            onClick={() => setTab(item.key)}
             style={{
               padding: '4px 12px', fontSize: '0.75rem', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: tab === t.key ? 'var(--amber)' : 'var(--surface)',
-              color: tab === t.key ? '#000' : 'var(--text-dim)',
+              background: tab === item.key ? 'var(--amber)' : 'var(--surface)',
+              color: tab === item.key ? '#000' : 'var(--text-dim)',
               fontFamily: 'var(--font-sans)', fontWeight: 500,
             }}
           >
-            {t.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </div>
@@ -76,7 +78,7 @@ export function ChatGallery({ channelId }: { channelId: string }) {
             <Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
           </div>
         ) : tab === 'links' ? (
-          links.length === 0 ? <Empty label="No links" /> : (
+          links.length === 0 ? <Empty label={t('messages.noLinks')} /> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {links.map((l, i) => (
                 <a key={i} href={l.url} target="_blank" rel="noopener noreferrer"
@@ -102,15 +104,16 @@ export function ChatGallery({ channelId }: { channelId: string }) {
 function attsOf(m: Message) { return m.attachments ?? []; }
 
 function MediaGrid({ messages }: { messages: Message[] }) {
+  const { t } = useI18n();
   const items = messages.flatMap(attsOf).filter((a) => a.kind === 'image' || a.kind === 'video');
-  if (items.length === 0) return <Empty label="No media" />;
+  if (items.length === 0) return <Empty label={t('messages.noMedia')} />;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 6 }}>
       {items.map((a) => (
         <a key={a.id} href={api.mediaUrl(a.url)} target="_blank" rel="noopener noreferrer"
           style={{ aspectRatio: '1', overflow: 'hidden', borderRadius: 6, background: 'var(--surface)' }}>
           {a.kind === 'video' && !a.thumbnail_url ? (
-            <video src={api.mediaUrl(a.url)} aria-label={a.name ?? 'Vídeo'} muted playsInline preload="metadata"
+            <video src={api.mediaUrl(a.url)} aria-label={a.name ?? t('messages.video')} muted playsInline preload="metadata"
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           ) : (
             <img src={api.mediaUrl(a.thumbnail_url ?? a.url)} alt={a.name ?? ''} loading="lazy"
@@ -123,8 +126,9 @@ function MediaGrid({ messages }: { messages: Message[] }) {
 }
 
 function VoiceList({ messages }: { messages: Message[] }) {
+  const { t } = useI18n();
   const items = messages.flatMap(attsOf).filter((a) => a.kind === 'audio');
-  if (items.length === 0) return <Empty label="No voice messages" />;
+  if (items.length === 0) return <Empty label={t('messages.noVoice')} />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {items.map((a) => (
@@ -135,15 +139,16 @@ function VoiceList({ messages }: { messages: Message[] }) {
 }
 
 function FileList({ messages }: { messages: Message[] }) {
+  const { t } = useI18n();
   const items = messages.flatMap(attsOf).filter((a) => a.kind === 'file');
-  if (items.length === 0) return <Empty label="No files" />;
+  if (items.length === 0) return <Empty label={t('messages.noFiles')} />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {items.map((a) => (
         <a key={a.id} href={api.mediaUrl(a.url)} target="_blank" rel="noopener noreferrer" style={rowStyle}>
           <FileText size={16} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-            {a.name ?? a.mime_type ?? 'file'}
+            {a.name ?? a.mime_type ?? t('messages.unknownFile')}
           </span>
           <Download size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         </a>

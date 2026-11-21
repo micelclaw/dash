@@ -19,8 +19,10 @@ import { TrackList } from '../components/TrackList';
 import { playTracks, shufflePlayTracks } from '../lib/playback';
 import { formatTotalDuration } from '../lib/format';
 import { BackButton, HeroActionButton } from '../components/detail-chrome';
+import { useI18n } from '@/i18n';
 
 export function AlbumDetailView() {
+  const { t } = useI18n();
   const detail = useMusicStore((s) => s.selectedAlbum);
   const closeDetail = useMusicStore((s) => s.closeDetail);
 
@@ -34,7 +36,7 @@ export function AlbumDetailView() {
       <MediaHero
         image={album.cover_art ? coverUrl(album.cover_art, 600) : null}
         fallbackIcon={Disc3}
-        kicker="Album"
+        kicker={t('music.album')}
         title={album.name}
         subtitle={
           <button
@@ -49,14 +51,14 @@ export function AlbumDetailView() {
         }
         meta={
           <>
-            {album.song_count} song{album.song_count === 1 ? '' : 's'} · {formatTotalDuration(album.duration)}
+            {t(album.song_count === 1 ? 'music.song' : 'music.songs', { count: album.song_count })} · {formatTotalDuration(album.duration)}
             {album.year ? ` · ${album.year}` : ''}
           </>
         }
         actions={
           <>
-            <HeroActionButton icon={Play} label="Play all" primary onClick={() => playTracks(tracks)} />
-            <HeroActionButton icon={Shuffle} label="Shuffle" onClick={() => shufflePlayTracks(tracks)} />
+            <HeroActionButton icon={Play} label={t('music.playAll')} primary onClick={() => playTracks(tracks)} />
+            <HeroActionButton icon={Shuffle} label={t('music.shuffle')} onClick={() => shufflePlayTracks(tracks)} />
           </>
         }
       />

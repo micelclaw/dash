@@ -31,26 +31,26 @@ import { Terminal, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Field, FormActions } from './shared';
 import { MatrixBridgeForm, CALLOUT, type LoginPaneContext } from './MatrixBridgeForm';
+import { useI18n } from '@/i18n';
 
 /** Las cuatro redes que trae preconfiguradas la imagen (verificado en su config). */
 const PRESET_NETWORKS = ['libera', 'oftc', 'ircnet', 'ergo'];
 
 function IrcLoginPane({ ctx, step }: { ctx: LoginPaneContext; step: 'login' | 'awaiting-pair' }) {
   const { login, submitting, send, bridgeMessage, onCancel } = ctx;
+  const { t } = useI18n();
   const [value, setValue] = useState('');
 
   if (step === 'login') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          IRC asks for its details one at a time — network, nickname, and a password if the network
-          needs one. Start the login and answer whatever it asks.
+          {t('settings.irc.intro')}
         </p>
         <div style={{ ...CALLOUT, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
           <Info size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            Networks ready to use: <strong>{PRESET_NETWORKS.join(', ')}</strong>. IRC keeps no
-            server-side history, so you&apos;ll only see messages from the moment you connect.
+            {t('settings.irc.networks', { networks: PRESET_NETWORKS.join(', ') })}
           </span>
         </div>
         {bridgeMessage}
@@ -58,7 +58,7 @@ function IrcLoginPane({ ctx, step }: { ctx: LoginPaneContext; step: 'login' | 'a
           onBack={onCancel}
           saving={submitting}
           onConfirm={() => void send('start')}
-          submitLabel={submitting ? 'Starting…' : 'Start login'}
+          submitLabel={submitting ? t('settings.irc.starting') : t('settings.irc.startLogin')}
         />
       </div>
     );
@@ -69,10 +69,10 @@ function IrcLoginPane({ ctx, step }: { ctx: LoginPaneContext; step: 'login' | 'a
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
         <Terminal size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-        <span>The bridge is asking for something — its exact words are below. Type your answer.</span>
+        <span>{t('settings.irc.prompt')}</span>
       </div>
       {bridgeMessage}
-      <Field label="Your answer" hint={`If it's asking for the network, one of: ${PRESET_NETWORKS.join(', ')}.`}>
+      <Field label={t('settings.irc.answer')} hint={t('settings.irc.answerHint', { networks: PRESET_NETWORKS.join(', ') })}>
         <Input
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -88,13 +88,14 @@ function IrcLoginPane({ ctx, step }: { ctx: LoginPaneContext; step: 'login' | 'a
           await send('input', value.trim());
           setValue(''); // el siguiente campo empieza en blanco
         }}
-        submitLabel="Send"
+        submitLabel={t('settings.irc.send')}
       />
     </div>
   );
 }
 
 export function IrcMatrixForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return (
     <MatrixBridgeForm
       onComplete={onComplete}
@@ -105,8 +106,7 @@ export function IrcMatrixForm({ onComplete, onCancel }: { onComplete: () => void
         connectorDisplayName: 'IRC',
         hubSetupBlurb: (
           <>
-            IRC connects through a private Matrix bridge that runs on your own server. Set it up
-            once — everyone on this instance can then connect their own nickname.
+            {t('settings.irc.setup')}
           </>
         ),
         // Sin disclaimer de riesgo: IRC no sanciona clientes de terceros, es un
@@ -116,8 +116,7 @@ export function IrcMatrixForm({ onComplete, onCancel }: { onComplete: () => void
         renderLogin: (ctx, step) => <IrcLoginPane ctx={ctx} step={step} />,
         readyBlurb: (
           <>
-            You&apos;re connected to IRC. Next, choose which channels Micelclaw should observe.
-            Remember there&apos;s no history: you&apos;ll see messages from now on.
+            {t('settings.irc.ready')}
           </>
         ),
       }}

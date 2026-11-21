@@ -17,6 +17,7 @@ import { getAgentEventBusStats, type AgentEventBusStats, type AgentEventRow } fr
 import type { ActivityStats } from '@/services/activity.service';
 import type { WsEvent } from '@/types/websocket';
 import { eventStatsSections, shouldFetchEventStats } from '../event-stats-view';
+import { useI18n } from '@/i18n';
 
 interface AgentEventWsPayload {
   id: string;
@@ -61,6 +62,7 @@ interface Props {
 }
 
 export function EventsTab({ filters, onFilterChange, search, onSearchChange, paused, onTogglePause, range, onRangeChange }: Props) {
+  const { t } = useI18n();
   const [statsOpen, setStatsOpen] = useState(false);
   const [busStats, setBusStats] = useState<AgentEventBusStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -69,10 +71,10 @@ export function EventsTab({ filters, onFilterChange, search, onSearchChange, pau
     setStatsLoading(true);
     setStatsError(null);
     try { setBusStats(await getAgentEventBusStats()); }
-    catch { setStatsError('Statistics are unavailable for this account.'); }
+    catch { setStatsError(t('activity.statsUnavailable')); }
     finally { setStatsLoading(false); }
   };
-  useEffect(() => { if (shouldFetchEventStats(statsOpen, !!busStats)) void loadStats(); }, [statsOpen, busStats]);
+  useEffect(() => { if (shouldFetchEventStats(statsOpen, !!busStats)) void loadStats(); }, [statsOpen, busStats, t]);
   const { filteredRows, loading } = useActivityRows<AgentEventRow>({
     adapter: eventsAdapter,
     filters,
@@ -103,10 +105,10 @@ export function EventsTab({ filters, onFilterChange, search, onSearchChange, pau
       <section style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
           <button type="button" onClick={() => setStatsOpen((open) => !open)} aria-expanded={statsOpen} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
-            {statsOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />} Process statistics
+            {statsOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />} {t('activity.processStats')}
           </button>
-          {statsOpen && <button type="button" onClick={() => void loadStats()} title="Refresh statistics" aria-label="Refresh statistics" style={{ display: 'flex', border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''} /></button>}
-          {statsOpen && <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Resets when Core restarts.</span>}
+          {statsOpen && <button type="button" onClick={() => void loadStats()} title={t('activity.refreshStats')} aria-label={t('activity.refreshStats')} style={{ display: 'flex', border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''} /></button>}
+          {statsOpen && <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{t('activity.statsResetNotice')}</span>}
         </div>
         {statsOpen && busStats && <EventStatsSummary stats={busStats} />}
         {statsOpen && statsError && <div role="status" style={{ padding: '0 16px 12px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{statsError}</div>}
@@ -125,13 +127,20 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 export function EventStatsSummary({ stats }: { stats: AgentEventBusStats }) {
+  const { t } = useI18n();
   const sections = eventStatsSections(stats);
   return <div style={{ display: 'grid', gap: 10, padding: '0 16px 12px', fontSize: '0.75rem' }}>
-    <StatsSection label="Since this Core started" rows={sections.sinceStart} />
-    <StatsSection label="Persistent backlog" rows={sections.backlog} />
+    <StatsSection label={t('activity.sinceCoreStart')} rows={sections.sinceStart} />
+    <StatsSection label={t('activity.persistentBacklog')} rows={sections.backlog} />
   </div>;
 }
 
 function StatsSection({ label, rows }: { label: string; rows: Array<[string, string | number]> }) {
-  return <section aria-label={label}><div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: 5 }}>{label}</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>{rows.map(([name, value]) => <Stat key={name} label={name} value={value} />)}</div></section>;
+  const { t } = useI18n();
+  const labels: Record<string, string> = {
+    Uptime: 'activity.statUptime', Emits: 'activity.statEmits', 'Latency p95': 'activity.statLatency',
+    'Validation rejects': 'activity.statValidationRejects', 'Top type': 'activity.statTopType',
+    Pending: 'activity.statPending', 'Older than 1h': 'activity.statOlderThanHour', 'Warn+ pending': 'activity.statWarnPending',
+  };
+  return <section aria-label={label}><div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: 5 }}>{label}</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>{rows.map(([name, value]) => <Stat key={name} label={labels[name] ? t(labels[name]!) : name} value={value} />)}</div></section>;
 }

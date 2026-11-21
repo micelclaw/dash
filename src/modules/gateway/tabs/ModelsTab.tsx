@@ -64,7 +64,7 @@ export function ModelsTab() {
     catalogWarm, fetchProvidersOverview,
     modelTests, testingModels, runModelTest, hydrateModelTests,
     addModel, removeModel,
-    queuedRemovals, inflightRemovals, queueRemoveModel, undoRemoveModel,
+    queuedRemovals, inflightRemovals, removalOperation, checkRemovalOperation, queueRemoveModel, undoRemoveModel,
   } = useGatewayStore();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -72,6 +72,7 @@ export function ModelsTab() {
     ? (searchParams.get('view') as View)
     : 'configured';
   const [view, setViewState] = useState<View>(initialView);
+  const [decisionRefreshVersion, setDecisionRefreshVersion] = useState(0);
   const setView = (next: View) => {
     setViewState(next);
     const params = new URLSearchParams(searchParams);
@@ -554,6 +555,14 @@ export function ModelsTab() {
   return (
     <ScrollArea style={{ height: '100%' }}>
       <div style={{ padding: isMobile ? 12 : 20 }}>
+        {removalOperation?.state === 'uncertain' && (
+          <div role="status" style={{ marginBottom: 12, padding: 10, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem' }}>
+            {removalOperation.message || 'La retirada necesita comprobación.'}
+            {removalOperation.requestId && removalOperation.canReconcile !== false && (removalOperation.code !== 'MODEL_OPERATION_MODEL_BUSY' || !!removalOperation.canonicalId) && (
+              <button type="button" onClick={() => { void checkRemovalOperation(); }} style={{ marginLeft: 10 }}>Comprobar retirada</button>
+            )}
+          </div>
+        )}
         <ModelsHeader
           isMobile={isMobile}
           search={search}
@@ -562,12 +571,12 @@ export function ModelsTab() {
           view={view}
           onViewChange={(v) => { setView(v); setProviderFilter(null); setCatalogSubView('providers'); setSelectedProvider(null); setSearch(''); }}
           countLabel={countLabel}
-          onRefresh={() => view === 'configured' ? fetchModels() : view === 'decision' ? setView('decision') : fetchCatalog(true)}
+          onRefresh={() => view === 'configured' ? fetchModels() : view === 'decision' ? setDecisionRefreshVersion(version => version + 1) : fetchCatalog(true)}
         />
 
         {/* Content by view */}
         {view === 'decision' ? (
-          <DecisionModelsView />
+          <DecisionModelsView refreshVersion={decisionRefreshVersion} />
         ) : view === 'advanced' ? (
           <ModelsAdvancedView />
         ) : view === 'configured' ? (
@@ -576,9 +585,6 @@ export function ModelsTab() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {filteredModels
-                // En vuelo (batch POST) → oculta; si el batch falla, reaparece
-                // sola (esto es solo un filtro de render sobre el store).
-                .filter((model) => !inflightRemovals.includes(model.id))
                 .map((model) => {
                 // GatewayModel.model viene SIN prefijo de provider para Ollama
                 // ("qwen3:8b"), pero el catalog usa key con prefijo ("ollama/qwen3:8b").

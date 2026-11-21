@@ -31,6 +31,8 @@ import { isLightThemeId } from '@/hooks/use-theme';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { resolveEntity } from '@/config/entity-registry';
 import { SEARCHABLE_DOMAINS, searchableByKey, iconDomainOf, labelOfResultDomain } from '@/config/search-domains';
+import { useI18n, hasMessage } from '@/i18n';
+import { moduleLabel } from '@/i18n/module-labels';
 import type { SearchResult } from '@/types/search';
 
 interface CommandPaletteProps {
@@ -57,22 +59,22 @@ interface CommandItem {
   action: () => void;
 }
 
-function getResultTitle(result: SearchResult): string {
+function getResultTitle(result: SearchResult, t: (key: string) => string): string {
   const r = result.record;
   if (!r) {
     // record not hydrated — fall back to snippet
-    return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || 'Unknown';
+    return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || t('shell.palette.fallback.unknown');
   }
   switch (result.domain) {
-    case 'note': return String(r.title || 'Untitled');
-    case 'event': return String(r.title || 'Untitled event');
-    case 'contact': return String(r.display_name || 'Unknown');
-    case 'email': return String(r.subject || '(no subject)');
-    case 'file': return String(r.filename || 'Untitled');
-    case 'diary': return String(r.entry_date || 'Diary entry');
-    case 'conversation': return String(r.first_message || 'Conversation');
-    case 'bookmark': return String(r.title || r.url || 'Bookmark');
-    default: return 'Unknown';
+    case 'note': return String(r.title || t('shell.palette.fallback.untitled'));
+    case 'event': return String(r.title || t('shell.palette.fallback.untitledEvent'));
+    case 'contact': return String(r.display_name || t('shell.palette.fallback.unknown'));
+    case 'email': return String(r.subject || t('shell.palette.fallback.noSubject'));
+    case 'file': return String(r.filename || t('shell.palette.fallback.untitled'));
+    case 'diary': return String(r.entry_date || t('shell.palette.fallback.diaryEntry'));
+    case 'conversation': return String(r.first_message || t('shell.palette.fallback.conversation'));
+    case 'bookmark': return String(r.title || r.url || t('shell.palette.fallback.bookmark'));
+    default: return t('shell.palette.fallback.unknown');
   }
 }
 
@@ -81,6 +83,7 @@ function getResultRoute(result: SearchResult): string {
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState('');
   const [mode, setMode] = useState<PaletteMode>('search');
@@ -97,7 +100,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const sidebarToggle = useSidebarStore((s) => s.toggle);
   const openPanel = useFloatingPanelsStore((s) => s.openPanel);
 
-  const commands: CommandItem[] = useMemo(() => [
+  const commands: CommandItem[] = useMemo(() => ([
     { id: 'goto-chat', label: 'Go to AI Chat', icon: MessageSquare, group: 'Navigation', action: () => navigate('/chat') },
     { id: 'goto-notes', label: 'Go to Notes', icon: StickyNote, group: 'Navigation', action: () => navigate('/notes') },
     { id: 'goto-calendar', label: 'Go to Calendar', icon: Calendar, group: 'Navigation', action: () => navigate('/calendar') },
@@ -147,7 +150,19 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       const current = st.settings?.dash?.theme ?? 'dark';
       void st.updateSection('dash', { theme: isLightThemeId(current) ? 'dark' : 'light' });
     } },
-  ], [navigate, sidebarToggle, openPanel]);
+  ] as CommandItem[]).map((command) => {
+    const key = `shell.palette.command.${command.id}`;
+    return { ...command, label: hasMessage(key) ? t(key) : command.label };
+  }), [navigate, sidebarToggle, openPanel, t]);
+
+  const domainLabel = (key: string) => {
+    const messageKey = `search.domain.${key}`;
+    return hasMessage(messageKey) ? t(messageKey) : searchableByKey(key)?.label ?? key;
+  };
+  const resultDomainLabel = (domain: string) => {
+    const searchable = SEARCHABLE_DOMAINS.find((item) => item.domains.includes(domain));
+    return searchable ? domainLabel(searchable.key) : labelOfResultDomain(domain);
+  };
 
   // Detect mode from input prefix
   useEffect(() => {
@@ -266,12 +281,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   }, [searchResults]);
 
   const placeholder = mode === 'commands'
-    ? 'Run a command...'
+    ? t('shell.palette.runCommand')
     : mode === 'domain' && selectedDomain
-      ? `@${selectedDomain} Search in ${searchableByKey(selectedDomain)?.label ?? selectedDomain}...`
+      ? t('shell.palette.searchInDomain', { domain: selectedDomain, label: domainLabel(selectedDomain) })
       : mode === 'domain'
-        ? '@domain query...'
-        : 'Search across all domains...';
+        ? t('shell.palette.searchDomain')
+        : t('shell.palette.searchAcross');
 
   if (!open) return null;
 
@@ -299,7 +314,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Paleta de comandos"
+        aria-label={t('shell.palette.label')}
         style={{
           position: 'fixed',
           top: '20%',
@@ -350,18 +365,18 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               <>
                 {isSearching && (
                   <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-                    Searching...
+                    {t('shell.palette.searching')}
                   </div>
                 )}
                 {!isSearching && inputValue.trim() && searchResults.length === 0 && (
                   <Command.Empty style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-                    No results found.
+                    {t('shell.palette.noResults')}
                   </Command.Empty>
                 )}
                 {!inputValue.trim() && (
                   <>
                     <div style={{ padding: '8px 12px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Quick navigation
+                      {t('shell.palette.quickNavigation')}
                     </div>
                     {MODULES.filter((m) => m.path).map((mod) => {
                       const Icon = mod.icon;
@@ -369,7 +384,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       return (
                         <Command.Item
                           key={mod.id}
-                          value={mod.label}
+                          value={moduleLabel(mod, locale)}
                           onSelect={() => {
                             if (domainKey) {
                               setSelectedDomain(domainKey);
@@ -393,7 +408,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                           data-cmdk-item=""
                         >
                           <Icon size={18} style={{ color: mod.color }} />
-                          <span>{mod.label}</span>
+                          <span>{moduleLabel(mod, locale)}</span>
                           {domainKey && (
                             <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                               @{domainKey}
@@ -409,7 +424,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   <Command.Group heading="">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       <Globe size={12} style={{ color: 'var(--amber)' }} />
-                      Web
+                      {t('shell.palette.web')}
                     </div>
                     <Command.Item
                       value={`search web ${inputValue}`}
@@ -430,7 +445,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       data-cmdk-item=""
                     >
                       <Search size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-                      <span>Search the web for <strong style={{ color: 'var(--amber)' }}>{inputValue.trim()}</strong></span>
+                      <span>{t('shell.palette.searchWebFor')} <strong style={{ color: 'var(--amber)' }}>{inputValue.trim()}</strong></span>
                     </Command.Item>
                     <Command.Item
                       value={`browse web ${inputValue}`}
@@ -451,7 +466,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       data-cmdk-item=""
                     >
                       <Globe size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-                      <span>Browse the web for <strong style={{ color: 'var(--amber)' }}>{inputValue.trim()}</strong></span>
+                      <span>{t('shell.palette.browseWebFor')} <strong style={{ color: 'var(--amber)' }}>{inputValue.trim()}</strong></span>
                     </Command.Item>
                   </Command.Group>
                 )}
@@ -459,7 +474,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   const dv = resolveEntity(domain);
                   const DomainIcon = dv.Icon;
                   const domainColor = dv.color;
-                  const label = labelOfResultDomain(domain);
+                  const label = resultDomainLabel(domain);
                   const visibleItems = items.slice(0, 3);
                   const remaining = items.length - visibleItems.length;
                   const mod = MODULES.find((m) => m.path && DOMAIN_MAP[m.id] === domain);
@@ -477,7 +492,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         return (
                           <Command.Item
                             key={result.record_id}
-                            value={`${getResultTitle(result)} ${result.snippet}`}
+                            value={`${getResultTitle(result, t)} ${result.snippet}`}
                             onSelect={() => handleSelect(getResultRoute(result))}
                             style={{
                               display: 'flex',
@@ -493,7 +508,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                             <RIcon size={14} style={{ color: rColor, flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {getResultTitle(result)}
+                                {getResultTitle(result, t)}
                               </div>
                               <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {result.snippet}
@@ -525,7 +540,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                           }}
                           data-cmdk-item=""
                         >
-                          {remaining} more results
+                          {t('shell.palette.moreResults', { count: remaining })}
                           <ArrowRight size={12} />
                         </Command.Item>
                       )}
@@ -539,7 +554,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             {mode === 'commands' && (
               <>
                 <Command.Empty style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-                  No commands found.
+                  {t('shell.palette.noCommands')}
                 </Command.Empty>
                 {(['Navigation', 'Actions', 'UI'] as const).map((group) => {
                   const groupCommands = commands.filter((c) => {
@@ -551,7 +566,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   return (
                     <Command.Group key={group} heading="">
                       <div style={{ padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        {group}
+                        {t(`shell.palette.commandGroup.${group.toLowerCase()}`)}
                       </div>
                       {groupCommands.map((cmd) => {
                         const Icon = cmd.icon;
@@ -590,7 +605,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             {mode === 'domain' && !selectedDomain && (
               <>
                 <div style={{ padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Filter by domain
+                  {t('shell.palette.filterDomain')}
                 </div>
                 {domainSuggestions.map((d) => {
                   const info = resolveEntity(iconDomainOf(d));
@@ -619,7 +634,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       <DIcon size={16} style={{ color: info.color }} />
                       <span>@{d}</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: 'auto' }}>
-                        Search in {searchableByKey(d)?.label ?? d}
+                        {t('shell.palette.searchInDomain', { domain: d, label: domainLabel(d) })}
                       </span>
                     </Command.Item>
                   );
@@ -631,12 +646,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               <>
                 {isSearching && (
                   <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-                    Searching in {selectedDomain}...
+                    {t('shell.palette.searchingDomain', { domain: domainLabel(selectedDomain) })}
                   </div>
                 )}
                 {!isSearching && inputValue.slice(`@${selectedDomain} `.length).trim() && searchResults.length === 0 && (
                   <Command.Empty style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-                    No results in {selectedDomain}.
+                    {t('shell.palette.noDomainResults', { domain: domainLabel(selectedDomain) })}
                   </Command.Empty>
                 )}
                 {searchResults.map((result) => {
@@ -646,7 +661,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   return (
                     <Command.Item
                       key={result.record_id}
-                      value={`${getResultTitle(result)} ${result.snippet}`}
+                      value={`${getResultTitle(result, t)} ${result.snippet}`}
                       onSelect={() => handleSelect(getResultRoute(result))}
                       style={{
                         display: 'flex',
@@ -662,7 +677,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       <DResultIcon size={14} style={{ color: dResultColor, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {getResultTitle(result)}
+                          {getResultTitle(result, t)}
                         </div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {result.snippet}
@@ -714,18 +729,18 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   }}
                 >
                   {sm === 'fulltext' ? <Type size={10} /> : <Brain size={10} />}
-                  {sm === 'fulltext' ? 'Keywords' : 'Semantic'}
+                  {sm === 'fulltext' ? t('shell.palette.mode.keywords') : t('shell.palette.mode.semantic')}
                   {isPro && searchMode !== 'semantic' && <Lock size={8} style={{ opacity: 0.6 }} />}
                 </button>
               );
             })}
             {lastSearchType === 'hybrid_rrf' && searchMode === 'auto' && searchResults.length > 0 && (
               <span style={{ marginLeft: 4, fontSize: '0.625rem', color: 'var(--amber)', fontFamily: 'var(--font-sans)' }}>
-                semantic
+              {t('shell.palette.mode.semantic')}
               </span>
             )}
             <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              {searchMode === 'auto' ? 'Auto' : searchMode === 'fulltext' ? 'Keywords' : 'Semantic'}
+              {searchMode === 'auto' ? t('shell.palette.mode.auto') : searchMode === 'fulltext' ? t('shell.palette.mode.keywords') : t('shell.palette.mode.semantic')}
             </span>
           </div>
         )}
@@ -742,10 +757,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             color: 'var(--text-muted)',
           }}
         >
-          <span><kbd style={kbdStyle}>↑↓</kbd> Navigate</span>
-          <span><kbd style={kbdStyle}>↵</kbd> Select</span>
-          <span><kbd style={kbdStyle}>Esc</kbd> Close</span>
-          {mode === 'search' && <span style={{ marginLeft: 'auto' }}><kbd style={kbdStyle}>&gt;</kbd> Commands <kbd style={kbdStyle}>@</kbd> Domain filter</span>}
+          <span><kbd style={kbdStyle}>↑↓</kbd> {t('shell.palette.navigate')}</span>
+          <span><kbd style={kbdStyle}>↵</kbd> {t('shell.palette.select')}</span>
+          <span><kbd style={kbdStyle}>Esc</kbd> {t('shell.palette.close')}</span>
+          {mode === 'search' && <span style={{ marginLeft: 'auto' }}><kbd style={kbdStyle}>&gt;</kbd> {t('shell.palette.commandsHint')} <kbd style={kbdStyle}>@</kbd> {t('shell.palette.domainFilterHint')}</span>}
         </div>
       </div>
 

@@ -47,6 +47,7 @@ import { CollapsibleSection } from './share/CollapsibleSection';
 import { PublicLinkSection } from './share/PublicLinkSection';
 import { PeopleSection } from './share/PeopleSection';
 import { SharedListSection } from './share/SharedListSection';
+import { hasMessage, useI18n } from '@/i18n';
 
 interface EntityShareModalProps {
   open: boolean;
@@ -72,25 +73,10 @@ const SECOND_ICON: Record<SecondActionKind, LucideIcon> = {
   gallery: ImageDown, downloads: Download, openWith: ExternalLink, saveText: FileText, emailDraft: Mail,
 };
 
-const ENTITY_LABELS: Record<string, string> = {
-  note: 'nota',
-  contact: 'contacto',
-  email: 'correo',
-  diary_entry: 'entrada de diario',
-  photo: 'foto',
-  event: 'evento',
-  file: 'archivo',
-  bookmark: 'marcador',
-  feed: 'feed',
-  article: 'artículo',
-  book: 'libro',
-  kanban_board: 'tablero',
-  album: 'álbum',
-};
-
 export function EntityShareModal({
   open, entityType, entityId, entityIds, entityTitle, shareMeta, onShared, onClose,
 }: EntityShareModalProps) {
+  const { t } = useI18n();
   const addNotification = useNotificationStore(s => s.addNotification);
   const ids = entityIds && entityIds.length > 0 ? entityIds : [entityId];
   const multi = ids.length > 1;
@@ -149,10 +135,10 @@ export function EntityShareModal({
       const result = await shareNative(payload);
       if (result === 'shared' || result === 'copied' || result === 'downloaded') onClose();
     } catch {
-      addNotification({ type: 'system', title: 'Error', body: 'No se pudo preparar el contenido para compartir' });
+      addNotification({ type: 'system', title: t('shared.share.externalErrorTitle'), body: t('shared.share.externalError') });
     }
     setExternalBusy(false);
-  }, [multi, ids, entityType, entityId, entityTitle, onClose, addNotification]);
+  }, [multi, ids, entityType, entityId, entityTitle, onClose, addNotification, t]);
 
   // Segunda acción nativa (añadir/abrir/guardar en la app del móvil correspondiente).
   const runSecond = useCallback(async (kind: SecondActionKind) => {
@@ -161,14 +147,15 @@ export function EntityShareModal({
       await executeSecondAction(kind, entityType, entityId, entityTitle, shareMeta);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo completar la acción');
+      toast.error(e instanceof Error ? e.message : t('shared.share.actionError'));
     }
     setBusyKind(null);
-  }, [entityType, entityId, entityTitle, shareMeta, onClose]);
+  }, [entityType, entityId, entityTitle, shareMeta, onClose, t]);
 
   if (!open) return null;
 
-  const label = ENTITY_LABELS[entityType] ?? entityType;
+  const labelKey = `shared.share.entity.${entityType}`;
+  const label = t(hasMessage(labelKey) ? labelKey : 'shared.result.unknown');
 
   return (
     <div
@@ -203,10 +190,12 @@ export function EntityShareModal({
         }}>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
             {multi
-              ? `Compartir ${ids.length} ${label}s`
-              : `Compartir ${isDirectory ? 'carpeta' : label}${entityTitle ? `: ${entityTitle}` : ''}`}
+              ? t('shared.share.headingMany', { count: ids.length })
+              : isDirectory
+                ? t('shared.share.headingFolder')
+                : t('shared.share.heading', { entity: label, title: entityTitle ? `: ${entityTitle}` : '' })}
           </h3>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} title={t('shared.share.close')} aria-label={t('shared.share.close')} style={{
             background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2,
           }}>
             <X size={16} />
@@ -230,9 +219,9 @@ export function EntityShareModal({
             >
               <Share2 size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontWeight: 600 }}>{externalBusy ? 'Preparando…' : 'Compartir fuera'}</span>
+                <span style={{ fontWeight: 600 }}>{externalBusy ? t('shared.share.preparing') : t('shared.share.external')}</span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Telegram, WhatsApp, correo… (apps del móvil)
+                  {t('shared.share.externalApps')}
                 </span>
               </span>
             </button>
@@ -256,14 +245,14 @@ export function EntityShareModal({
                 }}
               >
                 <Icon size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-                <span style={{ fontWeight: 600 }}>{busy ? 'Abriendo…' : a.label}</span>
+                <span style={{ fontWeight: 600 }}>{busy ? t('shared.share.opening') : t(`shared.share.action.${a.kind}`)}</span>
               </button>
             );
           })}
 
           {/* ── 3. Enlace público ── */}
           {fileish && (
-            <CollapsibleSection icon={Globe} title="Enlace público" badge={fileLinks.length}>
+            <CollapsibleSection icon={Globe} title={t('shared.share.publicLink')} badge={fileLinks.length}>
               <PublicLinkSection fileId={entityId} links={fileLinks} onLinksChanged={handleLinksMutated} />
             </CollapsibleSection>
           )}
@@ -274,14 +263,14 @@ export function EntityShareModal({
             }}>
               <Globe size={16} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
               <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-                Enlace público — próximamente para {label}s
+                {t('shared.share.linkComing')}
               </span>
             </div>
           )}
 
           {/* ── 4. Personas de Micelclaw ── */}
           {showInternal && (
-            <CollapsibleSection icon={Users} title="Personas de Micelclaw" defaultOpen>
+            <CollapsibleSection icon={Users} title={t('shared.share.people')} defaultOpen>
               <PeopleSection
                 entityType={entityType}
                 ids={ids}
@@ -301,7 +290,7 @@ export function EntityShareModal({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <UserPlus size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-                <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text)' }}>Ya compartido</span>
+                <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: 'var(--text)' }}>{t('shared.share.alreadyShared')}</span>
                 <span style={{
                   fontSize: '0.6875rem', fontWeight: 600, padding: '1px 7px',
                   borderRadius: 'var(--radius-full)', background: 'var(--amber)', color: '#000',
@@ -327,7 +316,7 @@ export function EntityShareModal({
               fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Cerrar
+            {t('shared.share.close')}
           </button>
         </div>
       </div>

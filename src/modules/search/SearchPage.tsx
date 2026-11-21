@@ -20,8 +20,10 @@ import { SearchResultsList } from './SearchResultsList';
 import { SearchDiscover } from './SearchDiscover';
 import { RankingPanel } from './RankingPanel';
 import { readSearchRouteState } from './search-route-state';
+import { hasMessage, useI18n } from '@/i18n';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
@@ -118,7 +120,7 @@ export function Component() {
                 if (e.key === 'Enter') handleSearch();
                 else if (e.key === 'Escape' && query) { setQuery(''); useSearchStore.getState().clear(); }
               }}
-              placeholder="Search across all modules..."
+              placeholder={t('search.placeholder')}
               style={{
                 flex: 1,
                 background: 'transparent',
@@ -132,8 +134,8 @@ export function Component() {
             {query && (
               <button
                 onClick={() => { setQuery(''); useSearchStore.getState().clear(); }}
-                aria-label="Clear search"
-                title="Clear search (Esc)"
+                aria-label={t('search.clearLabel')}
+                title={t('search.clear')}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   color: 'var(--text-muted)', padding: 2, display: 'flex',
@@ -167,7 +169,7 @@ export function Component() {
                     transition: 'all var(--transition-fast)',
                   }}
                 >
-                  All
+                  {t('search.all')}
                 </button>
               );
             })()}
@@ -192,7 +194,7 @@ export function Component() {
                     transition: 'all var(--transition-fast)',
                   }}
                 >
-                  {d.label}
+                  {hasMessage(`search.domain.${d.key}`) ? t(`search.domain.${d.key}`) : d.label}
                 </button>
               );
             })}
@@ -218,7 +220,7 @@ export function Component() {
               padding: '24px 16px', color: 'var(--text-muted)', fontSize: '0.875rem',
             }}>
               <Loader2 size={18} className="animate-spin" />
-              Searching…
+              {t('search.searching')}
             </div>
           )}
 
@@ -229,7 +231,7 @@ export function Component() {
               color: 'var(--text-muted)', fontSize: '0.875rem',
             }}>
               <Search size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
-              No results found
+              {t('search.noResults')}
             </div>
           )}
 
@@ -269,7 +271,7 @@ export function Component() {
               cursor: 'pointer',
             }}
           >
-            Ranking
+            {t('search.ranking')}
             {rankingOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         ) : (
@@ -280,7 +282,7 @@ export function Component() {
             fontWeight: 600,
             color: 'var(--text)',
           }}>
-            Ranking
+            {t('search.ranking')}
           </div>
         )}
         {(!isMobile || rankingOpen) && <RankingPanel />}

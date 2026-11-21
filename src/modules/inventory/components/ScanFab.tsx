@@ -13,6 +13,7 @@
 import { useState, type CSSProperties } from 'react';
 import { ScanLine, X } from 'lucide-react';
 import { ScannerModal, SCAN_INTENTS, type ScanIntent } from '@/modules/inventory/components/ScannerModal';
+import { useI18n } from '@/i18n';
 
 const fab: CSSProperties = {
   position: 'absolute', right: 20, bottom: 20, zIndex: 40,
@@ -35,13 +36,14 @@ const itemRow: CSSProperties = {
 
 /** FAB global de escaneo con menú de INTENCIÓN (nunca escaneo a ciegas). */
 export function ScanFab() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<ScanIntent | null>(null);
 
   return (
     <>
       {open && (
-        <div style={menu} role="menu" aria-label="Scan actions">
+        <div style={menu} role="menu" aria-label={t('inventory.scan.actions')}>
           {SCAN_INTENTS.map(({ id, label, hint, Icon }) => (
             <button
               key={id}
@@ -53,8 +55,8 @@ export function ScanFab() {
             >
               <Icon size={16} style={{ color: 'var(--mod-inventory, var(--amber))', flexShrink: 0 }} />
               <span style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{label}</span>
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{hint}</span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600 }}>{t(label)}</span>
+                <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{t(hint)}</span>
               </span>
             </button>
           ))}
@@ -64,8 +66,8 @@ export function ScanFab() {
       <button
         style={fab}
         onClick={() => setOpen(o => !o)}
-        title="Scan a QR code"
-        aria-label="Scan"
+        title={t('inventory.scan.qrTitle')}
+        aria-label={t('inventory.scan.button')}
         aria-expanded={open}
       >
         {open ? <X size={22} /> : <ScanLine size={22} />}

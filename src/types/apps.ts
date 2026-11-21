@@ -13,8 +13,8 @@
 // ─── App system types — mirrors backend schemas ────────────────────
 
 export type AppLevel = 1 | 2 | 3;
-export type AppStatus = 'active' | 'disabled' | 'archived' | 'error' | 'pending_migration';
-export type AppSource = 'local' | 'micelhub' | 'adapted' | 'openclaw' | 'registry';
+export type AppStatus = 'active' | 'available' | 'disabled' | 'archived' | 'error' | 'pending_migration';
+export type AppSource = 'local' | 'micelhub' | 'adapted' | 'openclaw' | 'registry' | 'studio';
 
 export interface AppManifest {
   name: string;
@@ -40,6 +40,8 @@ export interface AppManifest {
       component: string;
       icon: string;
       label: string;
+      color?: string;
+      app_key?: string;
     };
   };
   hooks?: {
@@ -73,6 +75,12 @@ export interface InstalledApp {
   installed_by: string | null;
   installed_at: string;
   updated_at: string;
+  /** Measured application files; excludes personal data and shared dependencies. */
+  installation_size_bytes?: number | null;
+  /** Older public catalogues may not supply a plan or publisher. */
+  catalog_metadata_pending?: boolean;
+  catalog_origin?: 'Micelclaw' | 'OpenClaw' | 'Tuya' | 'Community';
+  catalog_keywords?: string[];
 }
 
 export interface AppRuntimeStatus {

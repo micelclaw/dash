@@ -34,6 +34,7 @@ import type Hls from 'hls.js';
 import { useAuthStore } from '@/stores/auth.store';
 import { videoService } from '@/services/video.service';
 import { resolvePlayback, type ResolvedPlayback } from './lib/stream-resolver';
+import { useI18n } from '@/i18n';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const PROGRESS_INTERVAL_MS = 10_000;
@@ -57,6 +58,7 @@ function withToken(url: string, token: string): string {
 }
 
 export function PlayerView({ item, onClose }: PlayerViewProps) {
+  const { t } = useI18n();
   const [playback, setPlayback] = useState<ResolvedPlayback | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,14 +85,14 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Could not start playback';
+        const message = err instanceof Error ? err.message : t('video.playbackFailed');
         setError(message);
-        toast.error('Playback failed', { description: message });
+        toast.error(t('video.playbackFailed'), { description: message });
       });
     return () => {
       cancelled = true;
     };
-  }, [item.id, item.positionSeconds]);
+  }, [item.id, item.positionSeconds, t]);
 
   // ── "stopped" report — exactly once, must survive unload ──
   const sendStopped = useCallback(() => {
@@ -175,7 +177,7 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
               hls.recoverMediaError();
             } else {
               hls.destroy();
-              setError('Playback failed (fatal HLS error)');
+              setError(t('video.playbackFailed'));
             }
           });
           hls.loadSource(streamUrl);
@@ -188,7 +190,7 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
           // proxy session, while hls.js (preferred above) always works.
           video.src = withToken(streamUrl, useAuthStore.getState().tokens?.accessToken ?? '');
         } else {
-          setError('This browser cannot play HLS streams');
+          setError(t('video.hlsUnsupported'));
         }
       });
     }
@@ -198,7 +200,7 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [playback]);
+  }, [playback, t]);
 
   // ── Resume + progress reporting ──
   useEffect(() => {
@@ -295,27 +297,28 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
     <div
       className="fixed inset-0 z-[350] flex flex-col bg-black"
       role="dialog"
-      aria-label={`Playing ${item.name}`}
+      aria-label={t('video.playingItem', { title: item.name })}
     >
       {error ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4">
           <p className="max-w-md text-center text-sm text-white/80">{error}</p>
           <button
             onClick={handleClose}
+            aria-label={t('video.closePlayer')}
             className="rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
           >
-            Close
+            {t('video.closePlayer')}
           </button>
         </div>
       ) : !playback ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-white/80">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">Preparing playback…</p>
+          <p className="text-sm">{t('video.preparingPlayback')}</p>
           <button
             onClick={handleClose}
             className="mt-2 rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
           >
-            Cancel
+            {t('video.cancel')}
           </button>
         </div>
       ) : (
@@ -335,7 +338,7 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
                 kind="subtitles"
                 src={withToken(`${BASE_URL}/api/v1${s.delivery_url ?? ''}`, token)}
                 srcLang={s.language ?? 'und'}
-                label={s.title ?? s.language ?? `Subtitle ${s.index}`}
+                label={s.title ?? s.language ?? `${t('video.subtitle')} ${s.index}`}
               />
             ))}
           </video>
@@ -356,10 +359,10 @@ export function PlayerView({ item, onClose }: PlayerViewProps) {
             </div>
             <button
               onClick={handleClose}
-              aria-label="Close player"
+              aria-label={t('video.closePlayer')}
               className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
             >
-              <X className="h-4 w-4" /> Close
+              <X className="h-4 w-4" /> {t('video.closePlayer')}
             </button>
           </div>
 

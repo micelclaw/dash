@@ -10,12 +10,15 @@ import {
 import * as gatewayService from '@/services/gateway.service';
 import type { CatalogProvider, ProviderAuthFlow, ProviderAuthFlowPrompt } from '../types';
 import { describeCredentialError } from '../lib/credential-errors';
+import { useI18n } from '@/i18n';
 
 export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
   provider: CatalogProvider;
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
   const [flow, setFlow] = useState<ProviderAuthFlow | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [answering, setAnswering] = useState(false);
@@ -25,6 +28,7 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
   const flowStatus = flow?.status;
 
   useEffect(() => { onSuccessRef.current = onSuccess; }, [onSuccess]);
+  useEffect(() => { tRef.current = t; }, [t]);
 
   useEffect(() => {
     if (!flowId || flowStatus === 'completed' || flowStatus === 'failed' || flowStatus === 'cancelled') return;
@@ -33,7 +37,7 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
         .then((next) => {
           setFlow(next);
           if (next.status === 'completed') {
-            toast.success(`${provider.label} connected`);
+            toast.success(tRef.current('gateway.providerAuth.connected', { provider: provider.label }));
             onSuccessRef.current();
           }
         })
@@ -59,7 +63,7 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
     try {
       setFlow(await gatewayService.startProviderAuthFlow(provider.id, method));
     } catch (error) {
-      toast.error(describeCredentialError(error, `Could not start ${provider.label} authentication`));
+      toast.error(describeCredentialError(error, t('gateway.providerAuth.startFailed', { provider: provider.label })));
     } finally {
       setStarting(null);
     }
@@ -73,7 +77,7 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
         provider.id, flow.id, flow.prompt.id, answer,
       ));
     } catch (error) {
-      toast.error(describeCredentialError(error, 'Could not submit authentication step'));
+      toast.error(describeCredentialError(error, t('gateway.providerAuth.submitFailed')));
     } finally {
       setAnswering(false);
     }
@@ -83,9 +87,9 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
     <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent style={{ width: 'min(560px, calc(100vw - 24px))', maxHeight: '85vh', overflowY: 'auto' }}>
         <DialogHeader>
-          <DialogTitle style={{ color: 'var(--text)' }}>Configure {provider.label}</DialogTitle>
+          <DialogTitle style={{ color: 'var(--text)' }}>{t('gateway.providerAuth.configure', { provider: provider.label })}</DialogTitle>
           <DialogDescription>
-            Authentication methods and prompts are supplied by OpenClaw
+            {t('gateway.providerAuth.description')}
             {provider.version ? ` ${provider.version}` : ''}.
           </DialogDescription>
         </DialogHeader>
@@ -94,7 +98,7 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
             {provider.auth_methods.length === 0 ? (
               <div style={{ padding: 12, color: 'var(--text-dim)', fontSize: '0.8125rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-                Authentication metadata is unavailable. Reload the Gateway after the provider bridge is registered, then refresh the catalog.
+                {t('gateway.providerAuth.metadataUnavailable')}
               </div>
             ) : provider.auth_methods.map((method) => (
               <button
@@ -133,23 +137,23 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
             )}
             {flow.status === 'running' && !flow.prompt && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-                <Loader2 size={14} className="spin" /> Waiting for OpenClaw…
+                <Loader2 size={14} className="spin" /> {t('gateway.providerAuth.waiting')}
               </div>
             )}
             {flow.status === 'failed' && (
-              <div style={{ color: 'var(--error)', fontSize: '0.8125rem' }}>{flow.error ?? 'Authentication failed'}</div>
+              <div style={{ color: 'var(--error)', fontSize: '0.8125rem' }}>{flow.error ?? t('gateway.providerAuth.failed')}</div>
             )}
             {flow.status === 'completed' && (
-              <div style={{ color: 'var(--success)', fontSize: '0.8125rem' }}>Authentication completed.</div>
+              <div style={{ color: 'var(--success)', fontSize: '0.8125rem' }}>{t('gateway.providerAuth.completed')}</div>
             )}
           </div>
         )}
 
         <DialogFooter style={{ marginTop: 18, gap: 8 }}>
-          <Button variant="outline" onClick={close}>{flow?.status === 'completed' ? 'Close' : 'Cancel'}</Button>
+          <Button variant="outline" onClick={close}>{flow?.status === 'completed' ? t('gateway.providerAuth.close') : t('gateway.providerAuth.cancel')}</Button>
           {flow?.prompt && (
             <Button onClick={() => { void submitAnswer(); }} disabled={answering || (flow.prompt.type === 'text' && String(answer).trim().length === 0)}>
-              {answering ? <><Loader2 size={14} className="spin" /> Sending…</> : 'Continue'}
+              {answering ? <><Loader2 size={14} className="spin" /> {t('gateway.providerAuth.sending')}</> : t('gateway.providerAuth.continue')}
             </Button>
           )}
         </DialogFooter>
@@ -159,6 +163,7 @@ export function ProviderAuthWizard({ provider, onClose, onSuccess }: {
 }
 
 function OpenUrlMessage({ message }: { message: ProviderAuthFlow['messages'][number] }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const url = useMemo(() => {
     try {
@@ -172,7 +177,7 @@ function OpenUrlMessage({ message }: { message: ProviderAuthFlow['messages'][num
   if (!url) {
     return (
       <div style={{ padding: 10, color: 'var(--error)', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
-        OpenClaw returned an invalid authentication URL. Cancel and retry the flow.
+        {t('gateway.providerAuth.invalidUrl')}
       </div>
     );
   }
@@ -182,26 +187,26 @@ function OpenUrlMessage({ message }: { message: ProviderAuthFlow['messages'][num
       await navigator.clipboard.writeText(url);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_500);
-      toast.success('Authentication URL copied');
+      toast.success(t('gateway.providerAuth.urlCopied'));
     } catch {
-      toast.error('Could not copy the authentication URL');
+      toast.error(t('gateway.providerAuth.copyFailed'));
     }
   };
 
   return (
     <div style={{ padding: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
       <div style={{ fontWeight: 600, fontSize: '0.75rem', color: 'var(--text)', marginBottom: 8 }}>
-        {message.title ?? 'Authentication URL'}
+        {message.title ?? t('gateway.providerAuth.urlTitle')}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         <Button asChild size="sm">
           <a href={url} target="_blank" rel="noopener noreferrer">
-            <ExternalLink size={13} /> Open authentication page
+            <ExternalLink size={13} /> {t('gateway.providerAuth.openPage')}
           </a>
         </Button>
         <Button variant="outline" size="sm" onClick={() => { void copyUrl(); }}>
           {copied ? <Check size={13} /> : <Copy size={13} />}
-          {copied ? 'Copied' : 'Copy URL'}
+          {copied ? t('gateway.providerAuth.copied') : t('gateway.providerAuth.copyUrl')}
         </Button>
       </div>
       <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', lineHeight: 1.4, wordBreak: 'break-all' }}>
@@ -224,14 +229,15 @@ function PromptInput({ prompt, value, onChange }: {
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const { t } = useI18n();
   const selected = useMemo(() => new Set(Array.isArray(value) ? value.map((v) => JSON.stringify(v)) : []), [value]);
   if (prompt.type === 'confirm') {
     return (
       <div>
         <div style={{ color: 'var(--text)', fontSize: '0.8125rem', marginBottom: 8 }}>{prompt.message}</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant={value === true ? 'default' : 'outline'} onClick={() => onChange(true)}>Yes</Button>
-          <Button variant={value === false ? 'default' : 'outline'} onClick={() => onChange(false)}>No</Button>
+          <Button variant={value === true ? 'default' : 'outline'} onClick={() => onChange(true)}>{t('gateway.providerAuth.yes')}</Button>
+          <Button variant={value === false ? 'default' : 'outline'} onClick={() => onChange(false)}>{t('gateway.providerAuth.no')}</Button>
         </div>
       </div>
     );

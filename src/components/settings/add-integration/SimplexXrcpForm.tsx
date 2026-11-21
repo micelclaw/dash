@@ -20,7 +20,7 @@
  * Flujo: explain → deploy(sidecar) → pair(QR + código de sesión) → ready → chats.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Loader2, Check, Container, Copy, ShieldAlert, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,6 +30,7 @@ import { ApiError } from '@/services/api';
 import * as syncSvc from '@/services/sync.service';
 import * as messagingCli from '@/services/messaging-cli.service';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 type Step = 'explain' | 'deploy' | 'pair' | 'ready';
 
@@ -41,6 +42,9 @@ const CALLOUT: React.CSSProperties = {
 const AUTO_RELEASE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [step, setStep] = useState<Step>('explain');
   const [submitting, setSubmitting] = useState(false);
   const [understood, setUnderstood] = useState(false);
@@ -102,7 +106,7 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
     try {
       const status = await messagingCli.startSimplexXrcp();
       if (!status.running) {
-        toast.error('El puente XRCP arrancó pero no está sano — reintenta.');
+        toast.error(tRef.current('settings.simplexXrcp.startFailed'));
         return;
       }
       setRunning(true);
@@ -112,7 +116,7 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
       // el móvil, cada vez.
       await startPairing();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo desplegar el puente XRCP');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.simplexXrcp.deployFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +132,7 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
       setHostName(null);
       setStep('pair');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo iniciar el emparejamiento');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.simplexXrcp.pairFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -146,7 +150,7 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
     } catch (err) {
       // Un solo connector XRCP por usuario → 409 = "ya existe" → al selector.
       if (err instanceof ApiError && err.status === 409) { onComplete(); return; }
-      toast.error(err instanceof Error ? err.message : 'No se pudo crear el canal');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.simplexXrcp.channelFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -158,19 +162,15 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Ves y respondes tus chats <strong>REALES</strong> de SimpleX del teléfono, desde MicelclawOS.
+          {t('settings.simplexXrcp.intro')}
         </p>
         <div style={{ ...CALLOUT, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#fbbf24' }}>
           <ShieldAlert size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            <strong>Solo funciona UNA de las dos a la vez:</strong> mientras MicelclawOS controla,
-            tu SimpleX del móvil queda «en uso» y no lo puedes usar.
-            <br />• Requiere la <strong>MISMA red local</strong>.
-            <br />• Abre <strong>«Usar desde escritorio»</strong> en el móvil para cada sincronización.
-            <br />• El control se <strong>suelta solo</strong> tras las horas que configures.
+            {t('settings.simplexXrcp.warning')}
           </span>
         </div>
-        <Field label="Auto-soltar el control tras" hint="Pasado ese tiempo, tu móvil vuelve a quedar libre (1–8 h).">
+        <Field label={t('settings.simplexXrcp.releaseLabel')} hint={t('settings.simplexXrcp.releaseHint')}>
           <select
             value={autoReleaseHours}
             onChange={(e) => setAutoReleaseHours(Number(e.target.value))}
@@ -181,20 +181,20 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
             }}
           >
             {AUTO_RELEASE_OPTIONS.map((h) => (
-              <option key={h} value={h}>{h} {h === 1 ? 'hora' : 'horas'}</option>
+              <option key={h} value={h}>{h === 1 ? t('settings.simplexXrcp.hour', { count: h }) : t('settings.simplexXrcp.hours', { count: h })}</option>
             ))}
           </select>
         </Field>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.6875rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
           <Checkbox checked={understood} onCheckedChange={(v) => setUnderstood(v === true)} style={{ marginTop: 1 }} />
-          <span>Entiendo cómo funciona el control compartido.</span>
+          <span>{t('settings.simplexXrcp.understood')}</span>
         </label>
         <FormActions
           onBack={onCancel}
           saving={false}
           disabled={!understood}
           onConfirm={() => (running ? void startPairing() : setStep('deploy'))}
-          submitLabel="Continuar"
+          submitLabel={t('settings.matrix.continue')}
         />
       </div>
     );
@@ -204,19 +204,19 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Preparando el puente de control SimpleX en tu servidor (solo la primera vez).
+          {t('settings.simplexXrcp.prepare')}
         </p>
         <Button onClick={handleDeploy} disabled={submitting} className="w-full">
           {submitting
-            ? <><Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> Iniciando…</>
-            : <><Container size={14} style={{ marginRight: 6 }} /> Iniciar el puente</>}
+            ? <><Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> {t('settings.simplexXrcp.starting')}</>
+            : <><Container size={14} style={{ marginRight: 6 }} /> {t('settings.simplexXrcp.startBridge')}</>}
         </Button>
         {submitting && (
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Construyendo e iniciando el contenedor… puede tardar un minuto la primera vez.
+            {t('settings.simplexXrcp.startContainer')}
           </p>
         )}
-        <Button variant="outline" onClick={onCancel} className="w-full">Cancelar</Button>
+        <Button variant="outline" onClick={onCancel} className="w-full">{t('settings.simplexXrcp.cancel')}</Button>
       </div>
     );
   }
@@ -227,11 +227,11 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ ...CALLOUT, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
             <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-            <span>Emparejado con <strong>{hostName ?? 'tu móvil'}</strong>.</span>
+            <span>{t('settings.simplexXrcp.paired', { host: hostName ?? t('settings.simplexXrcp.yourPhone') })}</span>
           </div>
           <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
             <Smartphone size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-            <span>Para ver tus chats, el ordenador debe <strong>tomar el control</strong> del móvil. Abre ahora en el teléfono <strong>SimpleX → «Usar desde escritorio»</strong> (misma WiFi) y luego pulsa «Elegir chats» — tardará unos segundos en conectar.</span>
+            <span>{t('settings.simplexXrcp.controlPhone')}</span>
           </div>
           <button
             type="button"
@@ -239,29 +239,29 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
             onClick={() => { setPaired(false); setHostName(null); void startPairing(); }}
             style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: '0.75rem', textDecoration: 'underline', cursor: 'pointer', alignSelf: 'flex-start', padding: 0 }}
           >
-            ¿No es tu móvil o falla la sincronización? Volver a emparejar
+            {t('settings.simplexXrcp.repair')}
           </button>
-          <FormActions onBack={onCancel} saving={submitting} onConfirm={handleFinish} submitLabel="Elegir chats" />
+          <FormActions onBack={onCancel} saving={submitting} onConfirm={handleFinish} submitLabel={t('settings.simplexXrcp.chooseChats')} />
         </div>
       );
     }
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          En el móvil: <strong>SimpleX → Ajustes → «Usar desde escritorio» → Escanear código</strong>.
+          {t('settings.simplexXrcp.scanPhone')}
         </p>
         {/* QR GRANDE: la invitación XRCP es densa → cuanto más grande en pantalla,
             más fácil de escanear. `image-rendering: pixelated` evita que el navegador
             emborrone los módulos al escalar. */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {qrDataUri
-            ? <img src={qrDataUri} alt="SimpleX XRCP QR" style={{ width: '100%', maxWidth: 300, aspectRatio: '1', borderRadius: 8, background: '#fff', padding: 10, imageRendering: 'pixelated' }} />
+            ? <img src={qrDataUri} alt={t('settings.simplexXrcp.qrAlt')} style={{ width: '100%', maxWidth: 300, aspectRatio: '1', borderRadius: 8, background: '#fff', padding: 10, imageRendering: 'pixelated' }} />
             : <div style={{ width: '100%', maxWidth: 300, aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
                 <Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
               </div>}
         </div>
         {sessionCode && (
-          <Field label="Verifica que estos 4 grupos coinciden con los del móvil">
+          <Field label={t('settings.simplexXrcp.verifyCode')}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.9375rem', letterSpacing: '0.08em', padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)', wordBreak: 'break-all' }}>
                 {/* El móvil muestra solo los primeros 23 caracteres (4 grupos de 5 dígitos);
@@ -269,7 +269,7 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
                     exactamente esos 23 chars para que coincida visualmente con el teléfono. */}
                 {sessionCode.slice(0, 23)}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => { void navigator.clipboard.writeText(sessionCode.slice(0, 23)); toast.success('Código copiado'); }}>
+              <Button variant="ghost" size="sm" aria-label={t('settings.simplexXrcp.copyCode')} onClick={() => { void navigator.clipboard.writeText(sessionCode.slice(0, 23)); toast.success(t('settings.simplexXrcp.codeCopied')); }}>
                 <Copy size={13} />
               </Button>
             </div>
@@ -277,14 +277,14 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
         )}
         <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
           <Smartphone size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-          <span>Esperando a que conectes en el móvil… esta pantalla se comprueba sola cada pocos segundos. El móvil debe estar en la <strong>misma WiFi</strong> y <strong>sin VPN activa</strong> (una VPN que bloquee la red local corta la conexión).</span>
+          <span>{t('settings.simplexXrcp.waiting')}</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="outline" className="flex-1" disabled={submitting} onClick={() => void startPairing()}>
-            Nuevo QR
+            {t('settings.simplexXrcp.newQr')}
           </Button>
           <Button variant="outline" className="flex-1" disabled={submitting} onClick={onCancel}>
-            Cancelar
+            {t('settings.simplexXrcp.cancel')}
           </Button>
         </div>
       </div>
@@ -294,7 +294,7 @@ export function SimplexXrcpForm({ onComplete, onCancel }: { onComplete: () => vo
   // ready (no se usa directamente — el paso `pair` con paired hace de "ready")
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <FormActions onBack={() => setStep('pair')} saving={submitting} onConfirm={handleFinish} submitLabel="Elegir chats" />
+      <FormActions onBack={() => setStep('pair')} saving={submitting} onConfirm={handleFinish} submitLabel={t('settings.simplexXrcp.chooseChats')} />
     </div>
   );
 }

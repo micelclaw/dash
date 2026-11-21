@@ -23,6 +23,7 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { SelectionMenuButton } from '@/components/shared/TileMoreButton';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { PhotoSortField, PhotoSortDir } from './types';
+import { useI18n } from '@/i18n';
 
 // PhotosToolbar was the module's bespoke header (title + view pills + filters +
 // batch actions + search + upload). Phase 4 moved the page chrome to the shared
@@ -48,6 +49,7 @@ function BatchButton({ icon: Icon, label, onClick, disabled, variant, compact }:
       onClick={onClick}
       disabled={disabled}
       title={label}
+      aria-label={label}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -74,8 +76,6 @@ function BatchButton({ icon: Icon, label, onClick, disabled, variant, compact }:
 // funden en UN botón con dropdown multi-toggle, el filtro Videos desaparece, y
 // se añade el control de ordenación (Date/Name/Size + dirección, estilo galería
 // MIUI). El mismo cluster se monta en timeline Y dentro de un álbum.
-
-const SORT_LABELS: Record<PhotoSortField, string> = { date: 'Date', name: 'Name', size: 'Size' };
 
 /** Botón-pastilla base del cluster de filtros. */
 function pillStyle(active: boolean, hovered: boolean): React.CSSProperties {
@@ -116,12 +116,13 @@ export function PhotosFilters({
   inventoryActive = false,
   onInventoryToggle,
 }: PhotosFiltersProps) {
+  const { t } = useI18n();
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
 
   const starsActive = (selectedStars?.size ?? 0) > 0;
   const starsLabel = starsActive
     ? [...(selectedStars ?? [])].sort((a, b) => a - b).join(',')
-    : 'Stars';
+    : t('photos.stars');
   const DirIcon = sortDir === 'asc' ? ArrowUp : ArrowDown;
 
   return (
@@ -135,7 +136,7 @@ export function PhotosFilters({
                 onMouseEnter={() => setHoveredBtn('stars')}
                 onMouseLeave={() => setHoveredBtn(null)}
                 style={pillStyle(starsActive, hoveredBtn === 'stars')}
-                title="Filter by star rating"
+                title={t('photos.filterStars')}
               >
                 <Star size={12} />
                 {starsLabel}
@@ -160,7 +161,7 @@ export function PhotosFilters({
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => onStarsClear()} style={menuItemStyle}>
-                    <X size={12} /> Clear filter
+                    <X size={12} /> {t('photos.clearFilter')}
                   </DropdownMenuItem>
                 </>
               )}
@@ -178,10 +179,10 @@ export function PhotosFilters({
                 onMouseEnter={() => setHoveredBtn('sort')}
                 onMouseLeave={() => setHoveredBtn(null)}
                 style={pillStyle(false, hoveredBtn === 'sort')}
-                title="Sort by"
+                title={t('photos.sort')}
               >
                 <ArrowUpDown size={12} />
-                {SORT_LABELS[sortField]}
+                {t(`photos.${sortField}`)}
                 <DirIcon size={11} />
               </button>
             </DropdownMenuTrigger>
@@ -199,7 +200,7 @@ export function PhotosFilters({
                     style={menuItemStyle}
                   >
                     <span style={{ width: 14 }}>{active ? <Check size={13} /> : null}</span>
-                    {SORT_LABELS[field]}
+                    {t(`photos.${field}`)}
                     {active && <DirIcon size={12} style={{ marginLeft: 'auto', color: 'var(--amber)' }} />}
                   </DropdownMenuItem>
                 );
@@ -218,7 +219,7 @@ export function PhotosFilters({
             style={pillStyle(inventoryActive, hoveredBtn === 'inventory')}
           >
             <Boxes size={12} />
-            Inventory
+            {t('photos.inventory')}
           </button>
         </div>
       )}
@@ -246,6 +247,7 @@ export function PhotosBatchActions({
   onClearSelection,
   menuItems,
 }: PhotosBatchActionsProps) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const isMobile = useIsMobile();
   if (selectedCount <= 0) return null;
@@ -258,16 +260,17 @@ export function PhotosBatchActions({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap' }}>
-        {selectedCount} selected
+        {t(selectedCount === 1 ? 'photos.selectedOne' : 'photos.selected', { count: selectedCount })}
       </span>
-      {showButtons && onBatchAddToAlbum && <BatchButton icon={FolderPlus} label="Add to album" onClick={onBatchAddToAlbum} compact={isMobile} />}
-      {showButtons && onBatchProcess && <BatchButton icon={Cpu} label="Process" onClick={onBatchProcess} compact={isMobile} />}
-      {showButtons && onBatchDelete && <BatchButton icon={Trash2} label="Delete" onClick={onBatchDelete} variant="danger" compact={isMobile} />}
+      {showButtons && onBatchAddToAlbum && <BatchButton icon={FolderPlus} label={t('photos.addAlbum')} onClick={onBatchAddToAlbum} compact={isMobile} />}
+      {showButtons && onBatchProcess && <BatchButton icon={Cpu} label={t('photos.process')} onClick={onBatchProcess} compact={isMobile} />}
+      {showButtons && onBatchDelete && <BatchButton icon={Trash2} label={t('photos.delete')} onClick={onBatchDelete} variant="danger" compact={isMobile} />}
       {hasMenu && <SelectionMenuButton items={menuItems!} />}
       {onClearSelection && (
         <button
           onClick={onClearSelection}
-          title="Clear selection"
+          title={t('photos.clearSelection')}
+          aria-label={t('photos.clearSelection')}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           style={{
@@ -280,7 +283,7 @@ export function PhotosBatchActions({
           }}
         >
           <X size={13} />
-          {!isMobile && 'Clear'}
+          {!isMobile && t('photos.clear')}
         </button>
       )}
     </div>
@@ -290,6 +293,7 @@ export function PhotosBatchActions({
 // ─── Upload button — MediaShell actions slot ───────────────────────────
 
 export function PhotosUploadButton({ onClick }: { onClick: () => void }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   return (
     <button
@@ -306,7 +310,7 @@ export function PhotosUploadButton({ onClick }: { onClick: () => void }) {
       }}
     >
       <Upload size={14} />
-      Upload
+      {t('photos.upload')}
     </button>
   );
 }

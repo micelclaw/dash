@@ -25,8 +25,10 @@ import { api } from '@/services/api';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { listShareRecipients, type ShareRecipient } from '@/services/shares.service';
+import { useI18n } from '@/i18n';
 
 export function TransferBoardModal({ boardId, onClose }: { boardId: string; onClose: () => void }) {
+  const { t } = useI18n();
   const fetchFullBoard = useProjectsStore((s) => s.fetchFullBoard);
   const [recipients, setRecipients] = useState<ShareRecipient[]>([]);
   const [target, setTarget] = useState('');
@@ -42,11 +44,11 @@ export function TransferBoardModal({ boardId, onClose }: { boardId: string; onCl
     setBusy(true);
     try {
       await api.post(`/projects/boards/${boardId}/transfer`, { new_owner_id: target });
-      toast.success('Propiedad transferida');
+      toast.success(t('projects.transferBoard.success'));
       void fetchFullBoard(boardId);
       onClose();
     } catch (err) {
-      toast.error((err as Error)?.message || 'No se pudo transferir la propiedad');
+      toast.error((err as Error)?.message || t('projects.transferBoard.error'));
     }
     setBusy(false);
   };
@@ -65,26 +67,27 @@ export function TransferBoardModal({ boardId, onClose }: { boardId: string; onCl
           padding: '16px 20px', borderBottom: '1px solid var(--border)',
         }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Crown size={16} style={{ color: 'var(--amber)' }} /> Transferir propiedad
+            <Crown size={16} style={{ color: 'var(--amber)' }} /> {t('projects.transferBoard.title')}
           </h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4 }}>
+          <button onClick={onClose} aria-label={t('projects.transferBoard.close')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4 }}>
             <X size={16} />
           </button>
         </div>
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            Transfiere este tablero a otro usuario. Tú conservarás acceso de edición.
+            {t('projects.transferBoard.description')}
           </p>
           <select
             value={target}
             onChange={(e) => setTarget(e.target.value)}
+            aria-label={t('projects.transferBoard.recipient.label')}
             style={{
               background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6,
               padding: '6px 8px', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-sans)',
               outline: 'none', colorScheme: 'dark',
             }}
           >
-            <option value="">Selecciona el nuevo propietario…</option>
+            <option value="">{t('projects.transferBoard.recipient.placeholder')}</option>
             {recipients.map(u => (
               <option key={u.id} value={u.id}>
                 {u.display_name || u.email}{u.email && u.display_name ? ` (${u.email})` : ''}
@@ -101,7 +104,7 @@ export function TransferBoardModal({ boardId, onClose }: { boardId: string; onCl
               cursor: !target || busy ? 'default' : 'pointer', opacity: !target || busy ? 0.4 : 1,
             }}
           >
-            {busy ? 'Transfiriendo…' : 'Transferir'}
+            {busy ? t('projects.transferBoard.busy') : t('projects.transferBoard.submit')}
           </button>
         </div>
       </div>

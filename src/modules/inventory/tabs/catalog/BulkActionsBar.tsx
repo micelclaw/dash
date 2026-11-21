@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Tag as TagIcon, Trash2 } from 'lucide-react';
 import { SYSTEM_STATUS_LABELS, type InventoryLocation } from '@/modules/inventory/types';
 import { btnSecondary, inputStyle, selectStyle } from '@/modules/inventory/ui';
+import { useI18n } from '@/i18n';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -41,6 +42,7 @@ export function BulkActionsBar({
   onDelete,
   onClear,
 }: BulkActionsBarProps) {
+  const { t } = useI18n();
   const [tagDraft, setTagDraft] = useState('');
 
   return (
@@ -59,7 +61,7 @@ export function BulkActionsBar({
       }}
     >
       <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-        {selectedCount} selected
+        {selectedCount} {t('inventory.catalog.selected')}
       </span>
 
       {/* Mover a ubicación */}
@@ -68,10 +70,10 @@ export function BulkActionsBar({
         value=""
         disabled={busy}
         onChange={e => { const v = e.target.value; if (v) onMove(v === '__none__' ? null : v); e.currentTarget.value = ''; }}
-        aria-label="Move to location"
+        aria-label={t('inventory.catalog.moveToLocation')}
       >
-        <option value="">Move to…</option>
-        <option value="__none__">No location</option>
+        <option value="">{t('inventory.catalog.moveTo')}</option>
+        <option value="__none__">{t('inventory.panel.noLocation')}</option>
         {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
       </select>
 
@@ -81,10 +83,10 @@ export function BulkActionsBar({
         value=""
         disabled={busy}
         onChange={e => { const v = e.target.value; if (v) onStatus(v); e.currentTarget.value = ''; }}
-        aria-label="Set status"
+        aria-label={t('inventory.catalog.setStatus')}
       >
-        <option value="">Set status…</option>
-        {systemStatuses.map(s => <option key={s} value={s}>{SYSTEM_STATUS_LABELS[s] ?? s}</option>)}
+        <option value="">{t('inventory.catalog.setStatusPlaceholder')}</option>
+        {systemStatuses.map(s => <option key={s} value={s}>{SYSTEM_STATUS_LABELS[s] ? t(`inventory.status.${s}`) : s}</option>)}
       </select>
 
       {/* Añadir tag */}
@@ -92,7 +94,7 @@ export function BulkActionsBar({
         <TagIcon size={13} style={{ position: 'absolute', left: 8, color: 'var(--text-dim)', pointerEvents: 'none' }} />
         <input
           style={{ ...inputStyle, width: 150, padding: '5px 8px 5px 26px' }}
-          placeholder="Add tag + Enter"
+          placeholder={t('inventory.catalog.addTagPlaceholder')}
           value={tagDraft}
           disabled={busy}
           onChange={e => setTagDraft(e.target.value)}
@@ -105,9 +107,9 @@ export function BulkActionsBar({
         style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center', gap: 5 }}
         disabled={busy}
         onClick={onShowLabels}
-        title="Print QR labels for the selected items"
+        title={t('inventory.catalog.printQrLabels')}
       >
-        🏷 Labels
+        🏷 {t('inventory.catalog.labels')}
       </button>
 
       {/* Borrar en lote */}
@@ -116,11 +118,11 @@ export function BulkActionsBar({
         disabled={busy}
         onClick={onDelete}
       >
-        <Trash2 size={13} /> Delete
+        <Trash2 size={13} /> {t('inventory.delete')}
       </button>
 
       <button style={{ ...btnSecondary, marginLeft: 'auto' }} disabled={busy} onClick={onClear}>
-        Clear
+        {t('inventory.catalog.clearSelection')}
       </button>
     </div>
   );

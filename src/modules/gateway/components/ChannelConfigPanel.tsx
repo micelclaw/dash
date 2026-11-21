@@ -3,11 +3,12 @@
  * All rights reserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Save, X, RotateCcw, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { useGatewayStore } from '@/stores/gateway.store';
+import { useI18n } from '@/i18n';
 
 interface ChannelConfigPanelProps {
   channelType: string;
@@ -15,28 +16,28 @@ interface ChannelConfigPanelProps {
 }
 
 const DM_POLICIES = [
-  { value: 'pairing', label: 'Pairing', desc: 'Unknown senders must be approved' },
-  { value: 'allowlist', label: 'Allowlist', desc: 'Only pre-approved IDs' },
-  { value: 'open', label: 'Open', desc: 'Anyone can send DMs' },
-  { value: 'disabled', label: 'Disabled', desc: 'No DMs accepted' },
+  { value: 'pairing', label: 'gateway.channelConfig.pairing', desc: 'gateway.channelConfig.unknownSenders' },
+  { value: 'allowlist', label: 'gateway.channelConfig.allowlist', desc: 'gateway.channelConfig.preApprovedIds' },
+  { value: 'open', label: 'gateway.channelConfig.open', desc: 'gateway.channelConfig.anyoneDm' },
+  { value: 'disabled', label: 'gateway.channelConfig.disabled', desc: 'gateway.channelConfig.noDms' },
 ];
 
 const GROUP_POLICIES = [
-  { value: 'allowlist', label: 'Allowlist', desc: 'Only approved groups' },
-  { value: 'open', label: 'Open', desc: 'Any group the bot is in' },
-  { value: 'disabled', label: 'Disabled', desc: 'No group messages' },
+  { value: 'allowlist', label: 'gateway.channelConfig.allowlist', desc: 'gateway.channelConfig.approvedGroups' },
+  { value: 'open', label: 'gateway.channelConfig.open', desc: 'gateway.channelConfig.anyGroup' },
+  { value: 'disabled', label: 'gateway.channelConfig.disabled', desc: 'gateway.channelConfig.noGroupMessages' },
 ];
 
 const STREAMING_MODES = [
-  { value: 'off', label: 'Off', desc: 'Full message at once' },
-  { value: 'partial', label: 'Partial', desc: 'Live editing (recommended)' },
-  { value: 'block', label: 'Block', desc: 'Send text blocks as they complete' },
+  { value: 'off', label: 'gateway.channelConfig.off', desc: 'gateway.channelConfig.fullMessage' },
+  { value: 'partial', label: 'gateway.channelConfig.partial', desc: 'gateway.channelConfig.liveEditing' },
+  { value: 'block', label: 'gateway.channelConfig.block', desc: 'gateway.channelConfig.textBlocks' },
 ];
 
 const REPLY_MODES = [
-  { value: 'off', label: 'Off' },
-  { value: 'first', label: 'First message only' },
-  { value: 'all', label: 'All messages' },
+  { value: 'off', label: 'gateway.channelConfig.off' },
+  { value: 'first', label: 'gateway.channelConfig.firstMessage' },
+  { value: 'all', label: 'gateway.channelConfig.allMessages' },
 ];
 
 // Actions available per channel type
@@ -54,6 +55,7 @@ function SelectRow({ label, value, options, onChange }: {
   options: { value: string; label: string; desc?: string }[];
   onChange: (v: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '6px 0' }}>
       <span style={{ fontSize: '0.8125rem', color: 'var(--text)', flex: 1 }}>{label}</span>
@@ -68,7 +70,7 @@ function SelectRow({ label, value, options, onChange }: {
         }}
       >
         {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}{o.desc ? ` — ${o.desc}` : ''}</option>
+          <option key={o.value} value={o.value}>{t(o.label)}{o.desc ? ` — ${t(o.desc)}` : ''}</option>
         ))}
       </select>
     </div>
@@ -151,6 +153,9 @@ function Section({ title, expanded, onToggle, children }: {
 }
 
 export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelProps) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const channels = useGatewayStore(s => s.channels);
   const channelRuntime = channels.find(c => c.type === channelType);
   const isConnected = channelRuntime?.status === 'connected';
@@ -175,7 +180,7 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
       setOriginalConfig(data);
       setDirty(false);
     } catch {
-      toast.error(`Failed to load ${channelType} config`);
+      toast.error(tRef.current('gateway.channelConfig.loadFailed', { channel: channelType }));
     } finally {
       setLoading(false);
     }
@@ -213,9 +218,9 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
       await gwService.updateChannelConfig(channelType, patch);
       setOriginalConfig({ ...config });
       setDirty(false);
-      toast.success(`${channelType} config updated`);
+      toast.success(t('gateway.channelConfig.updated', { channel: channelType }));
     } catch {
-      toast.error(`Failed to update ${channelType} config`);
+      toast.error(t('gateway.channelConfig.updateFailed', { channel: channelType }));
     } finally {
       setSaving(false);
     }
@@ -232,7 +237,7 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
   if (loading) {
     return (
       <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-        Loading {channelLabel} config...
+        {t('gateway.channelConfig.loading', { channel: channelLabel })}
       </div>
     );
   }
@@ -248,13 +253,13 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
         padding: '12px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0,
       }}>
         <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-          {channelLabel} Configuration
+          {t('gateway.channelConfig.configuration', { channel: channelLabel })}
         </h3>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {dirty && (
             <>
-              <span style={{ fontSize: '0.6875rem', color: 'var(--warning)', marginRight: 4 }}>unsaved</span>
-              <button onClick={handleReset} title="Reset" style={{
+              <span style={{ fontSize: '0.6875rem', color: 'var(--warning)', marginRight: 4 }}>{t('gateway.channelConfig.unsaved')}</span>
+              <button onClick={handleReset} title={t('gateway.channelConfig.reset')} style={{
                 background: 'transparent', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)', padding: '4px 6px', cursor: 'pointer',
                 color: 'var(--text-dim)', display: 'flex', alignItems: 'center',
@@ -273,11 +278,11 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
                   fontFamily: 'var(--font-sans)',
                 }}
               >
-                <Save size={12} /> Save
+                <Save size={12} /> {t('gateway.heartbeat.save')}
               </button>
             </>
           )}
-          <button onClick={onClose} title="Close" style={{
+          <button onClick={onClose} title={t('gateway.providerAuth.close')} style={{
             background: 'transparent', border: 'none', padding: 4,
             cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center',
           }}>
@@ -306,79 +311,78 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
           }}>
             <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>
-              Channel is not connected at runtime (status: <strong>{channelRuntime.status}</strong>).
-              Changes will save but won't apply until the channel reconnects (re-login or fix the token).
+              {t('gateway.channelConfig.runtimeWarning', { status: channelRuntime.status })}
             </span>
           </div>
         )}
         {/* Enabled toggle */}
         <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
           <ToggleRow
-            label="Channel enabled"
+            label={t('gateway.channelConfig.channelEnabled')}
             value={config.enabled !== false}
             onChange={v => updateField('enabled', v)}
           />
         </div>
 
         {/* Access policies */}
-        <Section title="Access Policies" expanded={sections.access!} onToggle={() => toggleSection('access')}>
+        <Section title={t('gateway.channelConfig.accessPolicies')} expanded={sections.access!} onToggle={() => toggleSection('access')}>
           <SelectRow
-            label="DM policy"
+            label={t('gateway.channelConfig.dmPolicy')}
             value={(config.dm_policy ?? 'pairing') as string}
             options={DM_POLICIES}
             onChange={v => updateField('dmPolicy', v)}
           />
           <SelectRow
-            label="Group policy"
+            label={t('gateway.channelConfig.groupPolicy')}
             value={(config.group_policy ?? 'allowlist') as string}
             options={GROUP_POLICIES}
             onChange={v => updateField('groupPolicy', v)}
           />
           <ToggleRow
-            label="Require mention in groups"
+            label={t('gateway.channelConfig.requireMention')}
             value={(config.require_mention ?? true) as boolean}
             onChange={v => updateField('requireMention', v)}
           />
         </Section>
 
         {/* Messaging */}
-        <Section title="Messaging" expanded={sections.messaging!} onToggle={() => toggleSection('messaging')}>
+        <Section title={t('gateway.channelConfig.messaging')} expanded={sections.messaging!} onToggle={() => toggleSection('messaging')}>
           {['telegram', 'discord', 'slack'].includes(channelType) && (
             <SelectRow
-              label="Streaming"
+              label={t('gateway.channelConfig.streaming')}
               value={(config.streaming ?? 'off') as string}
               options={STREAMING_MODES}
               onChange={v => updateField('streaming', v)}
             />
           )}
           <SelectRow
-            label="Reply threading"
+            label={t('gateway.channelConfig.replyThreading')}
             value={(config.reply_to_mode ?? 'off') as string}
             options={REPLY_MODES}
             onChange={v => updateField('replyToMode', v)}
           />
           <NumberRow
-            label="History limit"
+            label={t('gateway.channelConfig.historyLimit')}
             value={(config.history_limit ?? 50) as number}
             min={0} max={200}
             onChange={v => updateField('historyLimit', v)}
           />
           <NumberRow
-            label="Text chunk limit"
+            label={t('gateway.channelConfig.textChunkLimit')}
             value={(config.text_chunk_limit ?? 4000) as number}
             min={500} max={10000}
             onChange={v => updateField('textChunkLimit', v)}
           />
           {channelType === 'telegram' && (
             <ToggleRow
-              label="Link preview"
+              label={t('gateway.channelConfig.linkPreview')}
               value={(config.link_preview ?? true) as boolean}
               onChange={v => updateField('linkPreview', v)}
             />
           )}
           {(channelType === 'whatsapp' || channelType === 'signal') && (
             <ToggleRow
-              label="Send read receipts"
+              label={t('gateway.channelConfig.readReceipts')}
               value={(config.send_read_receipts ?? true) as boolean}
               onChange={v => updateField('sendReadReceipts', v)}
             />
@@ -387,14 +391,14 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
 
         {/* Actions */}
         {availableActions.length > 0 && (
-          <Section title="Actions" expanded={sections.actions!} onToggle={() => toggleSection('actions')}>
+          <Section title={t('gateway.channelConfig.actions')} expanded={sections.actions!} onToggle={() => toggleSection('actions')}>
             {availableActions.map(action => {
               const actions = (config.actions ?? {}) as Record<string, boolean>;
               const enabled = actions[action] !== false;
               return (
                 <ToggleRow
                   key={action}
-                  label={action.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                  label={t(`gateway.channelConfig.action.${action}`)}
                   value={enabled}
                   onChange={v => updateNestedField('actions', action, v)}
                 />
@@ -404,16 +408,16 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
         )}
 
         {/* Advanced (channel-specific) */}
-        <Section title="Advanced" expanded={sections.advanced!} onToggle={() => toggleSection('advanced')}>
+        <Section title={t('gateway.channelConfig.advanced')} expanded={sections.advanced!} onToggle={() => toggleSection('advanced')}>
           {channelType === 'telegram' && (
             <>
               <SelectRow
-                label="Reaction notifications"
+                label={t('gateway.channelConfig.reactionNotifications')}
                 value={(config.reaction_notifications ?? 'own') as string}
                 options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'own', label: 'Own messages only' },
-                  { value: 'all', label: 'All messages' },
+                  { value: 'off', label: 'gateway.channelConfig.off' },
+                  { value: 'own', label: 'gateway.channelConfig.ownMessages' },
+                  { value: 'all', label: 'gateway.channelConfig.allMessages' },
                 ]}
                 onChange={v => updateField('reactionNotifications', v)}
               />
@@ -422,18 +426,18 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
           {channelType === 'discord' && (
             <>
               <SelectRow
-                label="Bot status"
+                label={t('gateway.channelConfig.botStatus')}
                 value={(config.status ?? 'online') as string}
                 options={[
-                  { value: 'online', label: 'Online' },
-                  { value: 'idle', label: 'Idle' },
-                  { value: 'dnd', label: 'Do Not Disturb' },
-                  { value: 'invisible', label: 'Invisible' },
+                  { value: 'online', label: 'gateway.channelConfig.online' },
+                  { value: 'idle', label: 'gateway.channelConfig.idle' },
+                  { value: 'dnd', label: 'gateway.channelConfig.dnd' },
+                  { value: 'invisible', label: 'gateway.channelConfig.invisible' },
                 ]}
                 onChange={v => updateField('status', v)}
               />
               <ToggleRow
-                label="Thread bindings"
+                label={t('gateway.channelConfig.threadBindings')}
                 value={((config.thread_bindings) as Record<string, unknown>)?.enabled as boolean ?? false}
                 onChange={v => updateNestedField('threadBindings', 'enabled', v)}
               />
@@ -442,23 +446,23 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
           {channelType === 'slack' && (
             <>
               <SelectRow
-                label="Mode"
+                label={t('gateway.channelConfig.mode')}
                 value={(config.mode ?? 'socket') as string}
                 options={[
-                  { value: 'socket', label: 'Socket Mode' },
-                  { value: 'http', label: 'HTTP Events API' },
+                  { value: 'socket', label: 'gateway.channelConfig.socketMode' },
+                  { value: 'http', label: 'gateway.channelConfig.httpEvents' },
                 ]}
                 onChange={v => updateField('mode', v)}
               />
               <ToggleRow
-                label="Native streaming"
+                label={t('gateway.channelConfig.nativeStreaming')}
                 value={(config.native_streaming ?? true) as boolean}
                 onChange={v => updateField('nativeStreaming', v)}
               />
             </>
           )}
           <NumberRow
-            label="Media max (MB)"
+            label={t('gateway.channelConfig.mediaMax')}
             value={(config.media_max_mb ?? 50) as number}
             min={1} max={200}
             onChange={v => updateField('mediaMaxMb', v)}

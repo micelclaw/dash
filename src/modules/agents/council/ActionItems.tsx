@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import type { ActionItem } from '../types';
 
 interface ActionItemsProps {
@@ -52,11 +53,11 @@ function statusBg(status: ActionItem['status']): string {
   }
 }
 
-function statusLabel(status: ActionItem['status']): string {
+function statusLabel(status: ActionItem['status'], t: (key: string) => string): string {
   switch (status) {
-    case 'complete': return 'Complete';
-    case 'in_progress': return 'In Progress';
-    case 'pending': return 'Pending';
+    case 'complete': return t('council.actions.status.complete');
+    case 'in_progress': return t('council.actions.status.inProgress');
+    case 'pending': return t('council.actions.status.pending');
   }
 }
 
@@ -69,6 +70,7 @@ function statusIcon(status: ActionItem['status']): string {
 }
 
 export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboard }: ActionItemsProps) {
+  const { t } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(
     items.length > 0 ? items[0]!.id : null
   );
@@ -104,7 +106,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
             fontWeight: 600,
             color: 'var(--text)',
           }}>
-            Action Items
+            {t('council.actions.title')}
           </h3>
           <span style={{
             fontSize: '0.75rem',
@@ -124,7 +126,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
             padding: '3px 10px',
             borderRadius: 'var(--radius-full)',
           }}>
-            All Tasks Complete
+            {t('council.actions.allComplete')}
           </span>
         )}
       </div>
@@ -230,7 +232,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
 
               {meetingTitle && (
                 <p style={{ margin: 0, fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  Del council «{meetingTitle}»
+                  {t('council.actions.origin', { title: meetingTitle })}
                 </p>
               )}
 
@@ -250,7 +252,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                     color: 'var(--text-muted)',
                     fontWeight: 500,
                   }}>
-                    Assigned to:
+                    {t('council.actions.assignedTo')}
                   </span>
                   <span style={{
                     fontSize: '0.8125rem',
@@ -272,14 +274,18 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                     color: 'var(--text-muted)',
                     fontWeight: 500,
                   }}>
-                    Status:
+                    {t('council.actions.statusLabel')}
                   </span>
                   {/* Con tarjeta del Workboard: el status LO MANDA la tarjeta (solo lectura + enlace).
                       Sin tarjeta (item asignado al usuario): clic manual que cicla el estado. */}
                   {onCycleStatus && !selectedItem.workboard_card_id ? (
                     <button
                       onClick={() => onCycleStatus(selectedItem.id, nextStatus(selectedItem.status))}
-                      title="Click to cycle status: pending → in progress → complete → pending"
+                      title={t('council.actions.cycleStatus', {
+                        pending: t('council.actions.status.pending'),
+                        inProgress: t('council.actions.status.inProgress'),
+                        complete: t('council.actions.status.complete'),
+                      })}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -296,11 +302,11 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                       }}
                     >
                       <span>{statusIcon(selectedItem.status)}</span>
-                      {statusLabel(selectedItem.status)}
+                      {statusLabel(selectedItem.status, t)}
                     </button>
                   ) : (
                     <span
-                      title={selectedItem.workboard_card_id ? 'Se sincroniza con la tarjeta del Workboard' : undefined}
+                      title={selectedItem.workboard_card_id ? t('council.actions.workboardSyncTitle') : undefined}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -313,7 +319,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                         borderRadius: 'var(--radius-full)',
                       }}>
                       <span>{statusIcon(selectedItem.status)}</span>
-                      {statusLabel(selectedItem.status)}
+                      {statusLabel(selectedItem.status, t)}
                     </span>
                   )}
                   {selectedItem.workboard_card_id && (
@@ -321,7 +327,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                       onClick={() => window.dispatchEvent(new CustomEvent('claw:agents-tab', { detail: 'workboard' }))}
                       style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                     >
-                      sincronizado con la tarjeta →
+                      {t('council.actions.workboardSynced')}
                     </button>
                   )}
                 </div>
@@ -338,7 +344,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                       color: 'var(--text-muted)',
                       fontWeight: 500,
                     }}>
-                      Deliverable:
+                      {t('council.actions.deliverable')}
                     </span>
                     <a
                       href={selectedItem.deliverable_url}
@@ -366,7 +372,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                     padding: '5px 12px', borderRadius: 'var(--radius-full)',
                     background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)',
                   }}>
-                    ✓ En el Workboard
+                    ✓ {t('council.actions.inWorkboard')}
                   </span>
                 ) : (
                   <button
@@ -384,7 +390,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
                       cursor: addingId === selectedItem.id ? 'wait' : 'pointer',
                     }}
                   >
-                    {addingId === selectedItem.id ? 'Añadiendo…' : '+ Añadir al Workboard'}
+                    {addingId === selectedItem.id ? t('council.actions.addingToWorkboard') : t('council.actions.addToWorkboard')}
                   </button>
                 )
               )}
@@ -398,7 +404,7 @@ export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboa
               color: 'var(--text-muted)',
               fontSize: '0.8125rem',
             }}>
-              Select an action item to view details.
+              {t('council.actions.selectItem')}
             </div>
           )}
         </div>

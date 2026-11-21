@@ -30,10 +30,12 @@ import { ProfileSelector } from '@/components/profiles/ProfileSelector';
 import { useProfileStore } from '@/stores/profile.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useBackGuard } from '@/hooks/use-back-guard';
+import { useI18n } from '@/i18n';
 
 type InventoryTab = 'panel' | 'catalog' | 'locations' | 'stock' | 'lending' | 'maintenance' | 'reports';
 
 export function Component() {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   // Deep-link a ubicación (QR de bin/estante): fuerza la tab Locations y pasa el id.
@@ -108,14 +110,14 @@ export function Component() {
   );
 
   const tabs = useMemo(() => [
-    { id: 'panel', label: 'Overview', icon: LayoutDashboard },
-    { id: 'catalog', label: 'Catalog', icon: Boxes },
-    { id: 'locations', label: 'Locations', icon: MapPin },
-    ...(showStock ? [{ id: 'stock', label: 'Stock', icon: ArrowRightLeft }] : []),
-    { id: 'lending', label: 'Lending', icon: HandHeart, badge: alerts?.active_loans.length || undefined },
-    { id: 'maintenance', label: 'Maintenance', icon: Wrench, badge: alerts?.upcoming_maintenance.length || undefined },
-    { id: 'reports', label: 'Reports', icon: BarChart3 },
-  ], [showStock, alerts]);
+    { id: 'panel', label: t('inventory.tab.panel'), icon: LayoutDashboard },
+    { id: 'catalog', label: t('inventory.tab.catalog'), icon: Boxes },
+    { id: 'locations', label: t('inventory.tab.locations'), icon: MapPin },
+    ...(showStock ? [{ id: 'stock', label: t('inventory.tab.stock'), icon: ArrowRightLeft }] : []),
+    { id: 'lending', label: t('inventory.tab.lending'), icon: HandHeart, badge: alerts?.active_loans.length || undefined },
+    { id: 'maintenance', label: t('inventory.tab.maintenance'), icon: Wrench, badge: alerts?.upcoming_maintenance.length || undefined },
+    { id: 'reports', label: t('inventory.tab.reports'), icon: BarChart3 },
+  ], [showStock, alerts, t]);
 
   const setTab = (id: string) => {
     setSearchParams(prev => {

@@ -27,10 +27,12 @@ import { ItemsGrid } from './catalog/ItemsGrid';
 import { sortItems, type SortDir, type SortKey } from './catalog/sorting';
 import { SavedViewsControl } from './catalog/SavedViewsControl';
 import type { CatalogSavedView } from './catalog/saved-views';
+import { useI18n } from '@/i18n';
 
 const VIEW_STORAGE_KEY = 'inventory-view';
 
 export function CatalogTab() {
+  const { t: tr } = useI18n();
   const {
     items,
     itemsTotal,
@@ -144,7 +146,7 @@ export function CatalogTab() {
       toast.success(label);
       setSelected(new Set());
     } catch {
-      toast.error('Bulk action failed');
+      toast.error(tr('inventory.catalog.bulkFailed'));
     } finally {
       setBulkBusy(false);
     }
@@ -152,16 +154,16 @@ export function CatalogTab() {
 
   const ids = () => [...selected];
   const onBulkMove = (locationId: string | null) =>
-    runBulk(`${selectedCount} item(s) moved`, () => bulkMoveItems(ids(), locationId));
+    runBulk(tr('inventory.catalog.bulkMoved', { count: selectedCount }), () => bulkMoveItems(ids(), locationId));
   const onBulkStatus = (status: string) =>
-    runBulk(`${selectedCount} item(s) updated`, () => bulkSetStatusItems(ids(), status));
+    runBulk(tr('inventory.catalog.bulkUpdated', { count: selectedCount }), () => bulkSetStatusItems(ids(), status));
   const onBulkTag = (tag: string) => {
     const t = tag.trim();
     if (!t) return;
-    void runBulk(`Tag "${t}" added to ${selectedCount} item(s)`, () => bulkAddTagItems(ids(), t));
+    void runBulk(tr('inventory.catalog.bulkTagAdded', { tag: t, count: selectedCount }), () => bulkAddTagItems(ids(), t));
   };
   const onBulkDelete = () =>
-    runBulk(`${selectedCount} item(s) deleted`, () => bulkDeleteItems(ids()));
+    runBulk(tr('inventory.catalog.bulkDeleted', { count: selectedCount }), () => bulkDeleteItems(ids()));
 
   const applyFilters = (patch: Partial<ItemFilters>) => {
     const next: ItemFilters = { ...filtersRef.current, ...patch };
@@ -228,29 +230,29 @@ export function CatalogTab() {
           <Search size={13} style={{ position: 'absolute', left: 8, color: 'var(--text-dim)', pointerEvents: 'none' }} />
           <input
             style={{ ...inputStyle, width: 200, padding: '5px 8px 5px 26px' }}
-            placeholder="Search items…"
+            placeholder={tr('inventory.search')}
             value={search}
             onChange={e => onSearchChange(e.target.value)}
           />
         </div>
 
         <select style={selectStyle} value={filters.category ?? ''} onChange={e => applyFilters({ category: e.target.value || undefined })}>
-          <option value="">All categories</option>
+          <option value="">{tr('inventory.catalog.allCategories')}</option>
           {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
         <select style={selectStyle} value={filters.status ?? ''} onChange={e => applyFilters({ status: e.target.value || undefined })}>
-          <option value="">All statuses</option>
+          <option value="">{tr('inventory.catalog.allStatuses')}</option>
           {systemStatuses.map(s => <option key={s} value={s}>{SYSTEM_STATUS_LABELS[s] ?? s}</option>)}
         </select>
 
         <select style={selectStyle} value={filters.location_id ?? ''} onChange={e => applyFilters({ location_id: e.target.value || undefined })}>
-          <option value="">All locations</option>
+          <option value="">{tr('inventory.catalog.allLocations')}</option>
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
 
         <select style={selectStyle} value={filters.tag ?? ''} onChange={e => applyFilters({ tag: e.target.value || undefined })}>
-          <option value="">All tags</option>
+          <option value="">{tr('inventory.catalog.allTags')}</option>
           {tags.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
 
@@ -261,7 +263,7 @@ export function CatalogTab() {
               checked={!!filters.low_stock}
               onChange={e => applyFilters({ low_stock: e.target.checked || undefined })}
             />
-            Low stock
+            {tr('inventory.catalog.lowStock')}
           </label>
         )}
 
@@ -269,7 +271,7 @@ export function CatalogTab() {
           <button
             type="button"
             onClick={() => setAssetsOnly(a => !a)}
-            title="Show only fixed assets (machines, vehicles, equipment)"
+            title={tr('inventory.catalog.assetsTitle')}
             style={{
               ...btnSecondary,
               padding: '5px 10px',
@@ -278,19 +280,19 @@ export function CatalogTab() {
                 : {}),
             }}
           >
-            🏭 Assets
+            🏭 {tr('inventory.catalog.assets')}
           </button>
         )}
 
         <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
           {!loading && (assetsOnly
-            ? `${displayItems.length} ${displayItems.length === 1 ? 'asset' : 'assets'}`
+            ? tr('inventory.catalog.assetCount', { count: displayItems.length })
             : items.length === itemsTotal
-              ? `${itemsTotal} ${itemsTotal === 1 ? 'item' : 'items'}`
-              : `${items.length} of ${itemsTotal}`)}
+              ? tr('inventory.catalog.itemCount', { count: itemsTotal })
+              : tr('inventory.catalog.countRange', { shown: items.length, total: itemsTotal }))}
         </span>
         <button style={btnPrimary} onClick={() => setShowModal(true)}>
-          + New item
+          + {tr('inventory.catalog.newItem')}
         </button>
       </div>
 
@@ -316,16 +318,16 @@ export function CatalogTab() {
           hasActiveFilters ? (
             <EmptyState
               icon={Search}
-              title="No matching items"
-              description="No items match your current search or filters."
-              actions={[{ label: 'Clear filters', onClick: clearFilters, variant: 'primary' }]}
+              title={tr('inventory.catalog.noMatchingItems')}
+              description={tr('inventory.catalog.noMatchDescription')}
+              actions={[{ label: tr('inventory.catalog.clearFilters'), onClick: clearFilters, variant: 'primary' }]}
             />
           ) : (
             <EmptyState
               icon={Boxes}
-              title="No items yet"
-              description="Add your first possession or send a photo of a receipt to your agent."
-              actions={[{ label: '+ New item', onClick: () => setShowModal(true), variant: 'primary' }]}
+              title={tr('inventory.catalog.noItemsYet')}
+              description={tr('inventory.catalog.noItemsDescription')}
+              actions={[{ label: `+ ${tr('inventory.catalog.newItem')}`, onClick: () => setShowModal(true), variant: 'primary' }]}
             />
           )
         ) : view === 'list' ? (
@@ -352,7 +354,7 @@ export function CatalogTab() {
         )}
 
         {loading && items.length === 0 && !empty && (
-          <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading…</div>
+          <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{tr('inventory.catalog.loading')}</div>
         )}
       </div>
 
@@ -366,9 +368,9 @@ export function CatalogTab() {
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         onConfirm={onBulkDelete}
-        title={`Delete ${selectedCount} item${selectedCount === 1 ? '' : 's'}?`}
-        description="This soft-deletes the selected items. Their stock ledger is preserved and they can be recovered from the database."
-        confirmLabel="Delete"
+        title={tr('inventory.catalog.deleteSelectedTitle', { count: selectedCount })}
+        description={tr('inventory.catalog.deleteSelectedDescription')}
+        confirmLabel={tr('inventory.delete')}
         variant="danger"
       />
     </div>

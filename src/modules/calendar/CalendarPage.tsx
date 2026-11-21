@@ -33,8 +33,10 @@ import { CalendarGrid } from './CalendarGrid';
 import { EventModal } from './EventModal';
 import { AddCalendarModal } from './AddCalendarModal';
 import type { CalendarView, CalendarEvent } from './types';
+import { useI18n } from '@/i18n';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
 
@@ -412,13 +414,13 @@ export function Component() {
         open={confirmDeleteEventId !== null}
         onClose={() => setConfirmDeleteEventId(null)}
         onConfirm={() => { if (confirmDeleteEventId) void deleteEvent(confirmDeleteEventId); setConfirmDeleteEventId(null); }}
-        title="Delete event"
+        title={t('calendar.deleteEvent')}
         description={(() => {
           const ev = regularEvents.find(e => e.id === confirmDeleteEventId);
           return ev ? `Delete "${ev.title}"?` : 'Delete this event?';
         })()}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        confirmLabel={t('calendar.delete')}
+        cancelLabel={t('calendar.cancel')}
         variant="danger"
       />
     </>

@@ -1,3 +1,4 @@
+import { useChatEvent } from '@/hooks/use-chat-event';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -22,6 +23,9 @@ import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { useDigestStore } from '@/stores/digest.store';
 import { useIsPhone, useIsCompact, useKeyboardOpen } from '@/hooks/use-media-query';
 import { useKeyboard } from '@/hooks/use-keyboard';
+import { useSynchronizedUiPreferences } from '@/hooks/use-ui-preferences';
+import { useConfigurationChanges } from '@/hooks/use-configuration-changes';
+import { UiPreferencesNotice } from '@/components/settings/UiPreferencesNotice';
 import { useCommandPalette } from '@/hooks/use-command-palette';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -56,8 +60,8 @@ import { useAppAccessStore } from '@/stores/app-access.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { useEntityTypesStore } from '@/stores/entity-types.store';
 import { AppAccessGate } from '@/components/shell/AppAccessGate';
-import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
+import { useChatWorkspaceAccess } from '@/hooks/use-chat-workspace-access';
 import { useChatStreamSubscription } from '@/hooks/use-chat-stream-subscription';
 import { useChatReconcile } from '@/hooks/use-chat-reconcile';
 import { useChatLedgerSubscription } from '@/hooks/use-chat-ledger-subscription';
@@ -65,6 +69,8 @@ import { useDeepLinks } from '@/hooks/use-deep-links';
 import { useCoreWebSocket } from '@/hooks/use-core-websocket';
 
 export function Shell() {
+  useSynchronizedUiPreferences();
+  useConfigurationChanges();
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
   const toggle = useSidebarStore((s) => s.toggle);
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
@@ -105,13 +111,9 @@ export function Shell() {
 
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
 
-  // Gateway onboarding status
-  const gatewayConfigured = useGatewayStore((s) => s.configured);
+  // Gateway availability is independent of first-installation onboarding.
   const fetchSnapshot = useGatewayStore((s) => s.fetchSnapshot);
   const fetchHealth = useGatewayStore((s) => s.fetchHealth);
-  const [onboardingJustCompleted, setOnboardingJustCompleted] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
-  const prevConfiguredRef = useRef<boolean | null>(null);
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const loadConfigSchema = useOpenclawSchemaStore((s) => s.loadConfigSchema);
@@ -139,8 +141,8 @@ export function Shell() {
     if (isAdmin) loadConfigSchema();
     // Poll Gateway health every 30s so the composite ConnectionStatus
     // and the chat input dot reflect the real Core↔Gateway state, not
-    // just dash↔Core. /gateway/health is cheap (<50ms). fetchHealth
-    // silently swallows errors (last-known value retained).
+    // just dash↔Core. All consumers share the bounded lightweight availability
+    // read; a failed check keeps dated observations and marks state unknown.
     if (!isAdmin) return;
     const healthPoll = setInterval(() => { void fetchHealth(); }, 30_000);
     return () => clearInterval(healthPoll);
@@ -171,39 +173,8 @@ export function Shell() {
     })();
   }, []);
 
-  // Poll every 10s while unconfigured to detect onboarding completion
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (gatewayConfigured !== false) return;
-    const interval = setInterval(() => fetchSnapshot(), 10_000);
-    return () => clearInterval(interval);
-  }, [isAdmin, gatewayConfigured, fetchSnapshot]);
-
-  // Detect transition: configured false → true → trigger provisioning
-  useEffect(() => {
-    if (!isAdmin) return;
-    const prev = prevConfiguredRef.current;
-    prevConfiguredRef.current = gatewayConfigured;
-
-    if (prev === false && gatewayConfigured === true) {
-      // Onboarding just completed — provision agents
-      import('@/services/gateway.service').then(({ provisionAgents, syncUserProfile }) => {
-        provisionAgents()
-          .then((result) => {
-            console.log('[onboarding] provisioned agents:', result);
-            // Sync USER.md (pre-filled from DB) to all agent workspaces
-            return syncUserProfile().then((sync) => {
-              console.log('[onboarding] synced user profile:', sync);
-            }).catch(() => { /* best-effort */ });
-          })
-          .then(() => setOnboardingJustCompleted(true))
-          .catch((err) => {
-            console.error('[onboarding] provision failed:', err);
-            setOnboardingJustCompleted(true); // Still show green banner
-          });
-      });
-    }
-  }, [isAdmin, gatewayConfigured]);
+  // Installation and agent preparation belong to the explicit /onboarding flow.
+  // A recovered connection must never provision agents or overwrite profiles.
 
   // Apply user theme + accent from settings
   useTheme();
@@ -221,6 +192,7 @@ export function Shell() {
   // Chat stream — ÚNICA suscripción global a chat.stream.* (antes vivía en
   // ChatPage/BottomBar, que se desmontan al navegar → done perdido → F5).
   // + reconciliación desde DB al reconectar/volver-a-pestaña. DB-authoritative.
+  useChatWorkspaceAccess();
   useChatStreamSubscription();
   useChatReconcile();
   useChatLedgerSubscription();
@@ -293,14 +265,14 @@ export function Shell() {
   const removeNotificationByRef = useNotificationStore((s) => s.removeByRef);
   const agentEvent = useWebSocket('agent.*');
   const digestEvent = useWebSocket('digest.*');
-  const approvalEvent = useWebSocket('approval.*');
+  const approvalEvent = useChatEvent('approval.*');
   const clipboardEvent = useWebSocket('clipboard.*');
   const processEvent = useWebSocket('process.*');
   const photoWorkerEvent = useWebSocket('photo.worker.*');
   const mediaEvent = useWebSocket('media.download.*');
   const notificationEvent = useWebSocket('notification.new');
   const notificationDismissEvent = useWebSocket('notification.dismiss');
-  const postYieldEvent = useWebSocket('chat.post_yield_message');
+  const postYieldEvent = useChatEvent('chat.post_yield_message');
 
   // (A4) La síntesis de notificaciones de `sync.*` y `email.*` se ELIMINÓ: el servidor
   // las decide desde el bus (plantillas `content.sync.*` / `content.email.received`) y
@@ -396,7 +368,7 @@ export function Shell() {
   }, [fetchPendingCount]);
 
   useEffect(() => {
-    if (!approvalEvent) return;
+    if (!approvalEvent || !approvalEvent.isCurrent()) return;
 
     // Conversación de ORIGEN de la aprobación (la rellena Core desde el sessionKey
     // de la tool-call). Enrutamos cada tarjeta/mensaje a SU chat — NO al activo —
@@ -490,7 +462,7 @@ export function Shell() {
   // mirror picks it up and broadcasts this event so the open chat tab
   // can append the reply without waiting for a manual refresh.
   useEffect(() => {
-    if (!postYieldEvent) return;
+    if (!postYieldEvent || !postYieldEvent.isCurrent()) return;
     const data = postYieldEvent.data as {
       id: string;
       conversation_id: string | null;
@@ -527,9 +499,9 @@ export function Shell() {
   // sidebar should reflect new threads in real time so the user sees
   // the Francis↔Atlas / Francis↔Sentinel conversation pop up while
   // they're delegating.
-  const subagentMsgEvent = useWebSocket('chat.subagent_message');
+  const subagentMsgEvent = useChatEvent('chat.subagent_message');
   useEffect(() => {
-    if (!subagentMsgEvent) return;
+    if (!subagentMsgEvent || !subagentMsgEvent.isCurrent()) return;
     const data = subagentMsgEvent.data as {
       id: string;
       conversation_id: string | null;
@@ -699,14 +671,7 @@ export function Shell() {
 
   return (
     <TooltipProvider>
-      <div className="shell-root" style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)', paddingTop: (gatewayConfigured === false || (onboardingJustCompleted && !bannerDismissed)) ? 40 : 0 }}>
-        {/* Onboarding banner */}
-        {gatewayConfigured === false && !bannerDismissed && (
-          <OnboardingBanner variant="unconfigured" />
-        )}
-        {onboardingJustCompleted && !bannerDismissed && gatewayConfigured === true && (
-          <OnboardingBanner variant="completed" onDismiss={() => setBannerDismissed(true)} />
-        )}
+      <div className="shell-root" style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)', paddingTop: 0 }}>
 
         {/* Desktop sidebar (en móvil se sustituye por la bottom-nav de abajo).
             isPhone (no isMobile) → oculto también en landscape de teléfono. */}
@@ -717,6 +682,7 @@ export function Shell() {
         {/* Main content area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
           {!isImmersive && <TopBar onOpenCommandPalette={openPalette} />}
+          {!isImmersive && <UiPreferencesNotice />}
 
           {/* Content + BottomBar */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

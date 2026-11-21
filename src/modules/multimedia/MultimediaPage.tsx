@@ -21,6 +21,7 @@ import {
 import { MultimediaStatusCard } from './MultimediaStatusCard';
 import { MultimediaSetupWizard } from './MultimediaSetupWizard';
 import { MediaDownloads } from './MediaDownloads';
+import { useI18n } from '@/i18n';
 
 interface MultimediaAppStatus {
   name: string;
@@ -56,6 +57,7 @@ const PRODUCER_APPS = ['qbittorrent', 'radarr', 'sonarr', 'lidarr', 'readarr'];
 const SUPPORT_APPS  = ['jackett', 'jellyseerr'];
 
 export function Component() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [status, setStatus] = useState<MultimediaSuiteStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,11 +73,11 @@ export function Component() {
       setStatus(res.data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch multimedia status');
+      setError(err instanceof Error ? err.message : t('multimedia.statusFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     refresh();
@@ -131,7 +133,7 @@ export function Component() {
       <div className="mm-center">
         <AlertTriangle size={28} style={{ color: 'var(--error)' }} />
         <span>{error}</span>
-        <button className="mm-btn" onClick={refresh}>Retry</button>
+        <button className="mm-btn" onClick={refresh}>{t('multimedia.retry')}</button>
       </div>
     );
   }
@@ -166,13 +168,13 @@ export function Component() {
   return (
     <div className="mm-page">
       <div className="mm-header">
-        <h2>Servarr</h2>
+        <h2>{t('multimedia.servarr')}</h2>
         <button
           className="mm-btn-icon"
           onClick={handleManualRefresh}
           disabled={refreshing}
-          title="Refresh"
-          aria-label="Refresh service status"
+          title={t('multimedia.refresh')}
+          aria-label={t('multimedia.refreshStatus')}
         >
           <RefreshCw size={14} className={refreshing ? 'mm-spin' : undefined} />
         </button>
@@ -182,8 +184,8 @@ export function Component() {
       <button className="mm-wizard-btn" onClick={() => setShowWizard(true)}>
         <Wand2 size={18} />
         <div>
-          <div className="mm-wizard-btn-title">Setup Wizard</div>
-          <div className="mm-wizard-btn-desc">Install and auto-configure your media stack</div>
+          <div className="mm-wizard-btn-title">{t('multimedia.setupWizard')}</div>
+          <div className="mm-wizard-btn-desc">{t('multimedia.setupWizardDescription')}</div>
         </div>
       </button>
 

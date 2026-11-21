@@ -12,6 +12,7 @@
 
 import { Input } from '@/components/ui/input';
 import { fieldLabelStyle } from './event-form';
+import { useI18n } from '@/i18n';
 
 interface AttendeesFieldProps {
   /** Comma-separated attendee emails, kept as raw text while editing */
@@ -20,13 +21,14 @@ interface AttendeesFieldProps {
 }
 
 export function AttendeesField({ value, onChange }: AttendeesFieldProps) {
+  const { t } = useI18n();
   return (
     <div>
-      <label style={fieldLabelStyle}>Attendees (comma-separated emails)</label>
+      <label style={fieldLabelStyle}>{t('calendar.attendees')}</label>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="alice@example.com, bob@example.com"
+        placeholder={t('calendar.attendeesExample')}
       />
     </div>
   );

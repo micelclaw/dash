@@ -24,6 +24,7 @@ import { getAppFiles, getAppFileContent, saveAppFile } from '@/services/apps.ser
 import type { AppFile } from '@/services/apps.service';
 import type { InstalledApp } from '@/types/apps';
 import { clawEditorTheme, clawHighlightStyle } from './editor-theme';
+import { useI18n } from '@/i18n';
 
 interface AppEditorProps {
   app: InstalledApp;
@@ -63,6 +64,7 @@ interface OpenTab {
 }
 
 export function AppEditor({ app, onBack }: AppEditorProps) {
+  const { t } = useI18n();
   const [files, setFiles] = useState<AppFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [tabs, setTabs] = useState<OpenTab[]>([]);
@@ -77,9 +79,9 @@ export function AppEditor({ app, onBack }: AppEditorProps) {
     setLoading(true);
     getAppFiles(appName)
       .then(setFiles)
-      .catch(() => toast.error('Failed to load files'))
+      .catch(() => toast.error(t('micelhub.loadFilesFailed')))
       .finally(() => setLoading(false));
-  }, [appName]);
+  }, [appName, t]);
 
   // Open a file in a tab
   const openFile = useCallback(async (file: AppFile) => {
@@ -130,14 +132,14 @@ export function AppEditor({ app, onBack }: AppEditorProps) {
           ? { ...t, original: t.content, dirty: false }
           : t
       ));
-      toast.success(`Saved ${tab.name}`);
+      toast.success(t('micelhub.savedFile', { name: tab.name }));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
+      const msg = err instanceof Error ? err.message : t('micelhub.saveFailed');
       toast.error(msg);
     } finally {
       setSaving(false);
     }
-  }, [appName, activeTab, tabs]);
+  }, [appName, activeTab, tabs, t]);
 
   // Close a tab
   const closeTab = useCallback((filepath: string, e?: React.MouseEvent) => {
@@ -192,7 +194,7 @@ export function AppEditor({ app, onBack }: AppEditorProps) {
           background: 'none', border: 'none', color: 'var(--text-dim)',
           cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
         }}>
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} /> {t('micelhub.back')}
         </button>
         <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
           {app.manifest?.icon || '📦'} {app.manifest?.name || appName}
@@ -212,7 +214,7 @@ export function AppEditor({ app, onBack }: AppEditorProps) {
               fontFamily: 'var(--font-sans)', opacity: saving ? 0.6 : 1,
             }}
           >
-            <Save size={12} /> {saving ? 'Saving...' : 'Save'}
+            <Save size={12} /> {saving ? t('micelhub.saving') : t('micelhub.save')}
           </button>
         )}
       </div>
@@ -222,9 +224,9 @@ export function AppEditor({ app, onBack }: AppEditorProps) {
         // File browser grid
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           {loading ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading files...</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{t('micelhub.loadingFiles')}</p>
           ) : onlyFiles.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No files found</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{t('micelhub.noFiles')}</p>
           ) : (
             <>
               <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem', margin: '0 0 12px' }}>

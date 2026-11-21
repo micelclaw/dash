@@ -11,21 +11,22 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Shield, Download, Power, Trash2, Save, Copy, Code } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { AppIcon, resolveManifestIcon } from '@/components/shared/AppIcon';
-import {
-  getApp, scanApp, exportApp, updateAppStatus, uninstallApp, forkApp, suggestForkName, deleteApp,
-} from '@/services/apps.service';
+import { getApp } from '@/services/apps.service';
 import { api } from '@/services/api';
 import * as gwService from '@/services/gateway.service';
-import { useAppsStore } from '@/stores/apps.store';
-import { useUiModulesStore } from '@/stores/ui-modules.store';
-import type { InstalledApp, ScanResult, AppManifest, AppRuntimeStatus } from '@/types/apps';
+import { useAuthStore } from '@/stores/auth.store';
+import type { InstalledApp, AppManifest, AppRuntimeStatus } from '@/types/apps';
+import { useI18n } from '@/i18n';
+import { AppActionProgress, AppBadges, AppCatalogAction, InstallationSize, type AppPrimaryAction, type CatalogView } from './AppCatalogPresentation';
 
 // Markdown components for README and SKILL.md tabs — handles overflow properly
 const mdComponents: Record<string, React.ComponentType<Record<string, unknown>>> = {
@@ -120,9 +121,12 @@ interface AppDetailProps {
   onBack: () => void;
   onRefresh: () => void;
   onEditFiles?: () => void;
+  origin?: string;
+  catalogView?: CatalogView;
+  primaryAction?: AppPrimaryAction;
 }
 
-type DetailTab = 'readme' | 'skill' | 'scan' | 'config';
+type DetailTab = 'readme' | 'skill' | 'config';
 
 const LEVEL_STYLES: Record<string, { border: string; color: string }> = {
   '1': { border: 'var(--text-dim)', color: 'var(--text-dim)' },
@@ -130,15 +134,20 @@ const LEVEL_STYLES: Record<string, { border: string; color: string }> = {
   '3': { border: '#a855f7', color: '#a855f7' },
 };
 
-export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProps) {
-  const setRestartRequired = useAppsStore((s) => s.setRestartRequired);
+const currentPrincipal = () => {
+  const { user, sessionGeneration } = useAuthStore.getState();
+  return `${user?.id ?? ''}:${sessionGeneration}:${user?.role ?? ''}`;
+};
+
+export function AppDetail({ app, onBack, onRefresh, origin, catalogView = app.status === 'active' ? 'installed' : 'available', primaryAction }: AppDetailProps) {
+  const { t } = useI18n();
+  const principal = useAuthStore((state) => `${state.user?.id ?? ''}:${state.sessionGeneration}:${state.user?.role ?? ''}`);
+  const selectionKey = `${principal}:${app.id}:${app.app_name}:${app.version}`;
+  const activeSelection = useRef(selectionKey);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('readme');
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const [scanning, setScanning] = useState(false);
   const [manifest, setManifest] = useState<AppManifest>(app.manifest);
   const [runtime, setRuntime] = useState<AppRuntimeStatus | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState(false);
 
   // SKILL.md and README.md content (loaded from backend)
   const [skillContent, setSkillContent] = useState<string | null>(null);
@@ -148,7 +157,9 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
   // GET /apps/registry/:name. Es la info que antes vivía en el panel propio de RegistryBrowser
   // (ahora hay UN solo panel: este). `registryAvailable` = paquete del store NO instalado.
   const isRegistry = app.source === 'registry';
+  const canManage = useAuthStore(s => s.user?.role === 'admin' || s.user?.role === 'owner');
   const registryAvailable = isRegistry && (app.manifest?.tags ?? []).includes('registry-available');
+  const registryPublic = isRegistry && (app.manifest?.tags ?? []).includes('registry-public');
   const [packageFiles, setPackageFiles] = useState<Array<{ path: string; size: number }> | null>(null);
   const [registryReadme, setRegistryReadme] = useState<string | null>(null);
 
@@ -162,74 +173,87 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
   const [configDirty, setConfigDirty] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
 
-  // Reset state when app changes (keep activeTab to preserve user's current tab)
+  // Keep the selected content tab, but isolate every response by actor and version.
   useEffect(() => {
+    let active = true;
+    activeSelection.current = selectionKey;
     setManifest(app.manifest);
     setRuntime(null);
-    setScanResult(null);
+    if (!registryAvailable && canManage) {
+      void getApp(app.app_name).then((detail) => {
+        if (!active || currentPrincipal() !== principal || activeSelection.current !== selectionKey || detail.version !== app.version) return;
+        setManifest({ ...detail.manifest, tags: [...new Set([
+          ...(detail.manifest.tags ?? []),
+          ...(app.manifest?.tags ?? []).filter(tag => tag === 'verified' || tag === 'featured'),
+        ])] });
+        setRuntime(detail.runtime);
+      }).catch(() => { /* keep the catalogue manifest */ });
+    }
+    return () => { active = false; if (activeSelection.current === selectionKey) activeSelection.current = ''; };
+  }, [selectionKey, app.app_name, app.version, app.manifest, registryAvailable, canManage, principal]);
+
+  useEffect(() => {
+    let active = true;
+    const current = () => active && currentPrincipal() === principal && activeSelection.current === selectionKey;
     setSkillContent(null);
     setReadmeContent(null);
     setSkillStatus(null);
-    // Fetch full detail
-    getApp(app.app_name)
-      .then((detail) => {
-        setManifest(detail.manifest);
-        setRuntime(detail.runtime);
-      })
-      .catch(() => { /* use existing manifest */ });
-  }, [app.app_name, app.id]);
-
-  // Fetch SKILL.md, README.md content, and skill status
-  useEffect(() => {
-    const loadFiles = async () => {
-      try {
-        const [skillRes, readmeRes, allStatuses] = await Promise.all([
-          api.get<{ data: { content: string | null } }>(`/gateway/skill-file/${app.app_name}/SKILL.md`).catch(() => ({ data: { content: null } })),
-          api.get<{ data: { content: string | null } }>(`/gateway/skill-file/${app.app_name}/README.md`).catch(() => ({ data: { content: null } })),
-          gwService.getSkillsStatus().catch(() => []),
-        ]);
+    if (!registryAvailable && canManage) {
+      void Promise.all([
+        api.get<{ data: { content: string | null } }>(`/gateway/skill-file/${app.app_name}/SKILL.md`).catch(() => ({ data: { content: null } })),
+        api.get<{ data: { content: string | null } }>(`/gateway/skill-file/${app.app_name}/README.md`).catch(() => ({ data: { content: null } })),
+        gwService.getSkillsStatus().catch(() => []),
+      ]).then(([skillRes, readmeRes, allStatuses]) => {
+        if (!current()) return;
         setSkillContent(skillRes.data.content);
         setReadmeContent(readmeRes.data.content);
-        // Find this skill in the status list
         const bareId = app.app_name.replace(/^claw-/, '');
-        const found = allStatuses.find(s => s.name === app.app_name || s.name === bareId || s.skill_key === app.app_name || s.skill_key === bareId);
+        const found = allStatuses.find((item) => item.name === app.app_name || item.name === bareId || item.skill_key === app.app_name || item.skill_key === bareId);
         setSkillStatus(found ?? null);
-      } catch { /* silent */ }
-    };
-    loadFiles();
-  }, [app.app_name]);
+      });
+    }
+    return () => { active = false; };
+  }, [selectionKey, app.app_name, app.version, registryAvailable, canManage, principal]);
 
-  // Registry: README + ficheros del paquete (.claw) → panel común. Funciona tanto para
-  // paquetes instalados como disponibles (el endpoint del registry no exige instalación).
+  // Registry detail is explicitly versioned and must never populate another selection.
   useEffect(() => {
+    let active = true;
     setPackageFiles(null);
     setRegistryReadme(null);
-    if (!isRegistry) return;
-    api.get<{ data: { readme?: string; files?: Array<{ path: string; size: number }> } }>(`/apps/registry/${app.app_name}`)
-      .then((res) => {
+    if (isRegistry && !registryPublic && canManage) {
+      void api.get<{ data: { version: string; readme?: string; files?: Array<{ path: string; size: number }> } }>(`/apps/registry/${app.app_name}`, { version: app.version }).then((res) => {
+        if (!active || currentPrincipal() !== principal || activeSelection.current !== selectionKey || res.data.version !== app.version) return;
         setPackageFiles(res.data.files ?? []);
         setRegistryReadme(res.data.readme ?? null);
-      })
-      .catch(() => { /* no registry detail → sin ficheros */ });
-  }, [app.app_name, isRegistry]);
-
-  // Fetch skill config (for OpenClaw bundled skills)
-  useEffect(() => {
-    if (app.source === 'openclaw') {
-      gwService.getSkillsConfig()
-        .then(config => {
-          const entries = (config.entries ?? {}) as Record<string, Record<string, unknown>>;
-          const entry = entries[app.app_name] ?? entries[app.app_name.replace('claw-', '')] ?? {};
-          setConfigEnabled(entry.enabled !== false);
-          setConfigApiKey((entry.api_key ?? '') as string);
-          const env = (entry.env ?? {}) as Record<string, string>;
-          setConfigEnv(env);
-        })
-        .catch(() => {});
+      }).catch(() => { /* package details are optional */ });
     }
-  }, [app.app_name, app.source]);
+    return () => { active = false; };
+  }, [selectionKey, app.app_name, app.version, isRegistry, registryPublic, canManage, principal]);
+
+  // Configuration drafts cannot carry over to another actor, app or version.
+  useEffect(() => {
+    let active = true;
+    setConfigEnabled(true);
+    setConfigApiKey('');
+    setConfigEnv({});
+    setConfigDirty(false);
+    setConfigSaving(false);
+    if (app.source === 'openclaw' && canManage) {
+      void gwService.getSkillsConfig().then((config) => {
+        if (!active || currentPrincipal() !== principal || activeSelection.current !== selectionKey) return;
+        const entries = (config.entries ?? {}) as Record<string, Record<string, unknown>>;
+        const entry = entries[app.app_name] ?? entries[app.app_name.replace('claw-', '')] ?? {};
+        setConfigEnabled(entry.enabled !== false);
+        setConfigApiKey((entry.api_key ?? '') as string);
+        setConfigEnv((entry.env ?? {}) as Record<string, string>);
+      }).catch(() => {});
+    }
+    return () => { active = false; };
+  }, [selectionKey, app.app_name, app.version, app.source, canManage, principal]);
 
   const handleSaveConfig = async () => {
+    if (!canManage || currentPrincipal() !== principal) return;
+    const current = () => currentPrincipal() === principal && activeSelection.current === selectionKey;
     setConfigSaving(true);
     try {
       if (app.source === 'openclaw') {
@@ -237,121 +261,18 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
           entries: { [app.app_name]: { enabled: configEnabled, ...(configApiKey ? { apiKey: configApiKey } : {}), ...(Object.keys(configEnv).length > 0 ? { env: configEnv } : {}) } },
         });
       }
+      if (!current()) return;
       toast.success('Config saved');
       setConfigDirty(false);
-    } catch { toast.error('Failed to save config'); }
-    finally { setConfigSaving(false); }
-  };
-
-  const handleScan = async () => {
-    setScanning(true);
-    try {
-      const result = await scanApp(app.app_name);
-      setScanResult(result);
-      setActiveTab('scan');
-    } catch {
-      toast.error('Scan failed');
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const handleExport = async () => {
-    try {
-      const blob = await exportApp(app.app_name);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${app.app_name}-${app.version}.claw`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Export downloaded');
-    } catch {
-      toast.error('Export failed');
-    }
-  };
-
-  const handleToggleStatus = async () => {
-    const installing = app.status !== 'active';
-    const newStatus = installing ? 'active' : 'available';
-    try {
-      await updateAppStatus(app.app_name, newStatus);
-      if (app.app_level === 1) {
-        setRestartRequired('openclaw', `${app.app_name} ${installing ? 'instalada' : 'desinstalada'}`);
-      }
       onRefresh();
-      // Una app desinstalada sale de /me/ui-modules → refrescar quita su módulo del sidebar al instante.
-      void useUiModulesStore.getState().refresh();
-      toast.success(installing ? 'App instalada' : 'App desinstalada');
-    } catch {
-      toast.error(installing ? 'No se pudo instalar' : 'No se pudo desinstalar');
-    }
+    } catch { if (current()) toast.error('Failed to save config'); }
+    finally { if (current()) setConfigSaving(false); }
   };
-
-  const handleUninstall = async () => {
-    try {
-      // Apps del registry: purge (borra dir+fila, el .claw sigue en el store → vuelve a
-      // "available"), igual que la lista del Registry. Sin esto se quedarían 'archived' pero
-      // la fila persistiría y GET /apps?source=registry (no filtra status) las re-mostraría
-      // como tarjeta zombi. El resto: archive (recuperable con purge posterior).
-      const result = await uninstallApp(app.app_name, isRegistry);
-      if (result.requires_restart) {
-        setRestartRequired(
-          app.app_level === 1 ? 'openclaw' : 'core',
-          `${app.app_name} was uninstalled`,
-        );
-      }
-      toast.success(isRegistry ? 'App uninstalled' : 'App archived');
-      onBack();
-      onRefresh();
-      void useUiModulesStore.getState().refresh();
-    } catch {
-      toast.error('Failed to uninstall');
-    }
-    setDeleteDialog(false);
-  };
-
-  const [forkDialogOpen, setForkDialogOpen] = useState(false);
-  const [forkSuggestedName, setForkSuggestedName] = useState('');
-
-  const handleFork = async () => {
-    try {
-      const suggested = await suggestForkName(app.app_name);
-      setForkSuggestedName(suggested);
-      setForkDialogOpen(true);
-    } catch {
-      toast.error('Failed to prepare fork');
-    }
-  };
-
-  const handleForkConfirm = async (newName: string) => {
-    try {
-      await forkApp(app.app_name, newName);
-      toast.success(`Forked as ${newName}`);
-      onRefresh();
-    } catch {
-      toast.error('Failed to fork app');
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      await deleteApp(app.app_name);
-      toast.success('App deleted');
-      onBack();
-      onRefresh();
-    } catch {
-      toast.error('Failed to delete');
-    }
-    setDeleteDialog(false);
-  };
-
-  const isPreinstalled = ['local', 'micelhub', 'openclaw'].includes(app.source);
 
   const levelStyle = LEVEL_STYLES[String(app.app_level)] ?? LEVEL_STYLES['1'];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'var(--font-sans)', minWidth: 0, overflow: 'hidden' }}>
+    <div role="region" aria-label={manifest?.name || app.app_name} data-app-name={app.app_name} data-app-version={app.version} data-catalog-view={catalogView} style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'var(--font-sans)', minWidth: 0, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{
         padding: '12px 16px', borderBottom: '1px solid var(--border)',
@@ -360,6 +281,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={onBack}
+            aria-label={t('micelhub.back')}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-dim)', padding: 2, display: 'flex',
@@ -380,42 +302,12 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
           </Badge>
         </div>
 
-        {/* Meta */}
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          {manifest?.author && <span>Author: {manifest.author}</span>}
-          <span>·</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-dim)]">
+          {manifest?.author && <span className="min-w-0 truncate">{manifest.author}</span>}
           <span>v{app.version}</span>
-          {manifest?.tier_required === 'pro' && (
-            <>
-              <span>·</span>
-              <Badge className="text-[10px] px-1.5 py-0">Pro</Badge>
-            </>
-          )}
+          {catalogView === 'installed' && <span className="ml-auto"><InstallationSize app={app} /></span>}
         </div>
-
-        {/* Tags */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {manifest?.permissions?.slice(0, 6).map((perm) => (
-            <Badge key={perm} variant="secondary" className="text-[10px] px-1.5 py-0">
-              {perm}
-            </Badge>
-          ))}
-          {app.source === 'adapted' && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: '#14b8a6', color: '#14b8a6' }}>
-              Adapted
-            </Badge>
-          )}
-          {(app.source === 'micelhub' || app.source === 'local') && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: '#06b6d4', color: '#06b6d4' }}>
-              <Shield size={8} style={{ marginRight: 2 }} /> Micelclaw
-            </Badge>
-          )}
-          {app.source === 'openclaw' && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: '#9f1239', color: '#9f1239' }}>
-              OpenClaw
-            </Badge>
-          )}
-        </div>
+        <AppBadges app={{ ...app, manifest }} origin={origin} />
       </div>
 
       {/* Tab bar */}
@@ -423,13 +315,10 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
         display: 'flex', gap: 0,
         borderBottom: '1px solid var(--border)',
       }}>
-        {(['readme', 'skill', 'config', 'scan'] as DetailTab[]).map((t) => (
+        {(['readme', 'skill', 'config'] as DetailTab[]).map((t) => (
           <button
             key={t}
-            onClick={() => {
-              if (t === 'scan' && !scanResult) handleScan();
-              else setActiveTab(t);
-            }}
+            onClick={() => setActiveTab(t)}
             style={{
               padding: '8px 14px',
               background: 'transparent',
@@ -445,7 +334,6 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
             {t === 'readme' && 'README'}
             {t === 'skill' && 'SKILL.md'}
             {t === 'config' && 'Config'}
-            {t === 'scan' && (scanning ? 'Scanning…' : 'Scan Results')}
           </button>
         ))}
       </div>
@@ -494,17 +382,13 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
             </div>
           )}
 
-          {activeTab === 'scan' && scanResult && (
-            <ScanResultsView result={scanResult} />
-          )}
-
           {activeTab === 'config' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* OS not supported */}
               {(skillStatus?.missing?.os?.length ?? 0) > 0 && (
                 <div style={{ padding: '12px 14px', background: '#ef444410', border: '1px solid #ef444425', borderRadius: 'var(--radius-md)' }}>
                   <span style={{ fontSize: '0.8125rem', color: '#ef4444', fontWeight: 500 }}>
-                    This app is only available on {skillStatus?.requirements?.os?.join(', ') || 'other platforms'} and cannot be used on this system.
+                    {t('micelhub.onlyOnPlatforms', { platforms: skillStatus?.requirements?.os?.join(', ') || 'other platforms' })}
                   </span>
                 </div>
               )}
@@ -512,7 +396,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
               {/* Dependencies (binary requirements) */}
               {(skillStatus?.requirements?.bins?.length ?? 0) > 0 && (
                 <div>
-                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dependencies</h4>
+                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('micelhub.dependencies')}</h4>
                   {skillStatus!.requirements.bins.map(bin => {
                     const isMissing = skillStatus!.missing.bins.includes(bin);
                     return (
@@ -524,12 +408,12 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
                         {isMissing && (skillStatus!.install?.length ?? 0) > 0 && (
                           <button onClick={async () => {
                             const installId = skillStatus!.install[0]!.id;
-                            const tid = toast.loading('Installing ' + bin + '...');
+                            const tid = toast.loading(t('micelhub.installingDependency', { name: bin }));
                             try {
                               const result = await gwService.installAppDeps(skillStatus!.name, installId);
-                              if (result.ok) { toast.success(bin + ' installed!', { id: tid }); }
-                              else { toast.error('Failed: ' + result.message, { id: tid }); }
-                            } catch { toast.error('Install failed', { id: tid }); }
+                              if (result.ok) { toast.success(t('micelhub.dependencyInstalled', { name: bin }), { id: tid }); }
+                              else { toast.error(t('micelhub.installDependencyFailed', { reason: result.message }), { id: tid }); }
+                            } catch { toast.error(t('micelhub.installFailed'), { id: tid }); }
                           }} style={{
                             padding: '3px 10px', fontSize: '0.6875rem', fontWeight: 500,
                             background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-sm)',
@@ -547,7 +431,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
               {/* Required API keys / settings */}
               {(skillStatus?.requirements?.env?.length ?? 0) > 0 && skillStatus!.requirements.env.some(e => e !== 'CLAW_API_KEY' && e !== 'CLAW_CORE_TOKEN') && (
                 <div>
-                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Required Settings</h4>
+                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('micelhub.requiredSettings')}</h4>
                   {skillStatus!.requirements.env.filter(e => e !== 'CLAW_API_KEY' && e !== 'CLAW_CORE_TOKEN').map(envVar => {
                     const isMissing = skillStatus!.missing.env.includes(envVar);
                     // User-friendly labels
@@ -579,7 +463,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
               {/* Required channel configuration */}
               {(skillStatus?.requirements?.config?.length ?? 0) > 0 && (
                 <div>
-                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Required Configuration</h4>
+                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('micelhub.requiredConfiguration')}</h4>
                   {skillStatus!.requirements.config.map(cfg => {
                     const isMissing = skillStatus!.missing.config.includes(cfg);
                     const channelMatch = cfg.match(/channels\.(\w+)/);
@@ -613,8 +497,8 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
                     <div>
-                      <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Enabled</span>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>When disabled, agents won't see this app</div>
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{t('micelhub.enabled')}</span>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{t('micelhub.disabledHint')}</div>
                     </div>
                     <div onClick={() => { setConfigEnabled(!configEnabled); setConfigDirty(true); }} style={{
                       width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
@@ -636,7 +520,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
                   color: '#000', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                   opacity: configSaving ? 0.7 : 1,
                 }}>
-                  <Save size={14} /> {configSaving ? 'Saving...' : 'Save'}
+                  <Save size={14} /> {configSaving ? t('micelhub.saving') : t('micelhub.save')}
                 </button>
               )}
             </div>
@@ -649,7 +533,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
             padding: '12px 16px', borderTop: '1px solid var(--border)',
           }}>
             <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Required Permissions
+              {t('micelhub.permissions')}
             </h4>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {manifest.permissions.map((p) => (
@@ -672,272 +556,48 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
             fontSize: '0.6875rem', color: 'var(--text-dim)',
             display: 'flex', gap: 12,
           }}>
-            <span>Status: <strong style={{ color: runtime.status === 'loaded' ? 'var(--success)' : 'var(--error)' }}>{runtime.status}</strong></span>
-            <span>Routes: {runtime.routes_registered}</span>
-            <span>Tables: {runtime.tables_created}</span>
-            {runtime.containers_running !== undefined && <span>Containers: {runtime.containers_running}</span>}
+            <span>{t('micelhub.status')}: <strong style={{ color: runtime.status === 'loaded' ? 'var(--success)' : 'var(--error)' }}>{runtime.status}</strong></span>
+            <span>{t('micelhub.routes')}: {runtime.routes_registered}</span>
+            <span>{t('micelhub.tables')}: {runtime.tables_created}</span>
+            {runtime.containers_running !== undefined && <span>{t('micelhub.containers')}: {runtime.containers_running}</span>}
           </div>
         )}
       </ScrollArea>
 
-      {/* Actions footer. Un paquete del registry NO instalado (registryAvailable) no tiene
-          acciones aquí: se instala desde la lista de la pestaña Registry. */}
-      <div style={{
-        padding: '10px 16px', borderTop: '1px solid var(--border)',
-        display: 'flex', gap: 6, alignItems: 'center',
-        justifyContent: registryAvailable ? 'center' : 'flex-end',
-      }}>
-        {registryAvailable ? (
-          <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-            Paquete disponible — instálalo desde la lista para gestionarlo.
-          </span>
-        ) : (
-          <>
-            {isPreinstalled && (
-              <FooterButton
-                icon={<Copy size={13} />}
-                label="Fork"
-                onClick={handleFork}
-                title="Create an editable copy of this app"
-              />
-            )}
-            {app.source === 'adapted' && onEditFiles && (
-              <FooterButton
-                icon={<Code size={13} />}
-                label="Edit Files"
-                onClick={onEditFiles}
-                title="Open file editor for this adapted app"
-              />
-            )}
-            <FooterButton
-              icon={<Power size={13} />}
-              label={app.status === 'active' ? 'Desinstalar' : 'Instalar'}
-              onClick={handleToggleStatus}
-            />
-            <FooterButton
-              icon={<Download size={13} />}
-              label="Export .claw"
-              onClick={handleExport}
-            />
-            {app.source === 'adapted' ? (
-              <FooterButton
-                icon={<Trash2 size={13} />}
-                label="Delete"
-                onClick={() => setDeleteDialog(true)}
-                danger
-              />
-            ) : (
-              <FooterButton
-                icon={<Trash2 size={13} />}
-                label="Uninstall"
-                onClick={() => setDeleteDialog(true)}
-                danger
-                disabled={isPreinstalled}
-                title={isPreinstalled ? 'Preinstalled apps cannot be uninstalled' : undefined}
-              />
-            )}
-          </>
-        )}
+      <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-3">
+        <AppActionProgress action={primaryAction} />
+        <div className="flex justify-end">
+          {primaryAction ? <AppCatalogAction view={catalogView} action={primaryAction} /> : !canManage && <span className="text-xs text-[var(--text-muted)]">{t('micelhub.registryAdminRequired')}</span>}
+        </div>
       </div>
-
-      <ConfirmDialog
-        open={deleteDialog}
-        onClose={() => setDeleteDialog(false)}
-        onConfirm={app.source === 'adapted' ? handleDelete : handleUninstall}
-        title={app.source === 'adapted' ? `Delete ${app.app_name}?` : `Uninstall ${app.app_name}?`}
-        description={app.source === 'adapted'
-          ? 'This will permanently delete the adapted app and all its files.'
-          : isRegistry
-            ? 'The app will be uninstalled. The package stays in the registry — you can reinstall it later.'
-            : 'The app will be archived (recoverable).'}
-        confirmLabel={app.source === 'adapted' ? 'Delete' : 'Uninstall'}
-        variant="danger"
-      />
-
-      {forkDialogOpen && <ForkNameDialog
-        suggestedName={forkSuggestedName}
-        onConfirm={handleForkConfirm}
-        onClose={() => setForkDialogOpen(false)}
-      />}
     </div>
   );
 }
 
 // ─── Fork Name Dialog ───────────────────────────────────────────────
 
-function ForkNameDialog({ suggestedName, onConfirm, onClose }: {
+export function ForkNameDialog({ suggestedName, onConfirm, onClose }: {
   suggestedName: string;
   onConfirm: (name: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [value, setValue] = useState(suggestedName);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 50);
-  }, []);
-
   const handleConfirm = () => {
     const trimmed = value.trim();
-    if (trimmed) {
-      onConfirm(trimmed);
-      onClose();
-    }
+    if (!trimmed) return;
+    onConfirm(trimmed);
+    onClose();
   };
-
-  return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--card)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)', padding: 20, width: 360,
-      }}>
-        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>
-          Fork app — choose a name
-        </label>
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleConfirm(); if (e.key === 'Escape') onClose(); }}
-          style={{
-            width: '100%', padding: '8px 10px', fontSize: '0.875rem',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-            fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
-            outline: 'none',
-          }}
-          onFocus={e => { e.target.style.borderColor = 'var(--amber)'; }}
-          onBlur={e => { e.target.style.borderColor = 'var(--border)'; }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-          <button onClick={onClose} style={{
-            padding: '6px 14px', borderRadius: 'var(--radius-sm)',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            color: 'var(--text)', fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-          }}>Cancel</button>
-          <button onClick={handleConfirm} style={{
-            padding: '6px 14px', borderRadius: 'var(--radius-sm)',
-            background: 'var(--amber)', border: 'none',
-            color: '#000', fontSize: '0.8125rem', fontWeight: 600,
-            cursor: 'pointer', fontFamily: 'var(--font-sans)',
-          }}>Fork</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Sub-components ─────────────────────────────────────────────────
-
-function ScanResultsView({ result }: { result: ScanResult }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 12px', borderRadius: 'var(--radius-md)',
-        background: result.passed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)',
-        border: `1px solid ${result.passed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
-      }}>
-        <span style={{ fontWeight: 600, fontSize: '0.8125rem', color: result.passed ? 'var(--success)' : 'var(--error)' }}>
-          {result.passed ? '✓ Scan passed' : '✕ Scan failed'}
-        </span>
-        <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>
-          Level: {result.level} · {new Date(result.scanned_at).toLocaleString()}
-        </span>
-      </div>
-
-      {result.errors.length > 0 && (
-        <div>
-          <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--error)', margin: '0 0 6px' }}>
-            Errors ({result.errors.length})
-          </h4>
-          {result.errors.map((err, i) => (
-            <div key={i} style={{
-              padding: '6px 10px', marginBottom: 4,
-              background: 'rgba(244, 63, 94, 0.05)',
-              border: '1px solid rgba(244, 63, 94, 0.15)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.75rem',
-            }}>
-              <span style={{ fontWeight: 500, color: 'var(--error)' }}>{err.code}</span>
-              <span style={{ color: 'var(--text-dim)' }}> — {err.message}</span>
-              {err.detail && (
-                <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                  {err.detail}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {result.warnings.length > 0 && (
-        <div>
-          <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--warning)', margin: '0 0 6px' }}>
-            Warnings ({result.warnings.length})
-          </h4>
-          {result.warnings.map((warn, i) => (
-            <div key={i} style={{
-              padding: '6px 10px', marginBottom: 4,
-              background: 'rgba(249, 115, 22, 0.05)',
-              border: '1px solid rgba(249, 115, 22, 0.15)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.75rem',
-            }}>
-              <span style={{ fontWeight: 500, color: 'var(--warning)' }}>{warn.code}</span>
-              <span style={{ color: 'var(--text-dim)' }}> — {warn.message}</span>
-              {warn.detail && (
-                <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                  {warn.detail}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {result.errors.length === 0 && result.warnings.length === 0 && (
-        <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', margin: 0 }}>
-          No issues found.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function FooterButton({ icon, label, onClick, danger, disabled, title }: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={title}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 5,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)', padding: '6px 12px',
-        color: danger && !disabled ? 'var(--error)' : 'var(--text-dim)',
-        fontSize: '0.8125rem',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-        fontFamily: 'var(--font-sans)',
-        transition: 'border-color var(--transition-fast)',
-      }}
-      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.borderColor = 'var(--border-hover)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+    <DialogContent style={{ width: 'calc(100vw - 32px)', maxWidth: 360 }} onOpenAutoFocus={(event) => { event.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }}>
+      <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); handleConfirm(); }}>
+        <DialogHeader><DialogTitle className="pr-4 text-base">{t('micelhub.forkName')}</DialogTitle><DialogDescription>{t('micelhub.forkTitle')}</DialogDescription></DialogHeader>
+        <label className="sr-only" htmlFor="micelhub-fork-name">{t('micelhub.forkNamePlaceholder')}</label>
+        <Input id="micelhub-fork-name" ref={inputRef} value={value} onChange={(event) => setValue(event.target.value)} placeholder={t('micelhub.forkNamePlaceholder')} />
+        <DialogFooter className="gap-2"><Button type="button" variant="outline" onClick={onClose}>{t('micelhub.cancelChanges')}</Button><Button type="submit" disabled={!value.trim()}>{t('micelhub.fork')}</Button></DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>;
 }

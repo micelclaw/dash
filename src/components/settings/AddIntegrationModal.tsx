@@ -32,6 +32,7 @@ import { SimplexOwnForm } from './add-integration/SimplexOwnForm';
 import { SimplexXrcpForm } from './add-integration/SimplexXrcpForm';
 import { SessionForm } from './add-integration/SessionForm';
 import { DiscoverForm } from './add-integration/DiscoverForm';
+import { useI18n } from '@/i18n';
 
 interface AddIntegrationModalProps {
   open: boolean;
@@ -41,6 +42,7 @@ interface AddIntegrationModalProps {
 }
 
 export function AddIntegrationModal({ open, onClose, onConnected, prefilterService }: AddIntegrationModalProps) {
+  const { t } = useI18n();
   const oauthPending = useRef<{ state: string; popup: Window; origin: string } | null>(null);
   useEffect(() => { if (!open) oauthPending.current = null; }, [open]);
   const [step, setStep] = useState<'pick' | 'oauth-pending' | 'form'>('pick');
@@ -92,11 +94,11 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
           });
           localStorage.removeItem('claw_oauth_pending');
           setStep('pick');
-          toast.success(`${selectedService?.name ?? 'Service'} connected`);
+          toast.success(t('settings.integration.connected', { service: selectedService?.name ?? 'Service' }));
           onConnected();
           onClose();
         } catch (err: any) {
-          toast.error(err?.message || 'Failed to complete authorization');
+          toast.error(err?.message || t('settings.integration.authFailed'));
           setStep('pick');
         }
         return;
@@ -104,7 +106,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
       // Legacy: direct oauth_complete (for future providers that handle it in the popup)
       if (event.data?.type === 'oauth_complete' && event.data?.status === 'connected') {
         setStep('pick');
-        toast.success(`${selectedService?.name ?? 'Service'} connected`);
+        toast.success(t('settings.integration.connected', { service: selectedService?.name ?? 'Service' }));
         onConnected();
         onClose();
       }
@@ -112,7 +114,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [open, step, selectedService, onConnected, onClose]);
+  }, [open, step, selectedService, onConnected, onClose, t]);
 
   /**
    * Qué hacer cuando una autorización no arranca.
@@ -158,12 +160,12 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
         if (popup) oauthPending.current = { state: oauth.state, popup,
           origin: new URL(new URL(oauth.authorize_url).searchParams.get('redirect_uri') ?? window.location.origin).origin };
         if (!popup) {
-          toast.error('El navegador ha bloqueado la ventana de autorización. Permítela e inténtalo otra vez.');
+          toast.error(t('settings.integration.authBlocked'));
           volverODesistir();
         }
       } catch (err: any) {
         // El aviso ya dice qué ha pasado; no hace falta nada más en pantalla.
-        toast.error(err?.message || 'No se ha podido iniciar la autorización');
+        toast.error(err?.message || t('settings.integration.authFailed'));
         volverODesistir();
       }
     } else {
@@ -172,13 +174,13 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
     }
     // `volverODesistir` es estable (useCallback sin dependencias).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [t]);
 
   const handleFormComplete = useCallback(() => {
-    toast.success(`${selectedService?.name ?? 'Service'} connected`);
+    toast.success(t('settings.integration.connected', { service: selectedService?.name ?? 'Service' }));
     onConnected();
     onClose();
-  }, [selectedService, onConnected, onClose]);
+  }, [selectedService, onConnected, onClose, t]);
 
   if (!open) return null;
 
@@ -199,7 +201,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Conectar una cuenta"
+        aria-label={t('settings.integration.connectAccount')}
         style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
@@ -221,10 +223,11 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
           borderBottom: '1px solid var(--border)',
         }}>
           <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            {step === 'pick' ? (prefilterService ? 'Add Integration' : 'Conectar una cuenta') : step === 'oauth-pending' ? 'Authorizing...' : selectedService?.name}
+            {step === 'pick' ? (prefilterService ? t('settings.integration.add') : t('settings.integration.connectAccount')) : step === 'oauth-pending' ? t('settings.integration.authorizing') : selectedService?.name}
           </div>
           <button
             onClick={step === 'form' ? (prefilterService ? onClose : () => setStep('pick')) : onClose}
+            aria-label={t('settings.integration.close')}
             style={{
               background: 'none', border: 'none', color: 'var(--text-dim)',
               cursor: 'pointer', padding: 4, display: 'flex',

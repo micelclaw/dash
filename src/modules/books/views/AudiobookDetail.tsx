@@ -15,15 +15,16 @@ import { ChevronLeft, Gauge, Headphones, Moon, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBooksStore } from '@/stores/books.store';
 import { usePlayerStore } from '@/stores/player.store';
+import { useI18n } from '@/i18n';
 import { audioCoverUrl, type AudioItemDetail } from '@/services/books.service';
 import { formatClock, formatTotalDuration } from '../lib/format';
 
 const SPEED_OPTIONS = [0.8, 1, 1.25, 1.5, 2];
 const SLEEP_OPTIONS = [
-  { value: 0, label: 'Off' },
-  { value: 15, label: '15 min' },
-  { value: 30, label: '30 min' },
-  { value: 60, label: '60 min' },
+  { value: 0 },
+  { value: 15 },
+  { value: 30 },
+  { value: 60 },
 ];
 
 const selectStyle: CSSProperties = {
@@ -43,6 +44,7 @@ const selectStyle: CSSProperties = {
  * live current-chapter highlight (click to seek across tracks).
  */
 export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
+  const { t } = useI18n();
   const closeAudiobook = useBooksStore((s) => s.closeAudiobook);
   const playAudiobook = useBooksStore((s) => s.playAudiobook);
   const jumpToPosition = useBooksStore((s) => s.jumpToPosition);
@@ -68,13 +70,13 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
       sleepTimerRef.current = setTimeout(() => {
         usePlayerStore.getState().pause();
         setSleepMinutes(0);
-        toast('Sleep timer — playback paused');
+        toast(t('books.sleepTimerPaused'));
       }, sleepMinutes * 60_000);
     }
     return () => {
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     };
-  }, [sleepMinutes]);
+  }, [sleepMinutes, t]);
 
   const playingThis = currentItem?.source === 'abs' && currentItem.fileId.startsWith(`${detail.id}:`);
   const bookPosition = playingThis ? (currentItem?.trackStartOffset ?? 0) + playerTime : null;
@@ -84,7 +86,7 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
       : null;
 
   const resumeTime = listItem?.progress?.current_time ?? 0;
-  const playLabel = playingThis ? (isPlaying ? 'Playing' : 'Resume') : resumeTime > 0 ? 'Resume' : 'Play';
+  const playLabel = playingThis ? (isPlaying ? t('books.playing') : t('books.resume')) : resumeTime > 0 ? t('books.resume') : t('books.play');
 
   const handlePlay = () => {
     if (playingThis) {
@@ -114,7 +116,7 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
         }}
       >
         <ChevronLeft size={14} />
-        Back to audiobooks
+        {t('books.backToAudiobooks')}
       </button>
 
       {/* Header: cover + meta + controls */}
@@ -153,9 +155,9 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
           )}
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             {formatTotalDuration(detail.duration_seconds)}
-            {detail.chapters.length > 0 && ` · ${detail.chapters.length} chapters`}
+            {detail.chapters.length > 0 && ` · ${t('books.chaptersCount', { count: detail.chapters.length })}`}
             {resumeTime > 0 && !listItem?.progress?.is_finished && (
-              <> · at {formatClock(resumeTime)}</>
+              <> · {t('books.atTime', { time: formatClock(resumeTime) })}</>
             )}
           </div>
 
@@ -189,7 +191,7 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
               <select
                 value={String(playbackRate)}
                 onChange={(e) => setPlaybackRate(Number(e.target.value))}
-                title="Playback speed"
+                title={t('books.playbackSpeed')}
                 style={selectStyle}
               >
                 {SPEED_OPTIONS.map((s) => (
@@ -203,11 +205,11 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
               <select
                 value={String(sleepMinutes)}
                 onChange={(e) => setSleepMinutes(Number(e.target.value))}
-                title="Sleep timer"
+                title={t('books.sleepTimer')}
                 style={selectStyle}
               >
                 {SLEEP_OPTIONS.map((o) => (
-                  <option key={o.value} value={String(o.value)}>{o.label}</option>
+                  <option key={o.value} value={String(o.value)}>{o.value === 0 ? t('books.sleepOff') : t('books.sleepMinutes', { count: o.value })}</option>
                 ))}
               </select>
             </label>
@@ -237,7 +239,7 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
       {detail.chapters.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <h3 style={{ margin: '0 0 10px', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-            Chapters
+            {t('books.chapters')}
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {detail.chapters.map((chapter) => {
@@ -247,7 +249,7 @@ export function AudiobookDetail({ detail }: { detail: AudioItemDetail }) {
                   key={chapter.id}
                   onClick={() => {
                     if (detail.tracks.length === 0) {
-                      toast.error('This audiobook has no playable tracks');
+                      toast.error(t('books.audiobookPlayFailed'));
                       return;
                     }
                     void jumpToPosition(detail, chapter.start);

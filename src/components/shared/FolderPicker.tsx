@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronRight, ChevronDown, FolderOpen, FolderPlus, X } from 'lucide-react';
 import { api } from '@/services/api';
 import type { FileRecord } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 interface FolderPickerProps {
   open: boolean;
@@ -30,6 +31,7 @@ interface FolderNode {
 }
 
 export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPickerProps) {
+  const { t } = useI18n();
   const [roots, setRoots] = useState<FolderNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [loadingRoot, setLoadingRoot] = useState(true);
@@ -169,10 +171,12 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
           padding: '16px 20px', borderBottom: '1px solid var(--border)',
         }}>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-            Move to...
+            {t('shared.folder.title')}
           </h3>
           <button
             onClick={onCancel}
+            title={t('shared.folder.cancel')}
+            aria-label={t('shared.folder.cancel')}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2 }}
           >
             <X size={16} />
@@ -183,7 +187,7 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
         <div style={{ flex: 1, overflow: 'auto', padding: '8px 12px', minHeight: 200 }}>
           {/* Root Drive node */}
           <FolderRow
-            label="Drive"
+            label={t('shared.folder.root')}
             path="/drive/"
             depth={0}
             selected={selectedPath === '/drive/'}
@@ -196,7 +200,7 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
 
           {loadingRoot ? (
             <div style={{ padding: '12px 0 12px 24px', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-              Loading...
+              {t('shared.folder.loading')}
             </div>
           ) : (
             roots.map(node => (
@@ -221,7 +225,8 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
                 value={newFolderInput}
                 onChange={e => setNewFolderInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowNewFolder(false); }}
-                placeholder="Folder name"
+                aria-label={t('shared.folder.name')}
+                placeholder={t('shared.folder.name')}
                 style={{
                   flex: 1,
                   background: 'var(--surface)',
@@ -247,7 +252,7 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
               }}
             >
               <FolderPlus size={14} />
-              New folder
+              {t('shared.folder.create')}
             </button>
           )}
         </div>
@@ -265,7 +270,7 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
               fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('shared.folder.cancel')}
           </button>
           <button
             onClick={() => selectedPath && onSelect(selectedPath)}
@@ -285,7 +290,7 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
               opacity: (!selectedPath || selectedPath === currentPath) ? 0.5 : moveHover ? 0.9 : 1,
             }}
           >
-            Move here
+            {t('shared.folder.move')}
           </button>
         </div>
       </div>
@@ -346,6 +351,7 @@ function FolderRow({
   onToggle: () => void;
   loading?: boolean;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   void _path;
 
@@ -372,6 +378,8 @@ function FolderRow({
       {/* Expand toggle */}
       <button
         onClick={e => { e.stopPropagation(); onToggle(); }}
+        title={t(expanded ? 'shared.folder.collapse' : 'shared.folder.expand', { name: label })}
+        aria-label={t(expanded ? 'shared.folder.collapse' : 'shared.folder.expand', { name: label })}
         style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
           padding: 0, display: 'flex', alignItems: 'center',

@@ -12,30 +12,32 @@
 
 import { Flame, BookOpen, BarChart3 } from 'lucide-react';
 import { useDiaryStats } from './hooks/use-diary-stats';
+import { useI18n } from '@/i18n';
 
 const MOOD_EMOJI: Record<string, string> = {
   great: '😄', good: '🙂', neutral: '😐', bad: '😕', terrible: '😢',
 };
 
 export function DiaryStatsWidget() {
+  const { t } = useI18n();
   const { stats, loading } = useDiaryStats();
 
   if (loading || !stats) return null;
 
   return (
     <div className="flex items-center gap-4 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs">
-      <div className="flex items-center gap-1.5 text-[var(--text-muted)]" title="Total entries">
+      <div className="flex items-center gap-1.5 text-[var(--text-muted)]" title={t('diary.totalEntries')}>
         <BookOpen size={12} />
         <span className="font-medium text-[var(--text)]">{stats.totalEntries}</span>
-        entries
+        {t('diary.entries')}
       </div>
-      <div className="flex items-center gap-1.5 text-[var(--text-muted)]" title="Current streak">
+      <div className="flex items-center gap-1.5 text-[var(--text-muted)]" title={t('diary.currentStreak')}>
         <Flame size={12} className="text-orange-400" />
         <span className="font-medium text-[var(--text)]">{stats.currentStreak}</span>
-        day streak
+        {t('diary.dayStreak')}
       </div>
       {stats.topTags?.length > 0 && (
-        <div className="flex items-center gap-1.5 text-[var(--text-muted)]" title="Top tags">
+        <div className="flex items-center gap-1.5 text-[var(--text-muted)]" title={t('diary.topTags')}>
           <BarChart3 size={12} />
           {stats.topTags.slice(0, 3).map(t => (
             <span key={t.tag} className="px-1.5 py-0.5 rounded bg-[var(--accent)]/10 text-[var(--accent)] text-[10px]">
@@ -45,12 +47,12 @@ export function DiaryStatsWidget() {
         </div>
       )}
       {stats.moodDistribution && Object.keys(stats.moodDistribution).length > 0 && (
-        <div className="flex items-center gap-0.5" title="Mood distribution">
+        <div className="flex items-center gap-0.5" title={t('diary.moodDistribution')}>
           {Object.entries(stats.moodDistribution)
             .sort(([, a], [, b]) => (b as number) - (a as number))
             .slice(0, 4)
             .map(([mood, count]) => (
-              <span key={mood} title={`${mood}: ${count}`}>
+              <span key={mood} title={t('diary.moodCount', { mood: t(`diary.mood.${mood}`), count: count as number })}>
                 {MOOD_EMOJI[mood] ?? '•'}
               </span>
             ))}

@@ -23,12 +23,13 @@ import { CronJobEditor } from '../components/CronJobEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { CronJob } from '../types';
+import { useI18n } from '@/i18n';
 
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'never';
+function timeAgo(dateStr: string | null, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (!dateStr) return t('gateway.devices.never');
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
+  if (minutes < 1) return t('gateway.devices.justNow');
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
@@ -36,6 +37,7 @@ function timeAgo(dateStr: string | null): string {
 }
 
 export function CronTab() {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const { cronJobs, cronLoading, cronError, fetchCronJobs } = useGatewayStore();
   const [showEditor, setShowEditor] = useState(false);
@@ -53,10 +55,10 @@ export function CronTab() {
     setActionLoading(key);
     try {
       await gwService.toggleCronJob(job.id, !job.enabled);
-      toast.success(`Job "${job.name}" ${job.enabled ? 'disabled' : 'enabled'}`);
+      toast.success(t(job.enabled ? 'gateway.cron.jobDisabled' : 'gateway.cron.jobEnabled', { name: job.name }));
       fetchCronJobs();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Toggle failed');
+      toast.error(err instanceof Error ? err.message : t('gateway.cron.toggleFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -67,10 +69,10 @@ export function CronTab() {
     setActionLoading(key);
     try {
       await gwService.runCronJob(job.id);
-      toast.success(`Job "${job.name}" executed`);
+      toast.success(t('gateway.cron.jobExecuted', { name: job.name }));
       fetchCronJobs();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Run failed');
+      toast.error(err instanceof Error ? err.message : t('gateway.cron.runFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -80,10 +82,10 @@ export function CronTab() {
     setActionLoading(`delete-${job.id}`);
     try {
       await gwService.deleteCronJob(job.id);
-      toast.success(`Job "${job.name}" deleted`);
+      toast.success(t('gateway.cron.jobDeleted', { name: job.name }));
       fetchCronJobs();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed');
+      toast.error(err instanceof Error ? err.message : t('gateway.cron.deleteFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -98,7 +100,7 @@ export function CronTab() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        Loading cron jobs...
+        {t('gateway.cron.loading')}
       </div>
     );
   }
@@ -126,7 +128,7 @@ export function CronTab() {
             fontSize: '0.8125rem', color: 'var(--text-dim)',
             fontFamily: 'var(--font-sans)',
           }}>
-            {cronJobs.length} job{cronJobs.length !== 1 ? 's' : ''}
+            {t(cronJobs.length === 1 ? 'gateway.cron.countOne' : 'gateway.cron.countMany', { count: cronJobs.length })}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -162,8 +164,7 @@ export function CronTab() {
                 display: 'flex', alignItems: 'center', gap: 6,
               }}
             >
-              <Plus size={14} />
-              Add Job
+              <Plus size={14} /> {t('gateway.cron.addJob')}
             </button>
           </div>
         </div>
@@ -175,7 +176,7 @@ export function CronTab() {
           }}>
             <Clock size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
             <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              No cron jobs configured
+              {t('gateway.cron.empty')}
             </span>
           </div>
         ) : (
@@ -205,7 +206,7 @@ export function CronTab() {
                   <button
                     onClick={() => handleToggle(job)}
                     disabled={actionLoading === `toggle-${job.id}`}
-                    title={job.enabled ? 'Disable' : 'Enable'}
+                    title={t(job.enabled ? 'gateway.cron.disable' : 'gateway.cron.enable')}
                     style={{
                       width: 28,
                       height: 28,
@@ -249,11 +250,11 @@ export function CronTab() {
                       fontSize: '0.75rem', color: 'var(--text-dim)',
                       fontFamily: 'var(--font-sans)', marginTop: 2,
                     }}>
-                      {job.action_type === 'system_event' ? 'System Event' : 'Message'}
+                      {job.action_type === 'system_event' ? t('gateway.cron.systemEvent') : t('gateway.cron.message')}
                       {' \u00b7 '}
-                      Last: {timeAgo(job.last_run_at)}
-                      {job.next_run_at && ` \u00b7 Next: ${new Date(job.next_run_at).toLocaleTimeString()}`}
-                      {` \u00b7 ${job.run_count} runs`}
+                      {t('gateway.cron.last', { time: timeAgo(job.last_run_at, t) })}
+                      {job.next_run_at && ` \u00b7 ${t('gateway.cron.next', { time: new Date(job.next_run_at).toLocaleTimeString() })}`}
+                      {` \u00b7 ${t('gateway.cron.runs', { count: job.run_count })}`}
                     </div>
                   </div>
 
@@ -264,13 +265,13 @@ export function CronTab() {
                   }}>
                     <CronSmallButton
                       icon={Play}
-                      label="Run"
+                      label={t('gateway.cron.run')}
                       onClick={() => handleRun(job)}
                       loading={actionLoading === `run-${job.id}`}
                     />
                     <CronSmallButton
                       icon={Trash2}
-                      label="Delete"
+                      label={t('gateway.cron.delete')}
                       onClick={() => handleDelete(job)}
                       loading={actionLoading === `delete-${job.id}`}
                       danger
@@ -297,10 +298,10 @@ export function CronTab() {
         open={confirmDeleteJob !== null}
         onClose={() => setConfirmDeleteJob(null)}
         onConfirm={() => { if (confirmDeleteJob) void performDelete(confirmDeleteJob); setConfirmDeleteJob(null); }}
-        title="Delete cron job"
-        description={confirmDeleteJob ? `Delete cron job "${confirmDeleteJob.name}"? This stops it from running.` : ''}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={t('gateway.cron.deleteTitle')}
+        description={confirmDeleteJob ? t('gateway.cron.deletedConfirm', { name: confirmDeleteJob.name }) : ''}
+        confirmLabel={t('gateway.cron.confirmDelete')}
+        cancelLabel={t('gateway.cron.cancel')}
         variant="danger"
       />
     </ScrollArea>
@@ -308,6 +309,7 @@ export function CronTab() {
 }
 
 function CronSettingsButton() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [hover, setHover] = useState(false);
   return (
@@ -315,7 +317,7 @@ function CronSettingsButton() {
       onClick={() => navigate('/settings/cron-config')}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title="Cron global settings (scheduler, retention, alerts)"
+      title={t('gateway.cron.settingsTitle')}
       style={{
         background: hover ? 'var(--surface-hover)' : 'transparent',
         border: '1px solid var(--border)',

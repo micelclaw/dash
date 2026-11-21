@@ -12,6 +12,7 @@
 
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useRef } from 'react';
+import { useI18n } from '@/i18n';
 import {
   Star, StarOff, Paperclip, Archive, Clock, Trash2,
   MailOpen, Mail as MailIcon, Inbox, ShieldAlert, Link2,
@@ -114,6 +115,7 @@ export function MailListItem({
   selectedIds,
   allSelectedStarred,
 }: MailListItemProps) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [relateOpen, setRelateOpen] = useState(false);
   const snoozeRef = useRef<HTMLButtonElement>(null);
@@ -156,7 +158,7 @@ export function MailListItem({
     folder: activeFolder ?? 'INBOX',
     moveTargets,
     canRelate: !isMulti,
-  });
+  }, t);
 
   const despachar = (a: MailAction, e?: { currentTarget: HTMLElement }) => {
     if (a.key === 'relate') { setRelateOpen(true); return; }
@@ -365,7 +367,8 @@ export function MailListItem({
               e.stopPropagation();
               onAction?.(activeFolder === 'ARCHIVE' ? 'unarchive' : 'archive', [email.id]);
             }}
-            title="Archive"
+            title={activeFolder === 'ARCHIVE' ? t('mail.actionMoveInbox') : t('mail.archive')}
+            aria-label={activeFolder === 'ARCHIVE' ? t('mail.actionMoveInbox') : t('mail.archive')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -387,7 +390,8 @@ export function MailListItem({
               e.stopPropagation();
               if (snoozeRef.current) onAction?.('snooze', [email.id], { el: snoozeRef.current });
             }}
-            title="Snooze"
+            title={t('mail.snooze')}
+            aria-label={t('mail.snooze')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -408,7 +412,8 @@ export function MailListItem({
               e.stopPropagation();
               onAction?.(activeFolder === 'TRASH' ? 'restore' : 'delete', [email.id]);
             }}
-            title="Delete"
+            title={activeFolder === 'TRASH' ? t('mail.actionRestore') : t('mail.delete')}
+            aria-label={activeFolder === 'TRASH' ? t('mail.actionRestore') : t('mail.delete')}
             style={{
               display: 'flex',
               alignItems: 'center',

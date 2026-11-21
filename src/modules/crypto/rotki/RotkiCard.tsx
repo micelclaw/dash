@@ -12,29 +12,31 @@
 
 import { useNavigate } from 'react-router';
 import { BarChart3, ExternalLink } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export function RotkiCard() {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   return (
     <div className="crypto-card">
       <div className="crypto-card-header">
         <div className="crypto-card-dot" style={{ background: '#6b7280' }} />
         <BarChart3 size={14} style={{ color: '#7e5bef' }} />
-        <span className="crypto-card-title">Rotki — Portfolio Tracker</span>
+        <span className="crypto-card-title">{t('crypto.rotkiPortfolio')}</span>
         <div style={{ flex: 1 }} />
-        <button className="crypto-btn-sm" onClick={() => navigate('/crypto/rotki')} title="Open Rotki">
+        <button className="crypto-btn-sm" onClick={() => navigate('/crypto/rotki')} title={t('crypto.openRotki')} aria-label={t('crypto.openRotki')}>
           <ExternalLink size={12} />
         </button>
       </div>
 
       <div className="crypto-card-body">
         <div className="rotki-summary">
-          <span className="rotki-label">Total portfolio value</span>
+          <span className="rotki-label">{t('crypto.totalPortfolioValue')}</span>
           <span className="rotki-value">— €</span>
         </div>
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-          Not installed
+          {t('crypto.notInstalled')}
         </div>
       </div>
 

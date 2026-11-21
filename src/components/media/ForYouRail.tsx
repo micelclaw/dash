@@ -13,6 +13,7 @@
 import type { ReactNode } from 'react';
 import { MediaRail } from './MediaRail';
 import { AI_MEDIA_ENABLED } from './flags';
+import { useI18n } from '@/i18n';
 
 interface ForYouRailProps {
   children?: ReactNode;
@@ -24,6 +25,7 @@ interface ForYouRailProps {
  * AI_MEDIA_ENABLED is false.
  */
 export function ForYouRail({ children }: ForYouRailProps) {
+  const { t } = useI18n();
   if (!AI_MEDIA_ENABLED) return null;
-  return <MediaRail title="For you">{children}</MediaRail>;
+  return <MediaRail title={t('media.forYou')}>{children}</MediaRail>;
 }

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-utils';
 import { useStorageStore } from '@/stores/storage.store';
+import { useI18n } from '@/i18n';
 import type { Disk, Partition, SmartStatus } from '../types';
 import { InfoTip } from './ZfsHelp';
 import { SmartHistoryModal } from './SmartHistoryModal';
@@ -33,18 +34,13 @@ import { SmartHistoryModal } from './SmartHistoryModal';
 const TYPE_CONFIG: Record<string, { icon: typeof Cpu; color: string; label: string }> = {
   ssd: { icon: Cpu, color: '#3b82f6', label: 'SSD' },
   hdd: { icon: Disc3, color: '#6b7280', label: 'HDD' },
-  unknown: { icon: Disc3, color: '#6b7280', label: 'Disco' },
+  unknown: { icon: Disc3, color: '#6b7280', label: '' },
 };
 
 const SMART_COLORS: Record<string, string> = {
   healthy: '#22c55e',
   warning: '#f97316',
   critical: '#f43f5e',
-};
-const SMART_LABELS: Record<string, string> = {
-  healthy: 'En buen estado',
-  warning: 'Aviso',
-  critical: 'Crítico',
 };
 
 // Horas de encendido en formato compacto (igual que SmartStatusCard).
@@ -56,21 +52,22 @@ function formatHours(hours: number | null): string {
 
 // Tipo "humano": NVMe se detecta por el transporte aunque el backend lo
 // clasifique como ssd (no hay un literal 'nvme' en Disk['type']).
-function diskTypeConfig(disk: Disk): { icon: typeof Cpu; color: string; label: string } {
+function diskTypeConfig(disk: Disk, unknownLabel: string): { icon: typeof Cpu; color: string; label: string } {
   const t = (disk.transport ?? '').toLowerCase();
   if (t.includes('nvme')) return { icon: Zap, color: '#8b5cf6', label: 'NVMe' };
-  return TYPE_CONFIG[disk.type] || { icon: Disc3, color: '#6b7280', label: 'Disco' };
+  const config = TYPE_CONFIG[disk.type] ?? { icon: Disc3, color: '#6b7280', label: '' };
+  return { ...config, label: config.label || unknownLabel };
 }
 
 // Texto de asignación tipo Synology. Si el disco está en un pool conocido
 // (campo pool) lo nombramos; si solo tenemos allocation, mapeamos.
-function allocationText(disk: Disk): string {
-  if (disk.pool) return `A un pool: ${disk.pool}`;
+function allocationText(disk: Disk, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (disk.pool) return t('storage.disk.allocationPool', { pool: disk.pool });
   switch (disk.allocation) {
-    case 'pool': return 'A un pool';
-    case 'system': return 'Sistema';
-    case 'spare': return 'Reserva';
-    case 'unconfigured': return 'Libre';
+    case 'pool': return t('storage.disk.inPool');
+    case 'system': return t('storage.disk.system');
+    case 'spare': return t('storage.disk.spare');
+    case 'unconfigured': return t('storage.disk.free');
     default: return disk.allocation ?? 'Libre';
   }
 }
@@ -89,34 +86,35 @@ function MiniBar({ percent }: { percent: number }) {
 
 // ── Ficha de detalles del disco (rejilla de pares clave/valor) ─────
 function DetailGrid({ disk }: { disk: Disk }) {
-  const cfg = diskTypeConfig(disk);
+  const { t } = useI18n();
+  const cfg = diskTypeConfig(disk, t('storage.disk.disk'));
   const smartColor = disk.smart_status ? (SMART_COLORS[disk.smart_status] ?? '#6b7280') : '#6b7280';
-  const smartLabel = disk.smart_status ? (SMART_LABELS[disk.smart_status] ?? disk.smart_status) : 'Sin datos';
+  const smartLabel = disk.smart_status === 'healthy' ? t('storage.smart.healthy') : disk.smart_status === 'warning' ? t('storage.smart.warning') : disk.smart_status === 'critical' ? t('storage.smart.critical') : disk.smart_status ?? t('storage.disk.smartNoData');
 
   const rows: { label: string; value: React.ReactNode; tip?: string }[] = [
-    { label: 'ID de unidad', value: disk.device },
-    { label: 'Proveedor', value: disk.vendor ?? '—' },
-    { label: 'Modelo', value: disk.model || '—' },
-    { label: 'Nº de serie', value: disk.serial ?? '—' },
-    { label: 'Tamaño', value: formatFileSize(disk.size_bytes) },
-    { label: 'Tipo', value: cfg.label },
-    { label: 'Interfaz', value: disk.transport ?? '—' },
+    { label: t('storage.disk.driveId'), value: disk.device },
+    { label: t('storage.disk.vendor'), value: disk.vendor ?? '—' },
+    { label: t('storage.disk.model'), value: disk.model || '—' },
+    { label: t('storage.disk.serial'), value: disk.serial ?? '—' },
+    { label: t('storage.disk.size'), value: formatFileSize(disk.size_bytes) },
+    { label: t('storage.disk.type'), value: cfg.label },
+    { label: t('storage.disk.interface'), value: disk.transport ?? '—' },
     {
-      label: 'Asignación', value: allocationText(disk),
-      tip: 'Indica para qué se usa el disco: dentro de un pool de almacenamiento, reservado para el sistema, libre (sin asignar) o como disco de reserva (spare).',
+      label: t('storage.disk.allocation'), value: allocationText(disk, t),
+      tip: t('storage.disk.allocationHint'),
     },
     {
-      label: 'Estado',
+      label: t('storage.disk.state'),
       value: (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: smartColor }} />
           <span style={{ color: 'var(--text)' }}>{smartLabel}</span>
         </span>
       ),
-      tip: 'Salud SMART de la unidad reportada por el firmware del disco. "En buen estado" = sin avisos; "Aviso"/"Crítico" = revisa el historial SMART y considera reemplazarlo.',
+      tip: t('storage.disk.smartState'),
     },
-    { label: 'Temperatura', value: disk.temperature_c != null ? `${disk.temperature_c}°C` : '—' },
-    { label: 'Firmware', value: disk.firmware ?? '—' },
+    { label: t('storage.smart.temperature'), value: disk.temperature_c != null ? `${disk.temperature_c}°C` : '—' },
+    { label: t('storage.disk.firmware'), value: disk.firmware ?? '—' },
   ];
 
   return (
@@ -142,19 +140,20 @@ function DetailGrid({ disk }: { disk: Disk }) {
 }
 
 function PartitionTable({ partitions }: { partitions: Partition[] }) {
+  const { t } = useI18n();
   if (!partitions.length) {
-    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0 4px 28px' }}>Sin particiones</div>;
+    return <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0 4px 28px' }}>{t('storage.disk.noPartitions')}</div>;
   }
   return (
     <div style={{ padding: '4px 0 8px 28px' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', fontFamily: 'var(--font-sans)' }}>
         <thead>
           <tr style={{ color: 'var(--text-muted)' }}>
-            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Partición</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Montaje</th>
-            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>FS</th>
-            <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>Tamaño</th>
-            <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>Usado</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>{t('storage.disk.partition')}</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>{t('storage.disk.mount')}</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>{t('storage.disk.fs')}</th>
+            <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>{t('storage.disk.size')}</th>
+            <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>{t('storage.disk.used')}</th>
             <th style={{ padding: '4px 8px', width: 50 }} />
           </tr>
         </thead>
@@ -191,6 +190,7 @@ const menuItem: React.CSSProperties = {
 };
 
 function DiskActions({ disk }: { disk: Disk }) {
+  const { t } = useI18n();
   const smartTest = useStorageStore((s) => s.smartTest);
   const [smartMenu, setSmartMenu] = useState(false);
   const [actionMenu, setActionMenu] = useState(false);
@@ -202,9 +202,9 @@ function DiskActions({ disk }: { disk: Disk }) {
     setTesting(true);
     try {
       await smartTest(disk.id, kind);
-      toast.success(`Test SMART ${kind === 'short' ? 'corto' : 'largo'} iniciado en ${disk.device}`);
+      toast.success(t('storage.disk.testStarted', { kind: t(kind === 'short' ? 'storage.disk.testShort' : 'storage.disk.testLong'), device: disk.device }));
     } catch (e) {
-      toast.error(`No se pudo iniciar el test SMART: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('storage.disk.testError', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setTesting(false);
     }
@@ -212,16 +212,16 @@ function DiskActions({ disk }: { disk: Disk }) {
 
   const demoAction = (name: string) => {
     setActionMenu(false);
-    toast.info(`${name}: solo demo (no hay operación real disponible)`);
+    toast.info(t('storage.disk.demoAction', { name }));
   };
 
   // Acciones del menú "Acción" — todas demo salvo SMART (que tiene su propio botón).
   const actions: { key: string; label: string; icon: typeof FlaskConical }[] = [
-    { key: 'benchmark', label: 'Banco de pruebas', icon: FlaskConical },
-    { key: 'secure-erase', label: 'Borrado seguro', icon: Eraser },
-    { key: 'deactivate', label: 'Desactivar', icon: Power },
-    { key: 'write-cache', label: 'Caché de escritura', icon: PenLine },
-    { key: 'firmware', label: 'Actualizar firmware', icon: UploadCloud },
+    { key: 'benchmark', label: t('storage.disk.benchmark'), icon: FlaskConical },
+    { key: 'secure-erase', label: t('storage.disk.secureErase'), icon: Eraser },
+    { key: 'deactivate', label: t('storage.disk.deactivate'), icon: Power },
+    { key: 'write-cache', label: t('storage.disk.writeCache'), icon: PenLine },
+    { key: 'firmware', label: t('storage.disk.updateFirmware'), icon: UploadCloud },
   ];
 
   return (
@@ -229,7 +229,7 @@ function DiskActions({ disk }: { disk: Disk }) {
       {/* Ejecutar test SMART (menú corto/largo) */}
       <div style={{ position: 'relative' }}>
         <button style={actionBtn} disabled={testing} onClick={() => setSmartMenu((v) => !v)}>
-          <Activity size={13} /> {testing ? 'Iniciando…' : 'Ejecutar test SMART'}
+          <Activity size={13} /> {testing ? t('storage.disk.testStarting') : t('storage.disk.smartTest')}
         </button>
         {smartMenu && (
           <>
@@ -242,12 +242,12 @@ function DiskActions({ disk }: { disk: Disk }) {
               <button style={menuItem} onClick={() => runTest('short')}
                 onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                Test corto <InfoTip text="Comprobación rápida (1-2 min) de los componentes electromecánicos principales." />
+                {t('storage.disk.testShort')} <InfoTip text={t('storage.disk.testShortHint')} />
               </button>
               <button style={menuItem} onClick={() => runTest('long')}
                 onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                Test largo <InfoTip text="Análisis exhaustivo de toda la superficie del disco. Puede tardar horas; se ejecuta en segundo plano." />
+                {t('storage.disk.testLong')} <InfoTip text={t('storage.disk.testLongHint')} />
               </button>
             </div>
           </>
@@ -256,18 +256,18 @@ function DiskActions({ disk }: { disk: Disk }) {
 
       {/* Historial SMART */}
       <button style={actionBtn} onClick={() => setHistoryOpen(true)}>
-        <History size={13} /> Historial SMART
+        <History size={13} /> {t('storage.disk.history')}
       </button>
 
       {/* Localizar unidad (demo) */}
-      <button style={actionBtn} onClick={() => toast.info(`Parpadeando la bahía de ${disk.device}… (demo)`)}>
-        <Lightbulb size={13} /> Localizar unidad
+      <button style={actionBtn} onClick={() => toast.info(t('storage.disk.demoBlink', { device: disk.device }))}>
+        <Lightbulb size={13} /> {t('storage.disk.locate')}
       </button>
 
       {/* Menú "Acción" (operaciones demo) */}
       <div style={{ position: 'relative' }}>
         <button style={actionBtn} onClick={() => setActionMenu((v) => !v)}>
-          <MoreHorizontal size={13} /> Acción
+          <MoreHorizontal size={13} /> {t('storage.disk.action')}
         </button>
         {actionMenu && (
           <>
@@ -315,11 +315,12 @@ const headCell: React.CSSProperties = {
 
 // Semáforo + etiqueta del estado SMART (con icono de aviso ámbar/rojo).
 function SmartHealthCell({ smart }: { smart: SmartStatus | undefined }) {
+  const { t } = useI18n();
   if (!smart) {
     return <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>—</span>;
   }
   const color = SMART_COLORS[smart.overall_status] ?? '#6b7280';
-  const label = SMART_LABELS[smart.overall_status] ?? smart.overall_status;
+  const label = smart.overall_status === 'healthy' ? t('storage.smart.healthy') : smart.overall_status === 'warning' ? t('storage.smart.warning') : smart.overall_status === 'critical' ? t('storage.smart.critical') : smart.overall_status;
   const warn = smart.overall_status === 'warning' || smart.overall_status === 'critical';
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -337,12 +338,13 @@ function SmartHealthCell({ smart }: { smart: SmartStatus | undefined }) {
 }
 
 function DiskRow({ disk, showSmart }: { disk: Disk; showSmart: boolean }) {
+  const { t } = useI18n();
   const expanded_disks = useStorageStore((s) => s.expanded_disks);
   const toggleDisk = useStorageStore((s) => s.toggleDisk);
   const smart_cache = useStorageStore((s) => s.smart_cache);
 
   const isExpanded = expanded_disks.includes(disk.id);
-  const cfg = diskTypeConfig(disk);
+  const cfg = diskTypeConfig(disk, t('storage.disk.disk'));
   const Icon = cfg.icon;
   const smart = smart_cache[disk.id];
   const badSectors = smart ? smart.reallocated_sectors + smart.pending_sectors : 0;
@@ -350,7 +352,12 @@ function DiskRow({ disk, showSmart }: { disk: Disk; showSmart: boolean }) {
   return (
     <Fragment>
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-label={`${disk.device} — ${isExpanded ? t('storage.disk.collapse') : t('storage.disk.expand')}`}
         onClick={() => toggleDisk(disk.id)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDisk(disk.id); } }}
         style={{
           display: 'grid', gridTemplateColumns: showSmart ? GRID_WITH_SMART : GRID_NO_SMART,
           alignItems: 'center', gap: 10, padding: '10px 14px',
@@ -411,6 +418,7 @@ function DiskRow({ disk, showSmart }: { disk: Disk; showSmart: boolean }) {
 }
 
 export function DiskList() {
+  const { t } = useI18n();
   const disks = useStorageStore((s) => s.disks);
   const smart_cache = useStorageStore((s) => s.smart_cache);
   // Mostramos las columnas SMART cuando hay datos SMART para algún disco
@@ -426,7 +434,7 @@ export function DiskList() {
     }}>
       {disks.length === 0 ? (
         <div style={{ padding: '20px 14px', fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          No se han detectado discos
+          {t('storage.disk.noDisks')}
         </div>
       ) : (
         <>
@@ -437,16 +445,16 @@ export function DiskList() {
               padding: '8px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)',
             }}>
               <span />
-              <span style={headCell}>Disco</span>
-              <span style={headCell}>Modelo</span>
-              <span style={headCell}>Tipo</span>
-              <span style={headCell}>Estado</span>
-              <span style={{ ...headCell, textAlign: 'right' }}>Temp.</span>
-              <span style={{ ...headCell, textAlign: 'right' }}>Encendido</span>
+              <span style={headCell}>{t('storage.disk.disk')}</span>
+              <span style={headCell}>{t('storage.disk.model')}</span>
+              <span style={headCell}>{t('storage.disk.type')}</span>
+              <span style={headCell}>{t('storage.disk.state')}</span>
+              <span style={{ ...headCell, textAlign: 'right' }}>{t('storage.disk.temperature')}</span>
+              <span style={{ ...headCell, textAlign: 'right' }}>{t('storage.disk.powerOn')}</span>
               <span style={{ ...headCell, textAlign: 'right', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                Sectores <InfoTip text="Sectores reasignados + pendientes. Cualquier valor mayor que 0 indica deterioro del disco; vigílalo de cerca." />
+                {t('storage.disk.sectors')} <InfoTip text={t('storage.disk.sectorsHint')} />
               </span>
-              <span style={{ ...headCell, textAlign: 'right' }}>Capacidad</span>
+              <span style={{ ...headCell, textAlign: 'right' }}>{t('storage.disk.capacity')}</span>
             </div>
           )}
           {disks.map((disk) => <DiskRow key={disk.id} disk={disk} showSmart={showSmart} />)}

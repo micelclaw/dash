@@ -1,11 +1,9 @@
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
- * All rights reserved.
+ * SPDX-License-Identifier: BUSL-1.1
  *
- * This file is part of Micelclaw OS and is proprietary software.
- * Unauthorized copying, modification, distribution, or use of this
- * file, via any medium, is strictly prohibited.
- *
- * See LICENSE in the root of this repository for full terms.
- * https://micelclaw.com
+ * Licensed under the Business Source License included in LICENSE.
+ * The Additional Use Grant and March 1, 2030 Change Date are in that file.
+ * On the applicable conversion date, use is governed by Apache-2.0.
+ * Third-party materials retain their own licenses and notices.
  */

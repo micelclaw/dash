@@ -22,6 +22,7 @@
 
 import { lazy, Suspense } from 'react';
 import type { Components } from 'react-markdown';
+import PlainMarkdownRenderer from './PlainMarkdownRenderer';
 
 export interface MarkdownRendererProps {
   content: string;
@@ -54,6 +55,7 @@ const LazyMarkdownImpl = lazy(async () => {
 });
 
 export default function MarkdownRenderer({ content, components, highlight = true }: MarkdownRendererProps) {
+  if (!highlight) return <PlainMarkdownRenderer content={content} components={components} />;
   return (
     <Suspense fallback={<div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{content}</div>}>
       <LazyMarkdownImpl content={content} components={components} highlight={highlight} />

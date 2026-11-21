@@ -118,6 +118,8 @@ export interface PlatformCapability {
    * ADEMÁS `can_send` (plataforma usable).
    */
   start_chat: { kind: 'phone' | 'username' | 'phone_or_username' } | null;
+  /** Omitted by older Core; does not assert account/audio readiness. */
+  meetings?: { supported: boolean };
 }
 
 export interface StartedChannel {

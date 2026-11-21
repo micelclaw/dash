@@ -15,8 +15,9 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { MessageSquare, Coins, Receipt, Layers } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { getAgentColor } from './agent-colors';
-import { formatTokens, modelShort, MODEL_PALETTE } from './shared/format';
+import { modelShort, MODEL_PALETTE } from './shared/format';
 import type { ConversationStats, ManagedAgent } from './types';
 
 interface ConversationChartsProps {
@@ -25,6 +26,14 @@ interface ConversationChartsProps {
 }
 
 export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
+  const { locale, t } = useI18n();
+  const numberLocale = locale === 'es' ? 'es-ES' : 'en-US';
+  const formatTokens = (value: number) => {
+    const divisor = value >= 1_000_000 ? 1_000_000 : value >= 1_000 ? 1_000 : 0;
+    if (!divisor) return String(value);
+    const amount = (value / divisor).toLocaleString(numberLocale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return `${amount}${divisor === 1_000_000 ? 'M' : 'k'}`;
+  };
   const agentData = useMemo(() => {
     const nameMap = new Map(agents.map(a => [a.name, a]));
     return (stats.by_agent ?? [])
@@ -61,19 +70,19 @@ export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 16px 4px' }}>
       {/* Resumen en stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        <StatTile icon={<MessageSquare size={13} />} label="Mensajes" value={(stats.total_messages ?? 0).toLocaleString('es-ES')} />
-        <StatTile icon={<Coins size={13} />} label="Tokens" value={formatTokens(stats.total_tokens ?? 0)} />
-        <StatTile icon={<Receipt size={13} />} label="Coste" value={(stats.total_cost_usd ?? 0) > 0 ? `$${(stats.total_cost_usd ?? 0).toFixed(2)}` : '—'} />
-        <StatTile icon={<Layers size={13} />} label="Sesiones" value={(stats.active_sessions ?? 0).toLocaleString('es-ES')} />
+        <StatTile icon={<MessageSquare size={13} />} label={t('agents.charts.messages')} value={(stats.total_messages ?? 0).toLocaleString(numberLocale)} />
+        <StatTile icon={<Coins size={13} />} label={t('agents.charts.tokens')} value={formatTokens(stats.total_tokens ?? 0)} />
+        <StatTile icon={<Receipt size={13} />} label={t('agents.charts.cost')} value={(stats.total_cost_usd ?? 0) > 0 ? `$${(stats.total_cost_usd ?? 0).toLocaleString(numberLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'} />
+        <StatTile icon={<Layers size={13} />} label={t('agents.charts.sessions')} value={(stats.active_sessions ?? 0).toLocaleString(numberLocale)} />
       </div>
 
       {!hasData ? (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 2px' }}>
-          Sin actividad en este periodo para graficar.
+          {t('agents.charts.noActivity')}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-          <ChartCard title="Tokens por agente" empty={agentData.length === 0}>
+          <ChartCard title={t('agents.charts.byAgent')} empty={agentData.length === 0}>
             <ResponsiveContainer width="100%" height={170}>
               <BarChart data={agentData} margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval={0} angle={-20} textAnchor="end" height={44} />
@@ -81,7 +90,7 @@ export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
                 <Tooltip
                   cursor={{ fill: 'var(--surface-hover)' }}
                   contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.75rem' }}
-                  formatter={(v, _n, p) => [`${Number(v).toLocaleString('es-ES')} tokens · ${p?.payload?.messages ?? 0} msgs`, p?.payload?.name]}
+                  formatter={(v, _n, p) => [t('agents.charts.tooltip', { tokens: Number(v).toLocaleString(numberLocale), messages: p?.payload?.messages ?? 0 }), p?.payload?.name]}
                 />
                 <Bar dataKey="tokens" radius={[3, 3, 0, 0]}>
                   {agentData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -90,7 +99,7 @@ export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Tokens por modelo" empty={modelData.length === 0}>
+          <ChartCard title={t('agents.charts.byModel')} empty={modelData.length === 0}>
             <ResponsiveContainer width="100%" height={170}>
               <BarChart data={modelData} layout="vertical" margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
                 <XAxis type="number" tickFormatter={formatTokens} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} height={20} />
@@ -98,7 +107,7 @@ export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
                 <Tooltip
                   cursor={{ fill: 'var(--surface-hover)' }}
                   contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.75rem' }}
-                  formatter={(v, _n, p) => [`${Number(v).toLocaleString('es-ES')} tokens · ${p?.payload?.messages ?? 0} msgs`, p?.payload?.name]}
+                  formatter={(v, _n, p) => [t('agents.charts.tooltip', { tokens: Number(v).toLocaleString(numberLocale), messages: p?.payload?.messages ?? 0 }), p?.payload?.name]}
                 />
                 <Bar dataKey="tokens" radius={[0, 3, 3, 0]}>
                   {modelData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -128,13 +137,14 @@ function StatTile({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 function ChartCard({ title, empty, children }: { title: string; empty: boolean; children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '10px 10px 4px' }}>
       <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
         {title}
       </div>
       {empty
-        ? <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px 0', textAlign: 'center' }}>Sin datos</div>
+        ? <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '20px 0', textAlign: 'center' }}>{t('agents.charts.noData')}</div>
         : children}
     </div>
   );

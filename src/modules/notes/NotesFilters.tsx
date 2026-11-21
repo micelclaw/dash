@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, ChevronDown, X } from 'lucide-react';
 import { ConnectButton } from '@/components/shared/ConnectButton';
+import { useI18n } from '@/i18n';
 
 interface NotesFiltersProps {
   search: string;
@@ -25,17 +26,18 @@ interface NotesFiltersProps {
 }
 
 const SOURCES = [
-  { value: '', label: 'All sources' },
-  { value: 'local', label: 'Local' },
-  { value: 'google_keep', label: 'Google Keep' },
-  { value: 'apple_notes', label: 'Apple Notes' },
-  { value: 'synology_note', label: 'Synology' },
+  { value: '', key: 'notes.sources.all' },
+  { value: 'local', key: 'notes.sources.local' },
+  { value: 'google_keep', key: 'notes.sources.googleKeep' },
+  { value: 'apple_notes', key: 'notes.sources.appleNotes' },
+  { value: 'synology_note', key: 'notes.sources.synology' },
 ];
 
 export function NotesFilters({
   search, onSearchChange, source, onSourceChange,
   selectedTag, onTagChange, availableTags,
 }: NotesFiltersProps) {
+  const { t } = useI18n();
   const [localSearch, setLocalSearch] = useState(search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -62,7 +64,8 @@ export function NotesFilters({
         <input
           value={localSearch}
           onChange={e => setLocalSearch(e.target.value)}
-          placeholder="Search notes..."
+          placeholder={t('notes.search')}
+          aria-label={t('notes.search')}
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
             color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
@@ -92,7 +95,7 @@ export function NotesFilters({
               fontFamily: 'var(--font-sans)', appearance: 'none', cursor: 'pointer', outline: 'none',
             }}
           >
-            {SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {SOURCES.map(s => <option key={s.value} value={s.value}>{t(s.key)}</option>)}
           </select>
           <ChevronDown size={12} style={{
             position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
@@ -112,7 +115,7 @@ export function NotesFilters({
               fontFamily: 'var(--font-sans)', appearance: 'none', cursor: 'pointer', outline: 'none',
             }}
           >
-            <option value="">All tags</option>
+            <option value="">{t('notes.allTags')}</option>
             {availableTags.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <ChevronDown size={12} style={{

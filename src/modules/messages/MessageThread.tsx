@@ -20,6 +20,7 @@ import { ChannelSyncStatus } from './ChannelSyncStatus';
 import { useInfiniteScroll } from './hooks/use-infinite-scroll';
 import { platformMeta } from '@/config/messaging-platforms';
 import { PlatformIcon } from '@/components/shared/platform-icons';
+import { useI18n } from '@/i18n';
 import type { Message, PlatformCapability } from '@/services/messages.service';
 
 interface MessageThreadProps {
@@ -37,20 +38,21 @@ interface MessageThreadProps {
   sending: boolean;
 }
 
-function formatDate(date: Date): string {
+function formatDate(date: Date, t: ReturnType<typeof useI18n>['t'], locale: string): string {
   const today = new Date();
   const d = new Date(date);
-  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === today.toDateString()) return t('messages.today');
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  if (d.toDateString() === yesterday.toDateString()) return t('messages.yesterdayDate');
+  return d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 export function MessageThread({
   channelId, channelName, platform, capability, messages, loading, loadingOlder,
   hasMore, error, onLoadOlder, onSend, sending,
 }: MessageThreadProps) {
+  const { t, locale } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const lastMsgIdRef = useRef<string | null>(null);
@@ -105,12 +107,12 @@ export function MessageThread({
       {/* Header */}
       <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <PlatformIcon platform={platform} size={22} />
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{channelName ?? 'Unknown'}</span>
+        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{channelName ?? t('messages.unknown')}</span>
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{meta.label}</span>
         <button
           onClick={() => setGalleryOpen((v) => !v)}
-          title={galleryOpen ? 'Volver al chat' : 'Media, ficheros, enlaces y voz de este chat'}
-          aria-label="Galería del chat"
+          title={galleryOpen ? t('messages.backToChat') : t('messages.galleryTitle')}
+          aria-label={t('messages.galleryLabel')}
           aria-pressed={galleryOpen}
           style={{
             marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -121,18 +123,18 @@ export function MessageThread({
             padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           }}
         >
-          {galleryOpen ? <X size={12} /> : <Images size={12} />} {galleryOpen ? 'Chat' : 'Gallery'}
+          {galleryOpen ? <X size={12} /> : <Images size={12} />} {galleryOpen ? t('messages.chat') : t('messages.gallery')}
         </button>
         <Link
           to={`/settings/observers?configure=${platform}`}
-          title="Manage which chats sync for this channel"
+          title={t('messages.manageSync')}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
             fontSize: '0.6875rem', color: 'var(--text-muted)', textDecoration: 'none',
             padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
           }}
         >
-          <SlidersHorizontal size={12} /> Manage chats
+          <SlidersHorizontal size={12} /> {t('messages.manageChats')}
         </Link>
       </div>
 
@@ -147,7 +149,7 @@ export function MessageThread({
         ref={scrollRef}
         role="log"
         aria-live="polite"
-        aria-label={`Conversation with ${channelName ?? 'channel'} on ${meta.label}`}
+        aria-label={t('messages.conversationWith', { channel: channelName ?? t('messages.unknown'), platform: meta.label })}
         style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}
       >
         {loading && messages.length === 0 ? (
@@ -157,7 +159,7 @@ export function MessageThread({
         ) : error && messages.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 32, color: 'var(--text-muted)' }}>
             <AlertCircle size={20} />
-            <span style={{ fontSize: '0.8125rem' }}>Couldn't load messages.</span>
+            <span style={{ fontSize: '0.8125rem' }}>{t('messages.loadFailed')}</span>
           </div>
         ) : (
           <>
@@ -177,7 +179,7 @@ export function MessageThread({
                       cursor: 'pointer', fontFamily: 'var(--font-sans)',
                     }}
                   >
-                    Load older messages
+                    {t('messages.loadOlder')}
                   </button>
                 )}
               </div>
@@ -188,7 +190,7 @@ export function MessageThread({
                   <div role="separator" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 4px' }}>
                     <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                     <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      {formatDate(new Date(group.date))}
+                      {formatDate(new Date(group.date), t, locale)}
                     </span>
                     <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                   </div>
@@ -200,7 +202,7 @@ export function MessageThread({
             </div>
             {messages.length === 0 && !loading && (
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-                No messages in this channel
+              {t('messages.emptyChannel')}
               </div>
             )}
           </>

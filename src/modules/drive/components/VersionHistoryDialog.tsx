@@ -12,6 +12,7 @@
 
 import { X, History } from 'lucide-react';
 import { FileVersionHistory } from '@/components/shared/FileVersionHistory';
+import { useI18n } from '@/i18n';
 import type { FileRecord } from '@/types/files';
 
 interface VersionHistoryDialogProps {
@@ -25,6 +26,7 @@ interface VersionHistoryDialogProps {
  * lets the Drive context menu open version history without a preview panel.
  */
 export function VersionHistoryDialog({ open, file, onClose }: VersionHistoryDialogProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return (
@@ -62,12 +64,17 @@ export function VersionHistoryDialog({ open, file, onClose }: VersionHistoryDial
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             <History size={15} style={{ flexShrink: 0, color: 'var(--mod-drive)' }} />
-            Version history: {file.filename}
+            {t('drive.versionsTab.dialogTitle', { filename: file.filename })}
           </h3>
-          <button onClick={onClose} style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--text-dim)', padding: 2, flexShrink: 0, display: 'flex',
-          }}>
+          <button
+            onClick={onClose}
+            aria-label={t('drive.versionsTab.closeDialog')}
+            title={t('drive.versionsTab.closeDialog')}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-dim)', padding: 2, flexShrink: 0, display: 'flex',
+            }}
+          >
             <X size={16} />
           </button>
         </div>

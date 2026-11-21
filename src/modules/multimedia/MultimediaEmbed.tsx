@@ -207,9 +207,9 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
       jellyseerr: 5056,
       qbittorrent: 8086,
       jackett: 9118,
-      navidrome: 4534,
-      calibreweb: 8084,
-      audiobookshelf: 13379,
+      navidrome: Number(import.meta.env.VITE_CLAW_IFRAME_NAVIDROME_PORT ?? 4534),
+      calibreweb: Number(import.meta.env.VITE_CLAW_IFRAME_CALIBRE_PORT ?? 8084),
+      audiobookshelf: Number(import.meta.env.VITE_CLAW_IFRAME_AUDIOBOOKS_PORT ?? 13379),
     };
     // El camino per-port (`<host>:<puerto>`) solo es alcanzable en la MISMA máquina que
     // corre los servicios (dev box: localhost). Desde un cliente REMOTO (app móvil vía

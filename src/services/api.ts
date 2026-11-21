@@ -29,6 +29,15 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
+  /** Public local installed-Vite probe; deliberately no session or profile headers. */
+  async installationReadiness():Promise<{ready:boolean;phase:'ready'|'preparing'}>{
+    const response=await fetch('/__micelclaw/startup',{cache:'no-store',signal:AbortSignal.timeout(5000)});
+    if(!response.ok)throw new ApiError('INTERFACE_PREPARATION_FAILED','No se pudo preparar la interfaz',undefined,response.status);
+    const result=await response.json();const data=result?.data;
+    if(data?.schema_version!==1||data.revision!=='r25'||typeof data.ready!=='boolean'||data.phase!==(data.ready?'ready':'preparing'))throw new ApiError('BAD_RESPONSE','Preparación de interfaz no válida');
+    return data;
+  }
+
   private getToken(): string | null {
     return useAuthStore.getState().tokens?.accessToken ?? null;
   }
@@ -61,8 +70,10 @@ class ApiClient {
   private async request<T>(
     method: string,
     path: string,
-    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined>; timeout?: number; _isRetry?: boolean },
+    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined>; timeout?: number; _isRetry?: boolean; signal?: AbortSignal },
   ): Promise<T> {
+    const requestGeneration = useAuthStore.getState().sessionGeneration;
+    if (useAuthStore.getState().logoutState === 'revoking' && path !== '/auth/logout') throw new ApiError('SESSION_CLOSING', 'Revocando la sesión');
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
       const { getMockResponse } = await import('./mock');
@@ -104,7 +115,7 @@ class ApiClient {
       method,
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
-      signal: AbortSignal.timeout(options?.timeout ?? REQUEST_TIMEOUT_MS),
+      signal: options?.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeout ?? REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(options?.timeout ?? REQUEST_TIMEOUT_MS),
       // Authed live API — never want a cached response. Without this
       // the browser may serve stale data for repeated GETs to the same
       // URL (notably workspace/files during a build, where the user
@@ -112,6 +123,7 @@ class ApiClient {
       cache: 'no-store',
     });
 
+    if (!path.startsWith('/auth/') && useAuthStore.getState().sessionGeneration !== requestGeneration) throw new ApiError('SESSION_CHANGED', 'La sesión cambió durante la petición');
     if (res.status === 401 && !options?._isRetry && !path.startsWith('/auth/')) {
       // Timeout de sesión por inactividad (Fase 2): NO intentar refresh (un refresh
       // re-mintaría la sesión y burlaría el cierre por inactividad) → logout directo.
@@ -121,14 +133,15 @@ class ApiClient {
         if (t) code = (JSON.parse(t) as { error?: { code?: string } })?.error?.code;
       } catch { /* cuerpo no-JSON: tratar como 401 normal */ }
       if (code === 'SESSION_IDLE_TIMEOUT') {
-        useAuthStore.getState().logout();
+        useAuthStore.getState().clearSession();
         throw new ApiError('SESSION_IDLE_TIMEOUT', 'Sesión cerrada por inactividad', undefined, 401);
       }
       try {
-        await useAuthStore.getState().refresh();
+        const refreshed = await useAuthStore.getState().refresh();
+        if (refreshed.status !== 'refreshed' || useAuthStore.getState().sessionGeneration !== requestGeneration) throw new ApiError('SESSION_NOT_REFRESHED', 'No se pudo renovar esta sesión', undefined, 401);
         return this.request(method, path, { ...options, _isRetry: true });
-      } catch {
-        useAuthStore.getState().logout();
+      } catch (error) {
+        if (error instanceof ApiError) throw error;
         throw new ApiError('UNAUTHORIZED', 'Session expired', undefined, 401);
       }
     }
@@ -144,6 +157,8 @@ class ApiClient {
     // throw the cryptic "Unexpected end of JSON input" that surfaced as a useless
     // toast. We surface a clear ApiError instead.
     const text = await res.text();
+    // Reading a streamed response body can outlive its authenticated session.
+    if (!path.startsWith('/auth/') && useAuthStore.getState().sessionGeneration !== requestGeneration) throw new ApiError('SESSION_CHANGED', 'La sesión cambió durante la petición');
     let json: unknown = undefined;
     if (text) {
       try {
@@ -236,6 +251,8 @@ class ApiClient {
    * pass-through with no future envelope post-processing.
    */
   async rawPost<T>(path: string, body?: unknown): Promise<T> {
+    const requestGeneration = useAuthStore.getState().sessionGeneration;
+    if (useAuthStore.getState().logoutState === 'revoking') throw new ApiError('SESSION_CLOSING', 'Revocando la sesión');
     const url = `${BASE_URL}${API_PREFIX}${path}`;
     const headers: Record<string, string> = {};
     const token = this.getToken();
@@ -250,10 +267,13 @@ class ApiClient {
     if (body !== undefined) fetchOpts.body = JSON.stringify(body);
 
     const res = await fetch(url, fetchOpts);
+    if (requestGeneration !== useAuthStore.getState().sessionGeneration) throw new ApiError('SESSION_CHANGED', 'La sesión cambió durante la petición');
 
     if (res.status === 401) {
       try {
-        await useAuthStore.getState().refresh();
+        const generation = useAuthStore.getState().sessionGeneration;
+        const refreshed = await useAuthStore.getState().refresh();
+        if (refreshed.status !== 'refreshed' || generation !== useAuthStore.getState().sessionGeneration) throw new ApiError('SESSION_NOT_REFRESHED', 'No se pudo renovar esta sesión', undefined, 401);
         const retryToken = this.getToken();
         if (retryToken) headers['Authorization'] = `Bearer ${retryToken}`;
         const retry = await fetch(url, { ...fetchOpts, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
@@ -264,7 +284,7 @@ class ApiClient {
         return (await retry.json()) as T;
       } catch (e) {
         if (e instanceof ApiError) throw e;
-        useAuthStore.getState().logout();
+        useAuthStore.getState().clearSession();
         throw new ApiError('UNAUTHORIZED', 'Session expired', undefined, 401);
       }
     }
@@ -276,15 +296,15 @@ class ApiClient {
     return json as T;
   }
 
-  get<T>(path: string, params?: Record<string, string | number | boolean | undefined>, opts?: { timeout?: number }): Promise<T> {
+  get<T>(path: string, params?: Record<string, string | number | boolean | undefined>, opts?: { timeout?: number; signal?: AbortSignal }): Promise<T> {
     return this.request<T>('GET', path, { params, ...opts });
   }
 
-  post<T>(path: string, body?: unknown, opts?: { timeout?: number }): Promise<T> {
+  post<T>(path: string, body?: unknown, opts?: { timeout?: number; signal?: AbortSignal }): Promise<T> {
     return this.request<T>('POST', path, { body, ...opts });
   }
 
-  patch<T>(path: string, body?: unknown, opts?: { timeout?: number }): Promise<T> {
+  patch<T>(path: string, body?: unknown, opts?: { timeout?: number; signal?: AbortSignal }): Promise<T> {
     return this.request<T>('PATCH', path, { body, ...opts });
   }
 
@@ -292,11 +312,11 @@ class ApiClient {
     return this.request<T>('PUT', path, { body });
   }
 
-  delete<T>(path: string, body?: unknown, opts?: { timeout?: number }): Promise<T> {
+  delete<T>(path: string, body?: unknown, opts?: { timeout?: number; signal?: AbortSignal }): Promise<T> {
     return this.request<T>('DELETE', path, body !== undefined ? { body, ...opts } : opts);
   }
 
-  async upload<T>(path: string, formData: FormData, method: 'POST' | 'PUT' = 'POST', opts?: { timeout?: number }): Promise<T> {
+  async upload<T>(path: string, formData: FormData, method: 'POST' | 'PUT' = 'POST', opts?: { timeout?: number; signal?: AbortSignal }): Promise<T> {
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
       const { getMockResponse } = await import('./mock');

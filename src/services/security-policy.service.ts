@@ -150,6 +150,7 @@ export interface AgentSecurity {
   agent: {
     id: string;
     user_id: string;
+    owner_role?: string;
     name: string;
     display_name: string;
     model: string;
@@ -207,6 +208,8 @@ export interface AgentSecurity {
 }
 
 export interface AgentSecurityPolicyInput {
+  /** Only send when preview explicitly advertises profile_version_guard. */
+  expected_profile_version_id?: string | null;
   expected_revision: number;
   requested_exec_mode: SecurityExecMode;
   profile_id: string | null;
@@ -214,6 +217,8 @@ export interface AgentSecurityPolicyInput {
 }
 
 export interface AgentSecurityPreview {
+  /** Additive capability; absent on the current legacy server. */
+  profile_version_guard?: boolean;
   before: Record<string, unknown> | null;
   after: {
     requested_exec_mode: SecurityExecMode;
@@ -223,7 +228,7 @@ export interface AgentSecurityPreview {
     desired_revision: number;
     state: string;
   };
-  impact: { profile_rules: number; local_overrides: number };
+  impact: { profile_rules: number; local_overrides: number; retained_local_overrides?: number; revoked_allow_overrides?: number };
   runtime_application: string;
   warnings: string[];
 }
@@ -518,7 +523,7 @@ export async function getAgentSecurityRuntime(agentId: string): Promise<AgentSec
   return res.data;
 }
 
-export async function reconcileAgentSecurity(agentId: string): Promise<Record<string, unknown>> {
-  const res = await api.post<{ data: Record<string, unknown> }>(`/managed-agents/${agentId}/security/reconcile`);
+export async function reconcileAgentSecurity(agentId: string, expectation?: { expected_revision: number; expected_mode: SecurityExecMode }): Promise<Record<string, unknown>> {
+  const res = await api.post<{ data: Record<string, unknown> }>(`/managed-agents/${agentId}/security/reconcile`, expectation);
   return res.data;
 }

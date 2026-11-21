@@ -16,7 +16,9 @@ import { X, ChevronLeft, ChevronRight, Image, Users, PanelRightOpen, PanelRightC
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { formatFileSize, getPreviewUrl, getStreamUrl, isVideoMime } from '@/lib/file-utils';
-import { formatDateShort, formatTime } from '@/lib/date-helpers';
+import { useI18n } from '@/i18n';
+import { formatDateTime } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
 import type { FaceDetection } from '@/stores/photo-ai.store';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -47,6 +49,8 @@ export function PhotoLightbox({
   detailsOpen = false,
   onToggleDetails,
 }: PhotoLightboxProps) {
+  const { locale, t } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const isMobile = useIsMobile();
   const photo = photos[currentIndex];
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
@@ -152,24 +156,24 @@ export function PhotoLightbox({
   const handleSetStars = useCallback(async (id: string, value: number) => {
     try {
       await api.patch(`/files/${id}`, { custom_fields: { aesthetic_override: value } });
-      toast.success(`Rating set to ${value} stars`);
+      toast.success(t(value === 1 ? 'photos.ratingOne' : 'photos.ratingMany', { count: value }));
       onUpdatePhoto?.({ ...photos[currentIndex]!, custom_fields: { ...photos[currentIndex]!.custom_fields, aesthetic_override: value } });
     } catch {
-      toast.error('Failed to update rating');
+      toast.error(t('photos.ratingFailed'));
     }
-  }, [currentIndex, photos, onUpdatePhoto]);
+  }, [currentIndex, photos, onUpdatePhoto, t]);
 
   const handleResetStars = useCallback(async (id: string) => {
     try {
       await api.patch(`/files/${id}`, { custom_fields: { aesthetic_override: null } });
-      toast.success('Rating reset to AI score');
+      toast.success(t('photos.resetAi'));
       const cf = { ...photos[currentIndex]!.custom_fields };
       delete cf.aesthetic_override;
       onUpdatePhoto?.({ ...photos[currentIndex]!, custom_fields: cf });
     } catch {
-      toast.error('Failed to reset rating');
+      toast.error(t('photos.resetRatingFailed'));
     }
-  }, [currentIndex, photos, onUpdatePhoto]);
+  }, [currentIndex, photos, onUpdatePhoto, t]);
 
   const handleNavigateToSimilar = useCallback((targetId: string) => {
     const idx = photos.findIndex((p) => p.id === targetId);
@@ -248,6 +252,7 @@ export function PhotoLightbox({
       {/* Close button */}
       <button
         onClick={onClose}
+        aria-label={t('photos.share.close')}
         onMouseEnter={() => setHoveredBtn('close')}
         onMouseLeave={() => setHoveredBtn(null)}
         style={{
@@ -277,7 +282,8 @@ export function PhotoLightbox({
           onClick={onToggleDetails}
           onMouseEnter={() => setHoveredBtn('details')}
           onMouseLeave={() => setHoveredBtn(null)}
-          title={detailsOpen ? 'Hide details' : 'Photo details'}
+          title={t(detailsOpen ? 'photos.hideDetails' : 'photos.photoDetails')}
+          aria-label={t(detailsOpen ? 'photos.hideDetails' : 'photos.photoDetails')}
           style={{
             position: 'absolute',
             top: 'calc(12px + env(safe-area-inset-top, 0px))',
@@ -321,6 +327,7 @@ export function PhotoLightbox({
             {!isMobile && (
             <button
               onClick={(e) => { e.stopPropagation(); goPrev(); }}
+              aria-label={t('photos.previousPhoto')}
               onMouseEnter={() => setHoveredBtn('prev')}
               onMouseLeave={() => setHoveredBtn(null)}
               disabled={currentIndex === 0}
@@ -413,6 +420,7 @@ export function PhotoLightbox({
             {!isMobile && (
             <button
               onClick={(e) => { e.stopPropagation(); goNext(); }}
+              aria-label={t('photos.nextPhoto')}
               onMouseEnter={() => setHoveredBtn('next')}
               onMouseLeave={() => setHoveredBtn(null)}
               disabled={currentIndex === photos.length - 1}
@@ -441,7 +449,7 @@ export function PhotoLightbox({
                 onMouseLeave={() => setHoveredBtn(null)}
                 style={actionBtnStyle('faces')}
               >
-                <Users size={12} /> {showFaceOverlay ? 'Hide' : 'Show'} faces ({faceDetections.length})
+                <Users size={12} /> {t(showFaceOverlay ? 'photos.hideFaces' : 'photos.showFaces', { count: faceDetections.length })}
               </button>
             )}
           </div>
@@ -472,11 +480,11 @@ export function PhotoLightbox({
             )}
             {photo.size_bytes > 0 && <InfoChip label={formatFileSize(photo.size_bytes)} />}
             {camera && <InfoChip label={camera} />}
-            <InfoChip label={`${formatDateShort(dateObj)} ${formatTime(dateObj)}`} />
+            <InfoChip label={formatDateTime(dateObj, locale, general)} />
             {gps && <InfoChip label={`${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)}`} />}
             {(photo.tags?.length ?? 0) > 0 && <InfoChip label={(photo.tags ?? []).join(', ')} />}
             {faceDetections && faceDetections.length > 0 && (
-              <InfoChip label={`${faceDetections.length} face${faceDetections.length !== 1 ? 's' : ''}`} />
+              <InfoChip label={t(faceDetections.length === 1 ? 'photos.faceOne' : 'photos.faceMany', { count: faceDetections.length })} />
             )}
           </div>
         </div>
@@ -497,20 +505,20 @@ export function PhotoLightbox({
           if (contactDialogFace?.face_cluster_id) {
             try {
               await linkFaceToContact(contactDialogFace.face_cluster_id, contactId);
-              toast.success('Contact linked');
+              toast.success(t('photos.contactLinked'));
               clearFaceDetections();
               if (photo?.id) fetchFaceDetections(photo.id);
-            } catch { toast.error('Failed to link contact'); }
+            } catch { toast.error(t('photos.contactLinkFailed')); }
           }
         }}
         onUnlink={async () => {
           if (contactDialogFace?.face_cluster_id) {
             try {
               await linkFaceToContact(contactDialogFace.face_cluster_id, null);
-              toast.success('Contact unlinked');
+              toast.success(t('photos.contactUnlinked'));
               clearFaceDetections();
               if (photo?.id) fetchFaceDetections(photo.id);
-            } catch { toast.error('Failed to unlink contact'); }
+            } catch { toast.error(t('photos.contactUnlinkFailed')); }
           }
         }}
       />

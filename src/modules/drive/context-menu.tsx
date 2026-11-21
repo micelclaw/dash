@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { documentsEditorPath } from './documents-editor';
+import {officeFileKind} from '@/modules/office/office-file-target';
 import {
   FolderOpen, Eye, ExternalLink, Download, Star, StarOff, Share2, Link2,
   Scissors, Copy, ClipboardPaste, FolderInput, FolderPlus,
@@ -27,13 +29,10 @@ import type { DriveTab } from '@/stores/drive.store';
 // ─── Mime helpers (extracted from the old inline menus in DriveList/DriveGrid) ───
 
 export function isOfficeFile(file: FileRecord): boolean {
-  return /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv)$/i.test(file.filename)
-    || !!file.mime_type?.startsWith('application/vnd.openxmlformats-officedocument')
-    || !!file.mime_type?.startsWith('application/vnd.ms-')
-    || !!file.mime_type?.startsWith('application/vnd.oasis.opendocument');
+  return officeFileKind(file)==='document';
 }
 
-export const isPdfFile = (f: FileRecord) => f.mime_type === 'application/pdf';
+export const isPdfFile = (f: FileRecord) => officeFileKind(f)==='pdf';
 export const isAudioFile = (f: FileRecord) => !!f.mime_type?.startsWith('audio/');
 export const isVideoFile = (f: FileRecord) => !!f.mime_type?.startsWith('video/');
 export const isDiagramFile = (f: FileRecord) => f.mime_type === 'application/vnd.claw.diagram+json';
@@ -135,7 +134,9 @@ function buildOpenWithItems(file: FileRecord, ctx: DriveMenuContext): ContextMen
     items.push({ label: 'Play video', icon: Play, onClick: () => { void playFromDrive(file); } });
   }
   if (isOfficeFile(file)) {
-    items.push({ label: 'Office', icon: FileText, onClick: () => navigate(`/office/edit/${file.id}`) });
+    const documentsPath = documentsEditorPath(file);
+    if (documentsPath) items.push({ label: 'Abrir en Office', icon: FileText, onClick: () => navigate(documentsPath) });
+    else items.push({ label: 'Abrir en Office', icon: FileText, onClick: () => navigate(`/office/edit/${file.id}`) });
   }
   if (isPdfFile(file)) {
     items.push({ label: 'PDF Viewer', icon: FileText, onClick: () => navigate(`/office/pdf/${file.id}`) });

@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
+import { officeFileTarget } from '@/modules/office/office-file-target';
 import { Users, Share2, Link2, Download, X, Copy as CopyIcon, KeyRound, FolderOpen, Pencil, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs } from '@/components/shared/Tabs';
@@ -155,6 +156,7 @@ function useShareFileMeta(shares: UserShare[]) {
 // ─── With me ─────────────────────────────────────────────
 
 function WithMeSub() {
+  const navigate = useNavigate();
   const [shares, setShares] = useState<UserShare[]>([]);
   const [loading, setLoading] = useState(true);
   const userName = useUserLookup();
@@ -185,9 +187,11 @@ function WithMeSub() {
       {loading && <Loading />}
       {shares.map(share => {
         const file = meta[share.target_id];
+        const office = file && officeFileTarget(file);
         // P2 — bespoke menu: shares received have no inspector/preview here,
         // so Download (when possible) + Copy file ID is what the row supports.
         const menuItems: ContextMenuItem[] = [
+          ...(office ? [{label: 'Abrir en Office', icon: ExternalLink, onClick: () => navigate(office)}] : []),
           ...(file && !file.is_directory ? [{
             label: 'Download', icon: Download,
             onClick: () => { void downloadFile(file.id, file.filename); },
@@ -220,6 +224,7 @@ function WithMeSub() {
                   </div>
                 </div>
                 <PermissionBadge permission={share.permission} />
+                {office && <IconButton icon={ExternalLink} title="Abrir en Office" onClick={() => navigate(office)} />}
                 {file && !file.is_directory && (
                   <IconButton
                     icon={Download}
@@ -247,6 +252,8 @@ function ByMeSub() {
 
   // P2 — "Open" jumps to My Drive (the current user OWNS these files).
   const openInMyDrive = useCallback((file: FileRecord) => {
+    const office = officeFileTarget(file);
+    if (office) { navigate(office); return; }
     if (file.is_directory) {
       const path = file.filepath.endsWith('/') ? file.filepath : file.filepath + '/';
       navigate(`/drive?tab=my-drive&path=${encodeURIComponent(path)}`);

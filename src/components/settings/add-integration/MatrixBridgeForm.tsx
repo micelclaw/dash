@@ -30,7 +30,7 @@
  *  - Disclaimer de riesgo ANTES de conectar (requisito playbook §A.6).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Loader2, Check, Lock, MessageCircle, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,6 +40,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { ApiError } from '@/services/api';
 import * as hub from '@/services/matrix-hub.service';
 import * as syncSvc from '@/services/sync.service';
+import { useI18n } from '@/i18n';
 import { FormActions } from './shared';
 
 /** Paso DERIVADO — no hay setStep para el estado "largo". */
@@ -105,6 +106,9 @@ function deriveStep(
 export function MatrixBridgeForm({
   config, onComplete, onCancel,
 }: { config: MatrixBridgeConfig; onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === 'admin' || role === 'owner';
 
@@ -128,13 +132,13 @@ export function MatrixBridgeForm({
           // deja intentar el login y enseña el motivo.
           setLogin({
             state: 'unknown',
-            message: err instanceof Error ? err.message : `The ${serviceLabel} bridge did not answer.`,
+            message: err instanceof Error ? err.message : tRef.current('settings.matrix.bridgeDidNotAnswer', { service: serviceLabel }),
             hint: null,
           });
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Could not read the ${serviceLabel} bridge status`);
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.matrix.readStatusFailed', { service: serviceLabel }));
     }
   }, [bridgeId, serviceLabel]);
 
@@ -145,12 +149,12 @@ export function MatrixBridgeForm({
   async function handleSetupHub() {
     setSubmitting(true);
     try {
-      toast.info(`Setting up the ${serviceLabel} bridge — this can take a few minutes the first time.`);
+      toast.info(t('settings.matrix.settingUp', { service: serviceLabel }));
       await hub.startMatrixHub(bridgeId);
       await refresh();
-      toast.success(`${serviceLabel} bridge is running`);
+      toast.success(t('settings.matrix.running', { service: serviceLabel }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not set up the bridge');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.matrix.setupFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -162,10 +166,10 @@ export function MatrixBridgeForm({
       const r = await hub.advanceLogin(loginStep, value, bridgeId);
       setLogin(r);
       if (r.state === 'error') toast.error(r.hint ?? r.message);
-      else if (r.state === 'unknown') toast.warning('Unexpected reply from the bridge — see the message below');
+      else if (r.state === 'unknown') toast.warning(tRef.current('settings.matrix.unexpectedReply'));
       return r;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `The ${serviceLabel} bridge did not respond`);
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.matrix.bridgeDidNotRespond', { service: serviceLabel }));
       return null;
     } finally {
       setSubmitting(false);
@@ -177,9 +181,9 @@ export function MatrixBridgeForm({
     try {
       const r = await hub.advanceLogin('status', undefined, bridgeId);
       if (r.state === 'done') { setLogin(r); return true; }
-      if (!silent) toast.info('Not linked yet — finish the remaining steps and try again.');
+      if (!silent) toast.info(tRef.current('settings.matrix.notLinked'));
     } catch {
-      if (!silent) toast.error(`The ${serviceLabel} bridge did not respond`);
+      if (!silent) toast.error(tRef.current('settings.matrix.bridgeDidNotRespond', { service: serviceLabel }));
     }
     return false;
   }, [bridgeId, serviceLabel]);
@@ -212,7 +216,7 @@ export function MatrixBridgeForm({
         onComplete();
         return;
       }
-      toast.error(err instanceof Error ? err.message : `Could not create the ${serviceLabel} channel`);
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.matrix.createChannelFailed', { service: serviceLabel }));
     } finally {
       setSubmitting(false);
     }
@@ -234,7 +238,7 @@ export function MatrixBridgeForm({
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: 32 }}>
         <Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>
-          Checking your {serviceLabel} bridge…
+          {t('settings.matrix.checkingBridge', { service: serviceLabel })}
         </p>
       </div>
     );
@@ -249,17 +253,17 @@ export function MatrixBridgeForm({
         </p>
         <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
           <MessageCircle size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-          <span>Setting up restarts the internal Matrix server for a few seconds — channels you already connected keep working (they reconnect automatically).</span>
+          <span>{t('settings.matrix.restartNotice')}</span>
         </div>
         <FormActions
           onBack={onCancel}
           saving={submitting}
           onConfirm={handleSetupHub}
-          submitLabel={submitting ? 'Setting up…' : 'Set up bridge'}
+          submitLabel={submitting ? t('settings.matrix.settingUpLabel') : t('settings.matrix.setUpBridge')}
         />
         {submitting && (
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Downloading and starting the {serviceLabel} bridge. First run can take a few minutes.
+            {t('settings.matrix.downloadingBridge', { service: serviceLabel })}
           </p>
         )}
       </div>
@@ -272,11 +276,10 @@ export function MatrixBridgeForm({
         <div style={{ ...CALLOUT, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
           <Lock size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            {serviceLabel} (personal account) isn&apos;t enabled on this server yet. Ask an
-            administrator to set up the {serviceLabel} bridge in Settings → Channel Observers.
+            {t('settings.matrix.unavailable', { service: serviceLabel })}
           </span>
         </div>
-        <Button variant="outline" onClick={onCancel} className="w-full">Close</Button>
+        <Button variant="outline" onClick={onCancel} className="w-full">{t('settings.matrix.close')}</Button>
       </div>
     );
   }
@@ -294,14 +297,14 @@ export function MatrixBridgeForm({
         </div>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.6875rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
           <Checkbox checked={riskAccepted} onCheckedChange={(v) => setRiskAccepted(v === true)} style={{ marginTop: 1 }} />
-          <span>I understand and accept the risk of linking my personal {serviceLabel} account.</span>
+          <span>{t('settings.matrix.acceptRisk', { service: serviceLabel })}</span>
         </label>
         <FormActions
           onBack={onCancel}
           saving={false}
           disabled={!riskAccepted}
           onConfirm={() => { /* el paso se re-deriva con riskAccepted=true */ setRiskAccepted(true); }}
-          submitLabel="Continue"
+          submitLabel={t('settings.matrix.continue')}
         />
       </div>
     );
@@ -317,7 +320,7 @@ export function MatrixBridgeForm({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ ...CALLOUT, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
         <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-        <span>{login?.message ?? `Linked to ${serviceLabel}.`}</span>
+      <span>{login?.message ?? t('settings.matrix.linked', { service: serviceLabel })}</span>
       </div>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
         {config.readyBlurb}
@@ -326,7 +329,7 @@ export function MatrixBridgeForm({
         onBack={onCancel}
         saving={submitting}
         onConfirm={handleChooseChats}
-        submitLabel="Choose chats"
+        submitLabel={t('settings.matrix.chooseChats')}
       />
     </div>
   );

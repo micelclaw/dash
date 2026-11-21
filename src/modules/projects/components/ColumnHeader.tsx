@@ -12,12 +12,20 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { MoreHorizontal, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
-import { SEMANTICAS, etiquetaSemantica, colorSemantica } from '../utils/status-semantic';
+import { SEMANTICAS, colorSemantica } from '../utils/status-semantic';
 import { useProjectsStore } from '@/stores/projects.store';
+import { useI18n } from '@/i18n';
 import type { Column } from '../types';
+import type { StatusSemantic } from '../utils/status-semantic';
 
 const COLUMN_COLORS = ['#94a3b8', '#3b82f6', '#8b5cf6', '#f59e0b', '#22c55e', '#ef4444'] as const;
 const COLUMN_MENU_OPEN_EVENT = 'micelclaw:column-menu-open';
+const STATUS_LABEL_KEYS: Record<StatusSemantic, string> = {
+  needs_action: 'projects.columnHeader.semantic.needsAction',
+  in_progress: 'projects.columnHeader.semantic.inProgress',
+  completed: 'projects.columnHeader.semantic.completed',
+  cancelled: 'projects.columnHeader.semantic.cancelled',
+};
 
 interface ColumnHeaderProps {
   column: Column;
@@ -25,6 +33,7 @@ interface ColumnHeaderProps {
 }
 
 export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
+  const { t } = useI18n();
   const activeBoardId = useProjectsStore((s) => s.activeBoardId);
   const updateColumn = useProjectsStore((s) => s.updateColumn);
   const deleteColumn = useProjectsStore((s) => s.deleteColumn);
@@ -58,6 +67,8 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
   }, [menuOpen]);
 
   const wipExceeded = column.wip_limit != null && cardCount > column.wip_limit;
+  const semanticKey = column.status_semantic ? STATUS_LABEL_KEYS[column.status_semantic as StatusSemantic] : undefined;
+  const semanticLabel = semanticKey ? t(semanticKey) : null;
 
   const handleSaveTitle = useCallback(() => {
     if (title.trim() && title !== column.title) {
@@ -89,13 +100,14 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
             display: 'flex',
             flexShrink: 0,
           }}
-          title={column.collapsed ? 'Expand' : 'Collapse'}
+          title={column.collapsed ? t('projects.columnHeader.expand') : t('projects.columnHeader.collapse')}
         >
           {column.collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
         </button>
         {editing ? (
           <input
             autoFocus
+            aria-label={t('projects.columnHeader.renameLabel', { name: column.title })}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleSaveTitle}
@@ -144,18 +156,18 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
             descubrirlo cuando algo no aparece en el móvil es mucho peor. */}
         {column.status_semantic ? (
           <span
-            title={`Fuera, esta columna equivale a «${etiquetaSemantica(column.status_semantic)}»`}
+            title={t('projects.columnHeader.semantic.externalTitle', { status: semanticLabel ?? '' })}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: colorSemantica(column.status_semantic), flexShrink: 0 }}
           >
             <span style={{ width: 6, height: 6, borderRadius: 999, background: colorSemantica(column.status_semantic) }} />
-            {etiquetaSemantica(column.status_semantic)?.toLowerCase()}
+            {semanticLabel?.toLowerCase()}
           </span>
         ) : (
           <span
-            title="Esta columna no dice a qué estado equivale. Al sincronizar, sus tareas se verán como «por hacer»."
+            title={t('projects.columnHeader.semantic.undefined')}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--text-dim)', flexShrink: 0, opacity: 0.7 }}
           >
-            ⚠ sin definir
+            ⚠ {t('projects.columnHeader.semantic.undefinedLabel')}
           </span>
         )}
       </div>
@@ -170,7 +182,7 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
             }
             setMenuOpen(!menuOpen);
           }}
-          aria-label={`Column options: ${column.title}`}
+          aria-label={t('projects.columnHeader.options', { name: column.title })}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           style={{
@@ -211,14 +223,14 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                 onClick={() => { setEditing(true); setMenuOpen(false); }}
                 style={menuItemStyle}
               >
-                Rename
+                {t('projects.columnHeader.rename')}
               </button>
 
               {/* Qué significa esta columna para el mundo exterior. Las columnas
                   se llaman como uno quiera; fuera solo existen cuatro estados. */}
               <div style={{ borderTop: '1px solid var(--border)', marginTop: 4, paddingTop: 6 }}>
                 <div style={{ padding: '0 8px 4px', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
-                  Significado
+                  {t('projects.columnHeader.meaning')}
                 </div>
                 {SEMANTICAS.map((sem) => (
                   <button
@@ -227,16 +239,16 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                     style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 6 }}
                   >
                     <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: column.status_semantic === sem.valor ? sem.color : 'transparent', border: `1px solid ${sem.color}` }} />
-                    {sem.etiqueta}
+                    {t(STATUS_LABEL_KEYS[sem.valor])}
                   </button>
                 ))}
                 <button
                   onClick={() => { updateColumn(activeBoardId!, column.id, { status_semantic: null }); setMenuOpen(false); }}
-                  title="Esta columna no equivale a ningún estado del estándar. Al sincronizar, sus tareas se verán como «por hacer»."
+                  title={t('projects.columnHeader.semantic.noneTitle')}
                   style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)' }}
                 >
                   <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: column.status_semantic == null ? 'var(--text-dim)' : 'transparent', border: '1px dashed var(--text-dim)' }} />
-                  Ninguno
+                  {t('projects.columnHeader.semantic.none')}
                 </button>
               </div>
               {/* Column color — editable any time, not just at creation */}
@@ -245,6 +257,7 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                   <button
                     key={c}
                     title={c}
+                    aria-label={t('projects.columnHeader.color', { color: c })}
                     onClick={() => updateColumn(activeBoardId!, column.id, { color: c })}
                     style={{
                       width: 16, height: 16, borderRadius: '50%', background: c,
@@ -257,11 +270,13 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                   type="color"
                   value={column.color ?? '#94a3b8'}
                   onChange={(e) => updateColumn(activeBoardId!, column.id, { color: e.target.value })}
-                  title="Custom color"
+                  aria-label={t('projects.columnHeader.color.custom')}
+                  title={t('projects.columnHeader.color.custom')}
                   style={{ width: 18, height: 18, padding: 0, border: '1px solid var(--border)', borderRadius: 4, background: 'none', cursor: 'pointer', flexShrink: 0 }}
                 />
                 <button
-                  title="No color"
+                  aria-label={t('projects.columnHeader.color.none')}
+                  title={t('projects.columnHeader.color.none')}
                   onClick={() => updateColumn(activeBoardId!, column.id, { color: null })}
                   style={{
                     width: 16, height: 16, borderRadius: '50%', background: 'transparent',
@@ -272,7 +287,7 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
               </div>
               <button
                 onClick={() => {
-                  const lim = prompt('WIP limit (0 to remove):', String(column.wip_limit ?? ''));
+                  const lim = prompt(t('projects.columnHeader.wip.prompt'), String(column.wip_limit ?? ''));
                   if (lim !== null) {
                     const n = parseInt(lim, 10);
                     updateColumn(activeBoardId!, column.id, { wip_limit: n > 0 ? n : null });
@@ -281,7 +296,7 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                 }}
                 style={menuItemStyle}
               >
-                Set WIP limit
+                {t('projects.columnHeader.wip.set')}
               </button>
               <button
                 onClick={() => {
@@ -290,7 +305,7 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                 }}
                 style={menuItemStyle}
               >
-                {column.collapsed ? 'Expand column' : 'Collapse column'}
+                {column.collapsed ? t('projects.columnHeader.expandColumn') : t('projects.columnHeader.collapseColumn')}
               </button>
               <button
                 onClick={() => {
@@ -299,7 +314,7 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                 }}
                 style={{ ...menuItemStyle, color: 'var(--error)' }}
               >
-                <Trash2 size={12} /> Delete
+                <Trash2 size={12} /> {t('projects.columnHeader.delete')}
               </button>
             </div>
           </>

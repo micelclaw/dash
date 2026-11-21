@@ -6,6 +6,7 @@ import { api } from '@/services/api';
 import { shouldRenderTool } from '@/config/tool-rendering';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 import { useAuthStore } from '@/stores/auth.store';
+import { GlobalCodeModeControl } from './GlobalCodeModeControl';
 
 type NativeProfile = 'minimal' | 'coding' | 'messaging' | 'full';
 type Tool = { presentation?: Pick<ToolPresentationPayload, 'origin' | 'visibility'>; name: string; label: string; description: string; origin: string; group: string; parameters: Record<string, unknown>; profiles: NativeProfile[]; require_approval: boolean; approval_locked: boolean };
@@ -132,18 +133,21 @@ export function ToolPolicyPanel() {
     return next;
   });
 
-  if (loading && !snapshot) return <p className="text-sm text-[var(--text-dim)]">Cargando catálogo de herramientas…</p>;
-  if (!snapshot) return <p className="flex items-center gap-2 text-sm text-[var(--danger)]"><CircleAlert size={16} />No se pudo cargar el catálogo.</p>;
+  if (loading && !snapshot) return <div className="space-y-4"><GlobalCodeModeControl /><p className="text-sm text-[var(--text-dim)]">Cargando catálogo de herramientas…</p></div>;
+  if (!snapshot) return <div className="space-y-4"><GlobalCodeModeControl /><p className="flex items-center gap-2 text-sm text-[var(--danger)]"><CircleAlert size={16} />No se pudo cargar el catálogo.</p></div>;
   return <div className="space-y-4">
-    <header><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><ShieldCheck size={19} className="text-[var(--amber)]" />Tools & approvals</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">El acceso se compila a OpenClaw; la visibilidad del chat es una preferencia personal de este dispositivo; las aprobaciones son una política global de seguridad.</p><p className="mt-1 text-[11px] text-[var(--text-muted)]">Catálogo nativo: {snapshot.native_catalog_source === 'gateway' ? 'Gateway en vivo' : 'inventario local de compatibilidad (Gateway no disponible)'}. Apps y MCP se leen desde Core.</p></header>
+    <header><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><ShieldCheck size={19} className="text-[var(--amber)]" />Tools & permissions</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Choose available tools and which ones ask for permission. Chat visibility only changes what you see.</p><p className="mt-1 text-[11px] text-[var(--text-muted)]">Native catalog: {snapshot.native_catalog_source === 'gateway' ? 'live Gateway' : 'local compatibility inventory (Gateway unavailable)'}. Apps and MCP come from Core.</p></header>
+    <GlobalCodeModeControl />
     <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3">
       <div className="flex flex-wrap items-end gap-3 border-b border-[var(--border)] pb-3">
-        <label className="text-xs text-[var(--text-dim)]">Perfil de acceso a tools<select value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)} className="ml-2 rounded border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--text)]">{nativeProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label}</option>)}{snapshot.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · base {title(profile.base_profile)}</option>)}</select></label>
+        <span className="rounded border border-[var(--border)] px-2 py-1 text-[10px] font-medium uppercase text-[var(--text-muted)]">Global access</span>
+        <label className="text-xs text-[var(--text-dim)]">Tool access profile<select value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)} className="ml-2 rounded border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--text)]">{nativeProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.label}</option>)}{snapshot.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · base {title(profile.base_profile)}</option>)}</select></label>
         <button type="button" disabled={!canEdit} onClick={() => void activate()} className="rounded border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text)] disabled:opacity-50">Aplicar acceso</button>
         {canEdit && <><input value={accessProfileName} onChange={(event) => setAccessProfileName(event.target.value)} placeholder="Nombre del perfil de acceso" className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--text)]" /><button type="button" onClick={() => void createProfile()} className="rounded border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text)]">+ Crear perfil de acceso</button></>}
       </div>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-xs text-[var(--text-dim)]">Perfil de visualización en chat<select value={activeVisibilityProfileId ?? `preset:${visibility.preset}`} onChange={(event) => selectVisibility(event.target.value)} className="ml-2 rounded border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--text)]"><option value="preset:minimal">Minimal</option><option value="preset:default">Default</option><option value="preset:verbose">Verbose</option><option value="preset:custom">Custom</option>{visibilityProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+        <span className="rounded border border-[var(--border)] px-2 py-1 text-[10px] font-medium uppercase text-[var(--text-muted)]">This browser</span>
+        <label className="text-xs text-[var(--text-dim)]">Chat display profile<select value={activeVisibilityProfileId ?? `preset:${visibility.preset}`} onChange={(event) => selectVisibility(event.target.value)} className="ml-2 rounded border border-[var(--border)] bg-[var(--card)] p-1.5 text-[var(--text)]"><option value="preset:minimal">Minimal</option><option value="preset:default">Default</option><option value="preset:verbose">Verbose</option><option value="preset:custom">Custom</option>{visibilityProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
         <input value={visibilityProfileName} onChange={(event) => setVisibilityProfileName(event.target.value)} placeholder="Nombre del perfil de visualización" className="rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--text)]" />
         <button type="button" onClick={createDisplayProfile} className="rounded border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text)]">+ Crear perfil de visualización</button>
         <span className="text-[11px] text-[var(--text-muted)]">Solo afecta a cómo ves las tools en este navegador.</span>
@@ -151,7 +155,7 @@ export function ToolPolicyPanel() {
     </div>
     {!activeProfile && <p className="rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-xs text-[var(--text-dim)]">Los perfiles nativos de OpenClaw son inmutables. Crea un perfil nombrado para añadir o retirar herramientas.</p>}
     <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar herramienta…" className="h-9 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]" />
-    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border)]"><table className="w-full min-w-[870px] text-left text-sm"><thead className="bg-[var(--surface)] text-xs text-[var(--text-dim)]"><tr><th className="p-3">Nombre</th><th>Acceso por perfil</th><th>Mostrar en chat</th><th>Aprobación</th></tr></thead><tbody>{toolGroups.map(([group, groupTools]) => {
+    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border)]"><table className="w-full min-w-[870px] text-left text-sm"><thead className="bg-[var(--surface)] text-xs text-[var(--text-dim)]"><tr><th className="p-3">Tool</th><th>Access · global</th><th>Show in chat · this browser</th><th>Ask permission · global</th></tr></thead><tbody>{toolGroups.map(([group, groupTools]) => {
       const groupOpen = query.trim().length > 0 || openGroups.has(group);
       const enabledCount = groupTools.filter((tool) => {
         const baseHas = activeProfile ? tool.profiles.includes(activeProfile.base_profile) : tool.profiles.includes(selectedProfile.replace('native:', '') as NativeProfile);

@@ -23,6 +23,7 @@
 
 import { useNavigate } from 'react-router';
 import type { LucideIcon } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export interface LandingGroup {
   id: string;
@@ -41,6 +42,7 @@ interface SettingsLandingProps {
 
 export function SettingsLanding({ groups }: SettingsLandingProps) {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   return (
     <div>
@@ -53,7 +55,7 @@ export function SettingsLanding({ groups }: SettingsLandingProps) {
           fontFamily: 'var(--font-sans)',
         }}
       >
-        Settings
+        {t('settings.title')}
       </h1>
       <p
         style={{
@@ -64,7 +66,7 @@ export function SettingsLanding({ groups }: SettingsLandingProps) {
           maxWidth: 640,
         }}
       >
-        Pick a category to get started. Use the search box on the left (press <kbd
+        {t('settings.landing.intro')} <kbd
           style={{
             padding: '1px 6px',
             border: '1px solid var(--border)',
@@ -73,7 +75,7 @@ export function SettingsLanding({ groups }: SettingsLandingProps) {
             fontSize: '0.6875rem',
             fontFamily: 'var(--font-mono)',
           }}
-        >/</kbd>) to jump to any option quickly.
+        >/</kbd>{t('settings.landing.suffix')}
       </p>
 
       <div

@@ -33,6 +33,7 @@ export function CollapsibleSection({ icon: Icon, title, badge, defaultOpen = fal
     <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, width: '100%',
           padding: '10px 12px', background: 'var(--surface)', border: 'none',

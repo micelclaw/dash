@@ -15,6 +15,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { VideoItem } from '@/services/video.service';
 import { useVideoStore } from '@/stores/video.store';
 import { EpisodeRow } from './EpisodeRow';
+import { useI18n } from '@/i18n';
 
 /**
  * Expandable season sections for a Series detail. Episodes load lazily on
@@ -22,6 +23,7 @@ import { EpisodeRow } from './EpisodeRow';
  * starts expanded.
  */
 export function SeasonList({ seasons }: { seasons: VideoItem[] }) {
+  const { t } = useI18n();
   const episodesBySeason = useVideoStore((s) => s.episodesBySeason);
   const loadingEpisodes = useVideoStore((s) => s.loadingEpisodes);
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
@@ -40,7 +42,7 @@ export function SeasonList({ seasons }: { seasons: VideoItem[] }) {
   if (seasons.length === 0) {
     return (
       <div style={{ padding: '8px 16px', color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-        No seasons found.
+        {t('video.noSeasons')}
       </div>
     );
   }
@@ -76,7 +78,7 @@ export function SeasonList({ seasons }: { seasons: VideoItem[] }) {
               {season.name}
               {episodes && (
                 <span style={{ fontWeight: 400, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {episodes.length} episode{episodes.length === 1 ? '' : 's'}
+                  {t(episodes.length === 1 ? 'video.episodeCountOne' : 'video.episodesCount', { count: episodes.length })}
                 </span>
               )}
             </button>
@@ -85,13 +87,13 @@ export function SeasonList({ seasons }: { seasons: VideoItem[] }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 8 }}>
                 {loading && !episodes && (
                   <div style={{ padding: '8px 10px', color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-                    Loading episodes…
+                    {t('video.loadingEpisodes')}
                   </div>
                 )}
                 {episodes?.map((ep) => <EpisodeRow key={ep.id} episode={ep} />)}
                 {episodes && episodes.length === 0 && (
                   <div style={{ padding: '8px 10px', color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-                    No episodes in this season.
+                    {t('video.noEpisodes')}
                   </div>
                 )}
               </div>

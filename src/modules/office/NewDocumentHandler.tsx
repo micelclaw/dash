@@ -19,48 +19,45 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Loader2, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
-import { useOfficeStore } from '@/stores/office.store';
+import { Loader2 } from 'lucide-react';
+import { getOfficeProviders, newOfficeDocument, preferredProvider } from './office-providers.service';
+import {useI18n} from '@/i18n';
+import { OfficeErrorState } from './OfficeErrorState';
+import { officeColor } from '@/config/office-colors';
 
-type DocType = 'docx' | 'xlsx' | 'pptx';
-const TYPE_LABEL: Record<DocType, string> = {
-  docx: 'documento',
-  xlsx: 'hoja de cálculo',
-  pptx: 'presentación',
-};
-
-function uniqueName(type: DocType): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, '0');
-  const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
-  return `Sin título ${stamp}.${type}`;
-}
+type DocType = 'docx' | 'xlsx' | 'pptx' | 'pdf';
 
 export function Component() {
+  const {t}=useI18n();const tRef=useRef(t);useEffect(()=>{tRef.current=t;},[t]);
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const type = params.get('type') as DocType | null;
   const ran = useRef(false);
   const [error, setError] = useState('');
+  const [attempt,setAttempt]=useState(0);
 
   useEffect(() => {
     if (ran.current) return;
     ran.current = true;
-    if (!type || !['docx', 'xlsx', 'pptx'].includes(type)) {
+    if (!type || !['docx', 'xlsx', 'pptx', 'pdf'].includes(type)) {
       navigate('/office', { replace: true });
       return;
     }
-    useOfficeStore.getState().createNewDocument(type, uniqueName(type))
-      // ?fullscreen=1 → los atajos docs/sheets/presentations abren a pantalla completa.
-      .then((session) => navigate(`/office/edit/${session.fileId}?fullscreen=1`, { replace: true }))
+    const create = async () => {
+      const status = await getOfficeProviders();
+      const slot = ({ docx: 'documents', xlsx: 'spreadsheets', pptx: 'presentations', pdf: 'pdf' } as const)[type];
+      const provider = preferredProvider(status.providers, slot);
+      if (provider) return (await newOfficeDocument(provider.app_name)).editor_url;
+      throw new Error(tRef.current('office.new.selectProvider'));
+    };
+    create()
+      .then((path) => { const target = new URL(path, location.origin); target.searchParams.set('fullscreen', '1'); navigate(target.pathname + target.search, { replace: true }); })
       .catch((e: any) => {
-        setError(e?.message ?? 'No se pudo crear el documento.');
-        toast.error('No se pudo crear el documento');
+        setError(e?.message ?? tRef.current('office.new.error'));
       });
-  }, [type, navigate]);
+  }, [type, navigate,attempt]);
 
-  const label = type && TYPE_LABEL[type] ? TYPE_LABEL[type] : 'documento';
+  const label = type && ['docx','xlsx','pptx','pdf'].includes(type) ? t(`office.type.${type}`) : t('office.type.docx');
 
   return (
     <div style={{
@@ -68,22 +65,13 @@ export function Component() {
       alignItems: 'center', justifyContent: 'center', gap: 14, color: 'var(--text)',
     }}>
       {error ? (
-        <>
-          <AlertTriangle size={36} style={{ color: 'var(--error)' }} />
-          <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>No se pudo crear el {label}</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>{error}</div>
-          <button
-            onClick={() => navigate('/office', { replace: true })}
-            style={{
-              marginTop: 4, padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none',
-              background: 'var(--amber)', color: '#06060a', fontWeight: 600, cursor: 'pointer',
-            }}
-          >Ir a Office</button>
-        </>
+        <OfficeErrorState title={t('office.new.failedType',{type:label})} message={error}
+          color={officeColor(type?({docx:'documents',xlsx:'spreadsheets',pptx:'presentations',pdf:'pdf'}[type]):undefined)}
+          onRetry={()=>{ran.current=false;setError('');setAttempt(n=>n+1);}} />
       ) : (
         <>
           <Loader2 size={34} className="animate-spin" style={{ color: 'var(--amber)' }} />
-          <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)' }}>Creando {label} en blanco…</div>
+          <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)' }}>{t('office.new.creating',{type:label})}</div>
         </>
       )}
     </div>

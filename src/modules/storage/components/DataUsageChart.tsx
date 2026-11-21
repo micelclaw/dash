@@ -31,8 +31,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { Camera, Waves, FileText, MoreHorizontal } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-utils';
 import { useStorageStore } from '@/stores/storage.store';
+import { useI18n } from '@/i18n';
 import type { DataCategoryResult, ZfsPoolObservation, ZfsDatasetObservation } from '../types';
-import { InfoTip, ZFS_COPY } from './ZfsHelp';
+import { InfoTip } from './ZfsHelp';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CreateSnapshotForm } from './ZfsModals';
 
@@ -53,12 +54,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const DEFAULT_COLOR = '#6b7280';
 
-const GROUP_LABELS: Record<string, string> = {
-  user: 'Tu almacenamiento',
-  others: 'Otros usuarios',
-  system: 'Sistema',
-};
-
 // Paleta para las barras de pools/datasets (cíclica).
 const POOL_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#6366f1'];
 
@@ -68,14 +63,12 @@ function fmt(n: number | null | undefined): string {
   return formatFileSize(n);
 }
 
-function formatCacheAge(seconds: number): string {
-  if (seconds < 60) return 'ahora mismo';
+function formatCacheAge(seconds: number, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (seconds < 60) return t('storage.chart.ageNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes === 1) return 'hace 1 min';
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 60) return t('storage.chart.ageMinute', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours === 1) return 'hace 1 h';
-  return `hace ${hours} h`;
+  return t('storage.chart.ageHour', { count: hours });
 }
 
 // Color de la barra de capacidad según % ocupado (idéntico a ZfsSection).
@@ -87,6 +80,7 @@ function capColorFor(cap: number | null | undefined): string {
 }
 
 function CustomTooltip({ active, payload }: any) {
+  const { t } = useI18n();
   if (!active || !payload?.[0]) return null;
   const d = payload[0].payload;
   return (
@@ -96,7 +90,7 @@ function CustomTooltip({ active, payload }: any) {
     }}>
       <div style={{ color: 'var(--text)', fontWeight: 500 }}>{d.label}</div>
       <div style={{ color: 'var(--text-dim)', marginTop: 2 }}>
-        {d.size_bytes > 0 ? formatFileSize(d.size_bytes) : d.status === 'calculating' ? 'Calculando…' : '0 B'}
+        {d.size_bytes > 0 ? formatFileSize(d.size_bytes) : d.status === 'calculating' ? t('storage.chart.calculating') : '0 B'}
       </div>
     </div>
   );
@@ -122,6 +116,7 @@ function GroupedChart({
   categories: DataCategoryResult[];
   onPick?: (cat: DataCategoryResult) => void;
 }) {
+  const { t } = useI18n();
   const groups = ['user', 'others', 'system'] as const;
 
   return (
@@ -132,7 +127,7 @@ function GroupedChart({
 
         return (
           <div key={group}>
-            <GroupHeader label={GROUP_LABELS[group] ?? group} />
+          <GroupHeader label={t(group === 'user' ? 'storage.chart.groupUser' : group === 'others' ? 'storage.chart.groupOthers' : 'storage.chart.groupSystem')} />
             <ResponsiveContainer width="100%" height={Math.max(items.length * 34, 34)}>
               <BarChart layout="vertical" data={items} margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
                 <XAxis type="number" tickFormatter={(v: number) => formatFileSize(v)} tick={{ fontSize: 11, fill: '#7a7a8a' }} axisLine={false} tickLine={false} />
@@ -209,6 +204,7 @@ function CapacityBar({ pct, color }: { pct: number; color: string }) {
 type Scope = 'category' | 'pool' | 'dataset';
 
 export function DataUsageChart() {
+  const { t } = useI18n();
   const data_usage = useStorageStore((s) => s.data_usage);
   const status = useStorageStore((s) => s.status);
   const pools = useStorageStore((s) => s.zfs_pools);
@@ -289,9 +285,9 @@ export function DataUsageChart() {
   }
 
   const segments: { id: Scope; label: string }[] = [
-    { id: 'category', label: 'Por categoría' },
-    ...(hasPools ? [{ id: 'pool' as const, label: 'Por almacén (pool)' }] : []),
-    ...(hasDatasets ? [{ id: 'dataset' as const, label: 'Por carpeta (dataset)' }] : []),
+    { id: 'category', label: t('storage.chart.scopeCategory') },
+    ...(hasPools ? [{ id: 'pool' as const, label: t('storage.chart.scopePool') }] : []),
+    ...(hasDatasets ? [{ id: 'dataset' as const, label: t('storage.chart.scopeDataset') }] : []),
   ];
 
   const onScrubAll = async () => {
@@ -311,12 +307,12 @@ export function DataUsageChart() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-            Actualizado {formatCacheAge(data_usage.cache_age_seconds)}
+            {t('storage.chart.updated', { age: formatCacheAge(data_usage.cache_age_seconds, t) })}
           </span>
           <div ref={menuRef} style={{ position: 'relative', display: 'inline-flex' }}>
             <button
               type="button"
-              aria-label="Acciones de uso de datos"
+              aria-label={t('storage.chart.actions')}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
@@ -342,20 +338,20 @@ export function DataUsageChart() {
                 {caps?.can_snapshot && (
                   <MenuItem
                     icon={<Camera size={14} />}
-                    label="Crear instantánea"
+                    label={t('storage.chart.createSnapshot')}
                     onClick={() => { setMenuOpen(false); setSnapTarget(datasets[0]?.name ?? pools[0]?.name ?? 'tank'); }}
                   />
                 )}
                 {caps?.can_scrub && hasPools && (
                   <MenuItem
                     icon={<Waves size={14} />}
-                    label="Verificar almacén"
+                    label={t('storage.chart.verifyPool')}
                     onClick={onScrubAll}
                   />
                 )}
                 <MenuItem
                   icon={<FileText size={14} />}
-                  label="Ver detalles de archivos"
+                  label={t('storage.chart.fileDetails')}
                   onClick={() => {
                     setMenuOpen(false);
                     document.querySelector('[data-storage-file-stats]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -379,6 +375,7 @@ export function DataUsageChart() {
               <button
                 key={s.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => { setScope(s.id); setOpenCat(null); }}
                 style={{
                   padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
@@ -424,13 +421,13 @@ export function DataUsageChart() {
         display: 'flex', gap: 28, flexWrap: 'wrap', marginTop: 14, paddingTop: 12,
         borderTop: '1px solid var(--border)',
       }}>
-        <StatItem label="Total usado" value={fmt(summary.used)} />
+        <StatItem label={t('storage.chart.totalUsed')} value={fmt(summary.used)} />
         <StatItem
-          label="Snapshots"
+          label={t('storage.chart.snapshots')}
           value={fmt(snapTotal)}
-          tip={ZFS_COPY.usage_snapshots}
+          tip={t('storage.data.snapshotsHint')}
         />
-        {summary.hasFree && <StatItem label="Libre" value={fmt(summary.free)} />}
+        {summary.hasFree && <StatItem label={t('storage.chart.free')} value={fmt(summary.free)} />}
       </div>
 
       {/* Modal de crear instantánea */}
@@ -469,6 +466,7 @@ function CategoryScope({
   openCat: string | null;
   setOpenCat: (name: string | null) => void;
 }) {
+  const { t } = useI18n();
   const total = categories.reduce((a, c) => a + (c.size_bytes ?? 0), 0);
   const picked = categories.find((c) => c.name === openCat) ?? null;
   const pct = picked && total > 0 ? (picked.size_bytes / total) * 100 : 0;
@@ -480,25 +478,25 @@ function CategoryScope({
         onPick={(cat) => setOpenCat(openCat === cat.name ? null : cat.name)}
       />
       <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4 }}>
-        Pulsa una barra para ver su desglose.
+        {t('storage.chart.clickBreakdown')}
       </div>
       {picked && (
         <div style={{ marginTop: 10 }}>
           <CollapsibleSection title={picked.label} defaultOpen>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <DetailRow label="Grupo" value={GROUP_LABELS[picked.group] ?? picked.group} />
-              <DetailRow label="Espacio usado" value={fmt(picked.size_bytes)} />
+              <DetailRow label={t('storage.chart.group')} value={picked.group === 'user' ? t('storage.chart.groupUser') : picked.group === 'others' ? t('storage.chart.groupOthers') : picked.group === 'system' ? t('storage.chart.groupSystem') : picked.group} />
+              <DetailRow label={t('storage.chart.usedSpace')} value={fmt(picked.size_bytes)} />
               <DetailRow
-                label="Porcentaje del total"
+                label={t('storage.chart.totalPercent')}
                 value={total > 0 ? `${pct.toFixed(1)} %` : '—'}
               />
               <DetailRow
-                label="Estado"
+                label={t('storage.chart.state')}
                 value={
-                  picked.status === 'calculating' ? 'Calculando…'
-                  : picked.status === 'timeout' ? 'Cálculo expirado'
-                  : picked.status === 'empty' ? 'Vacío'
-                  : 'Calculado'
+                  picked.status === 'calculating' ? t('storage.chart.calculating')
+                  : picked.status === 'timeout' ? t('storage.chart.calculationExpired')
+                  : picked.status === 'empty' ? t('storage.chart.empty')
+                  : t('storage.chart.calculated')
                 }
               />
             </div>
@@ -519,6 +517,7 @@ function PoolScope({
   datasets: ZfsDatasetObservation[];
   snapshots: { full_name: string; used_bytes: number | null }[];
 }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {pools.map((p, i) => {
@@ -534,8 +533,8 @@ function PoolScope({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <CapacityBar pct={cap} color={capColorFor(cap)} />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                <span>{cap}% ocupado · {fmt(p.alloc_bytes)} de {fmt(p.size_bytes)}</span>
-                <span>{fmt(p.free_bytes)} libres</span>
+                <span>{t('storage.chart.poolUsed', { percent: cap, used: fmt(p.alloc_bytes), total: fmt(p.size_bytes) })}</span>
+                <span>{t('storage.chart.freeValue', { amount: fmt(p.free_bytes) })}</span>
               </div>
               {children.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
@@ -543,7 +542,7 @@ function PoolScope({
                     fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
                     textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2,
                   }}>
-                    Carpetas
+                    {t('storage.chart.folders')}
                   </div>
                   {children
                     .slice()
@@ -559,7 +558,7 @@ function PoolScope({
                             <>
                               {fmt(d.used_bytes)}
                               {snaps.length > 0 && (
-                                <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {snaps.length} snap ({fmt(snapBytes)})</span>
+                                <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {t('storage.chart.snapCount', { count: snaps.length, size: fmt(snapBytes) })}</span>
                               )}
                             </>
                           }
@@ -569,7 +568,7 @@ function PoolScope({
                 </div>
               ) : (
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                  Este almacén todavía no tiene carpetas gestionadas.
+                  {t('storage.chart.noFolders')}
                 </div>
               )}
             </div>
@@ -598,6 +597,7 @@ function DatasetScope({
   canSnapshot: boolean;
   onSnapshot: (target: string) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState<string | null>(null);
   const maxUsed = Math.max(1, ...datasets.map((d) => d.used_bytes ?? 0));
 
@@ -606,14 +606,15 @@ function DatasetScope({
       {/* Selector de pool: Todos / tank / vault … */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          Almacén
+          {t('storage.data.pool')}
         </span>
-        {[{ id: '__all__', label: 'Todos' }, ...poolNames.map((n) => ({ id: n, label: n }))].map((opt) => {
+        {[{ id: '__all__', label: t('storage.chart.allPools') }, ...poolNames.map((n) => ({ id: n, label: n }))].map((opt) => {
           const active = poolFilter === opt.id;
           return (
             <button
               key={opt.id}
               type="button"
+              aria-pressed={active}
               onClick={() => { setPoolFilter(opt.id); setOpen(null); }}
               style={{
                 padding: '3px 10px', fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer',
@@ -631,7 +632,7 @@ function DatasetScope({
 
       {datasets.length === 0 && (
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>
-          No hay carpetas en este almacén.
+          {t('storage.data.noFolders')}
         </div>
       )}
 
@@ -679,30 +680,30 @@ function DatasetScope({
 
               {isOpen && (
                 <div style={{ marginTop: 8, marginBottom: 4 }}>
-                  <CollapsibleSection title={`Detalle de ${shortName}`} defaultOpen>
+                  <CollapsibleSection title={t('storage.data.detail', { name: shortName })} defaultOpen>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <DetailRow label="Ruta completa" value={d.name} />
+                      <DetailRow label={t('storage.data.fullPath')} value={d.name} />
                       <DetailRow
-                        label="Usado"
+                        label={t('storage.data.used')}
                         value={fmt(used)}
-                        tip={ZFS_COPY.usage_logical_vs_physical}
+                        tip={t('storage.data.usageHint')}
                       />
-                      <DetailRow label="Disponible" value={fmt(d.available_bytes)} />
+                      <DetailRow label={t('storage.data.available')} value={fmt(d.available_bytes)} />
                       {quota != null && (
-                        <DetailRow label="Cuota (refquota)" value={`${fmt(quota)}${quotaPct != null ? ` · ${quotaPct}% usado` : ''}`} />
+                        <DetailRow label={t('storage.data.quota')} value={`${fmt(quota)}${quotaPct != null ? ` · ${t('storage.data.usedQuota', { percent: quotaPct })}` : ''}`} />
                       )}
                       <DetailRow
-                        label="Compresión"
+                        label={t('storage.data.compression')}
                         value={d.compression && d.compression !== 'off' ? d.compression : '—'}
                       />
                       <DetailRow
-                        label="Cifrado"
-                        value={d.encryption && d.encryption !== 'off' ? 'Sí' : '—'}
+                        label={t('storage.data.encryption')}
+                        value={d.encryption && d.encryption !== 'off' ? t('storage.data.yes') : '—'}
                       />
                       <DetailRow
-                        label="Instantáneas"
-                        value={snaps.length > 0 ? `${snaps.length} · ${fmt(snapBytes)}` : 'ninguna'}
-                        tip={ZFS_COPY.usage_snapshots}
+                        label={t('storage.data.snapshots')}
+                        value={snaps.length > 0 ? `${snaps.length} · ${fmt(snapBytes)}` : t('storage.data.none')}
+                        tip={t('storage.data.snapshotsHint')}
                       />
                     </div>
                     {canSnapshot && d.type !== 'volume' && (
@@ -716,7 +717,7 @@ function DatasetScope({
                           alignItems: 'center', gap: 6, fontWeight: 500,
                         }}
                       >
-                        <Camera size={13} /> Crear instantánea de esta carpeta
+                        <Camera size={13} /> {t('storage.data.createSnapshot')}
                       </button>
                     )}
                   </CollapsibleSection>

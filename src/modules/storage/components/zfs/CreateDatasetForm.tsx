@@ -16,10 +16,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Database } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, InfoTip, ZFS_COPY } from '../ZfsHelp';
+import { SectionIntro, InfoTip } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, ZfsInput, Field, selectStyle } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function CreateDatasetForm({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const create = useStorageStore((s) => s.zfsCreateDataset);
   const demo = useStorageStore((s) => s.zfs_demo);
   const [name, setName] = useState('tank/');
@@ -29,39 +31,33 @@ export function CreateDatasetForm({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { await create({ name, compression, refquota_gb: quota ? Number(quota) : undefined, encrypt }); toast.success(`Dataset "${name}" creado${demo ? ' (demo)' : ''}`); onClose(); }
-    catch (e) { toast.error(`Error: ${e instanceof Error ? e.message : String(e)}`); } finally { setBusy(false); }
+    try { await create({ name, compression, refquota_gb: quota ? Number(quota) : undefined, encrypt }); toast.success(t('storage.dataset.created', { name, demo: demo ? t('storage.common.demoSuffix') : '' })); onClose(); }
+    catch (e) { toast.error(t('storage.dataset.createError', { error: e instanceof Error ? e.message : String(e) })); } finally { setBusy(false); }
   };
   return (
-    <ZfsModal title="Nueva carpeta gestionada (dataset)" icon={<Database size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton primary disabled={busy || !name.includes('/')} onClick={submit}>{busy ? 'Creando…' : 'Crear'}</ZfsButton></>}>
-      <SectionIntro>{ZFS_COPY.dataset}</SectionIntro>
+    <ZfsModal title={t('storage.dataset.title')} icon={<Database size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton primary disabled={busy || !name.includes('/')} onClick={submit}>{busy ? t('storage.common.creating') : t('storage.common.create')}</ZfsButton></>}>
+      <SectionIntro>{t('storage.help.dataset')}</SectionIntro>
       <div>
-        <Field hint="El nombre va dentro de un almacén, con la forma almacén/carpeta (p. ej. tank/documentos). Puedes anidar carpetas con más barras.">
-          Nombre (almacén/carpeta)
-        </Field>
-        <ZfsInput value={name} onChange={(e) => setName(e.target.value)} placeholder="tank/documentos" />
+        <Field hint={t('storage.dataset.nameHint')}>{t('storage.dataset.name')}</Field>
+        <ZfsInput aria-label={t('storage.dataset.name')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('storage.dataset.namePlaceholder')} />
       </div>
       <div>
-        <Field hint="La compresión reduce el espacio que ocupan los datos al vuelo. lz4 es rápida y casi gratis (recomendada). zstd comprime más a cambio de algo más de CPU. off la desactiva.">
-          Compresión
-        </Field>
+        <Field hint={t('storage.dataset.compressionHint')}>{t('storage.dataset.compression')}</Field>
         <select style={selectStyle} value={compression} onChange={(e) => setCompression(e.target.value)}>
-          <option value="lz4">lz4 (recomendada, rápida)</option>
-          <option value="zstd">zstd (comprime más)</option>
-          <option value="off">off (sin compresión)</option>
+          <option value="lz4">{t('storage.dataset.lz4')}</option>
+          <option value="zstd">{t('storage.dataset.zstd')}</option>
+          <option value="off">{t('storage.dataset.off')}</option>
         </select>
       </div>
       <div>
-        <Field hint="Límite máximo de espacio que puede ocupar esta carpeta, en gigas. Útil para que un tipo de contenido no se coma todo el almacén. Déjalo vacío para sin límite.">
-          Cuota (GB, opcional)
-        </Field>
+        <Field hint={t('storage.dataset.quotaHint')}>{t('storage.dataset.quota')}</Field>
         <ZfsInput type="number" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="500" />
       </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem' }}>
         <input type="checkbox" checked={encrypt} onChange={(e) => setEncrypt(e.target.checked)} />
-        Cifrar esta carpeta
-        <InfoTip text="Cifra solo el contenido de esta carpeta en reposo. Útil si quieres proteger datos sensibles aunque el resto del almacén no esté cifrado." />
+        {t('storage.dataset.encrypt')}
+        <InfoTip text={t('storage.dataset.encryptHint')} />
       </label>
     </ZfsModal>
   );

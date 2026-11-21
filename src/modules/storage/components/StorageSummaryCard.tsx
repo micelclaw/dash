@@ -18,6 +18,7 @@
 
 import { Gauge, Boxes, HardDrive, Activity } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-utils';
+import { useI18n } from '@/i18n';
 import type { StorageStatus } from '../types';
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -82,6 +83,7 @@ export function StorageSummaryCard({
   poolCount: number;
   diskCount: number;
 }) {
+  const { t, locale } = useI18n();
   if (!status) {
     return (
       <div style={{
@@ -100,7 +102,7 @@ export function StorageSummaryCard({
   const barColor = getBarColor(percent);
   const healthColor = HEALTH_COLORS[status.health] ?? '#6b7280';
   const isUnknownHealth = status.health === 'unknown';
-  const healthLabel = isUnknownHealth ? 'N/A' : status.health.charAt(0).toUpperCase() + status.health.slice(1);
+  const healthLabel = status.health === 'healthy' ? t('storage.smart.healthy') : status.health === 'warning' ? t('storage.smart.warning') : status.health === 'critical' ? t('storage.smart.critical') : isUnknownHealth ? 'N/A' : status.health;
 
   const caption: React.CSSProperties = {
     fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)',
@@ -117,8 +119,8 @@ export function StorageSummaryCard({
           la barra, para que un uso bajo no parezca un aviso. */}
       <StatTile
         icon={<Gauge size={13} />}
-        label="Usado"
-        value={`${percent.toFixed(0)}%`}
+        label={t('storage.summary.used')}
+        value={`${percent.toLocaleString(locale, { maximumFractionDigits: 0 })}%`}
         valueColor={percent > 90 ? '#f43f5e' : undefined}
         footer={
           <>
@@ -141,23 +143,23 @@ export function StorageSummaryCard({
       {/* Pools ZFS observados */}
       <StatTile
         icon={<Boxes size={13} />}
-        label="Pools"
+        label={t('storage.summary.pools')}
         value={String(poolCount)}
-        footer={<div style={caption}>almacenes ZFS</div>}
+        footer={<div style={caption}>{t('storage.summary.zfsPools')}</div>}
       />
 
       {/* Discos físicos detectados */}
       <StatTile
         icon={<HardDrive size={13} />}
-        label="Discos"
+        label={t('storage.summary.disks')}
         value={String(diskCount)}
-        footer={<div style={caption}>físicos</div>}
+        footer={<div style={caption}>{t('storage.summary.physical')}</div>}
       />
 
       {/* Salud global */}
       <StatTile
         icon={<Activity size={13} />}
-        label="Salud"
+        label={t('storage.summary.health')}
         value={
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: '1rem', fontWeight: 600 }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: healthColor, flexShrink: 0 }} />
@@ -166,7 +168,7 @@ export function StorageSummaryCard({
         }
         footer={
           <div style={caption}>
-            {isUnknownHealth ? 'SMART no disponible (solo bare-metal)' : 'estado del almacenamiento'}
+            {isUnknownHealth ? t('storage.summary.smartUnavailable') : t('storage.summary.storageState')}
           </div>
         }
       />

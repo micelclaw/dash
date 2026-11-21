@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import { Check, Gauge } from 'lucide-react';
 import { fmtMeter, type InventoryItem } from '@/modules/inventory/types';
 import { btnPrimary, btnSecondary, inputStyle } from '@/modules/inventory/ui';
@@ -25,6 +26,7 @@ interface MeterCardProps {
 
 /** Medidor de desgaste (km, horas…): mostrar/actualizar o añadir uno nuevo. */
 export function MeterCard({ item, readOnly, onSubmitReading }: MeterCardProps) {
+  const { t } = useI18n();
   const [editOpen, setEditOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -69,11 +71,11 @@ export function MeterCard({ item, readOnly, onSubmitReading }: MeterCardProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Gauge size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
           <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
-            Meter: {fmtMeter(item.meter_value, item.meter_unit)}
+            {t('inventory.drawer.meter', { value: fmtMeter(item.meter_value, item.meter_unit) })}
           </span>
           {item.meter_updated_at && (
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-              updated {fmtDate(item.meter_updated_at)}
+              {t('inventory.drawer.updatedDate', { date: fmtDate(item.meter_updated_at) })}
             </span>
           )}
           {!readOnly && !editOpen && (
@@ -85,7 +87,7 @@ export function MeterCard({ item, readOnly, onSubmitReading }: MeterCardProps) {
                 setEditOpen(true);
               }}
             >
-              Update
+              {t('inventory.drawer.updateReading')}
             </button>
           )}
         </div>
@@ -104,33 +106,33 @@ export function MeterCard({ item, readOnly, onSubmitReading }: MeterCardProps) {
                   if (e.key === 'Enter') commitUpdate();
                   if (e.key === 'Escape') resetForms();
                 }}
-                placeholder={`New reading${item.meter_unit ? ` (${item.meter_unit})` : ''}`}
+                placeholder={t('inventory.drawer.newReading', { unit: item.meter_unit ? ` (${item.meter_unit})` : '' })}
                 autoFocus
                 style={{ ...inputStyle, flex: 1 }}
-                aria-label="New meter reading"
+                aria-label={t('inventory.drawer.newMeterReading')}
               />
               <button
                 style={{ ...btnPrimary, padding: '5px 8px', display: 'inline-flex', alignItems: 'center' }}
                 onClick={commitUpdate}
-                aria-label="Save reading"
+                aria-label={t('inventory.drawer.saveReading')}
               >
                 <Check size={14} />
               </button>
             </div>
             {confirmLower && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', color: 'var(--amber)', flexWrap: 'wrap' }}>
-                <span>Lower than current — confirm?</span>
+                <span>{t('inventory.drawer.lowerReading')}</span>
                 <button
                   style={{ ...btnSecondary, padding: '2px 8px', fontSize: '0.6875rem', color: 'var(--amber)', borderColor: 'var(--amber)' }}
                   onClick={commitUpdate}
                 >
-                  Confirm
+                  {t('inventory.drawer.confirm')}
                 </button>
                 <button
                   style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.6875rem', padding: 0 }}
                   onClick={() => setConfirmLower(false)}
                 >
-                  Cancel
+                  {t('inventory.drawer.cancel')}
                 </button>
               </div>
             )}
@@ -147,28 +149,28 @@ export function MeterCard({ item, readOnly, onSubmitReading }: MeterCardProps) {
       <div style={{ ...cardStyle, gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Gauge size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Add meter</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{t('inventory.drawer.addMeter')}</span>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <select
             value={unitDraft}
             onChange={e => setUnitDraft(e.target.value)}
             style={{ ...inputStyle, width: 88, flexShrink: 0 }}
-            aria-label="Meter unit"
+            aria-label={t('inventory.drawer.meterUnitOptional')}
           >
             <option value="km">km</option>
             <option value="h">h</option>
             <option value="cycles">cycles</option>
             <option value="uses">uses</option>
-            <option value="other">other…</option>
+            <option value="other">{t('inventory.drawer.otherUnit')}</option>
           </select>
           {unitDraft === 'other' && (
             <input
               value={unitCustom}
               onChange={e => setUnitCustom(e.target.value)}
-              placeholder="unit"
+              placeholder={t('inventory.drawer.unit')}
               style={{ ...inputStyle, width: 72, flexShrink: 0 }}
-              aria-label="Custom meter unit"
+              aria-label={t('inventory.drawer.customUnit')}
             />
           )}
           <input
@@ -180,15 +182,15 @@ export function MeterCard({ item, readOnly, onSubmitReading }: MeterCardProps) {
               if (e.key === 'Enter') commitAdd();
               if (e.key === 'Escape') resetForms();
             }}
-            placeholder="Value"
+            placeholder={t('inventory.drawer.value')}
             autoFocus
             style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-            aria-label="Meter value"
+            aria-label={t('inventory.drawer.meterValue')}
           />
           <button
             style={{ ...btnPrimary, padding: '5px 8px', display: 'inline-flex', alignItems: 'center' }}
             onClick={commitAdd}
-            aria-label="Save meter"
+            aria-label={t('inventory.drawer.saveMeter')}
           >
             <Check size={14} />
           </button>

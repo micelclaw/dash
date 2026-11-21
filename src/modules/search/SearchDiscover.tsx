@@ -27,6 +27,7 @@ import { HeatBadge } from '@/components/shared/HeatBadge';
 import { timeAgo } from '@/lib/time';
 import { getTitle } from './result-helpers';
 import type { SearchResult } from '@/types/search';
+import { useI18n } from '@/i18n';
 
 function DiscoverRow({ r, meta }: { r: SearchResult; meta: React.ReactNode }) {
   const navigate = useNavigate();
@@ -90,6 +91,7 @@ function SectionHeader({ icon: Icon, title }: { icon: typeof Clock; title: strin
 }
 
 export function SearchDiscover() {
+  const { t } = useI18n();
   const discover = useSearchStore((s) => s.discover);
   const loading = useSearchStore((s) => s.discoverLoading);
   const error = useSearchStore((s) => s.discoverError);
@@ -125,7 +127,7 @@ export function SearchDiscover() {
         color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center',
       }}>
         <Search size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
-        {error ? 'No se pudieron cargar tus registros' : 'Escribe para buscar en todos los módulos'}
+        {error ? t('search.loadFailed') : t('search.typeToSearch')}
       </div>
     );
   }
@@ -134,7 +136,7 @@ export function SearchDiscover() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
       {recent.length > 0 && (
         <section>
-          <SectionHeader icon={Clock} title="Recientes" />
+          <SectionHeader icon={Clock} title={t('search.recent')} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {recent.map((r, i) => {
               const rec = r.record as Record<string, unknown> | null;
@@ -160,7 +162,7 @@ export function SearchDiscover() {
 
       {hot.length > 0 && (
         <section>
-          <SectionHeader icon={Flame} title="Más accedidos" />
+          <SectionHeader icon={Flame} title={t('search.mostAccessed')} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {hot.map((r, i) => (
               <DiscoverRow

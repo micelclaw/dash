@@ -12,9 +12,12 @@
 
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { useMemo } from 'react';
-import { addDays, formatDateLong, formatTime, isSameDay, isToday, startOfDay } from '@/lib/date-helpers';
+import { addDays, isSameDay, isToday, startOfDay } from '@/lib/date-helpers';
+import { formatDate, formatGridTime } from '@/i18n/format';
 import { getCalendarColor } from '../types';
 import type { CalendarEvent } from '../types';
+import { useI18n } from '@/i18n';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface AgendaViewProps {
   currentDate: Date;
@@ -25,6 +28,8 @@ interface AgendaViewProps {
 }
 
 export function AgendaView({ events, onEventClick, calendarColorMap }: AgendaViewProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   // Group events by date
   const grouped = useMemo(() => {
     const map = new Map<string, { date: Date; events: CalendarEvent[] }>();
@@ -55,7 +60,7 @@ export function AgendaView({ events, onEventClick, calendarColorMap }: AgendaVie
           fontSize: '0.875rem',
         }}
       >
-        No upcoming events
+        {t('calendar.noUpcomingEvents')}
       </div>
     );
   }
@@ -73,9 +78,9 @@ export function AgendaView({ events, onEventClick, calendarColorMap }: AgendaVie
         const today = isToday(date);
         const tomorrow = isSameDay(date, addDays(new Date(), 1));
         const dayLabel = today
-          ? 'Today'
+          ? t('calendar.today')
           : tomorrow
-            ? 'Tomorrow'
+            ? t('calendar.tomorrow')
             : '';
 
         return (
@@ -92,7 +97,7 @@ export function AgendaView({ events, onEventClick, calendarColorMap }: AgendaVie
               }}
             >
               {dayLabel ? `${dayLabel}, ` : ''}
-              {formatDateLong(date)}
+              {formatDate(date, locale, general)}
             </div>
 
             {/* Events */}
@@ -114,6 +119,8 @@ interface AgendaEventRowProps {
 
 /** One event row of the agenda list: time, color dot, title and calendar badge */
 function AgendaEventRow({ event, onEventClick, calendarColorMap }: AgendaEventRowProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const start = new Date(event.start_at);
   const end = event.end_at ? new Date(event.end_at) : null;
   const color = getCalendarColor(event.calendar_name, calendarColorMap);
@@ -148,8 +155,8 @@ function AgendaEventRow({ event, onEventClick, calendarColorMap }: AgendaEventRo
         }}
       >
         {event.all_day
-          ? 'All day'
-          : `${formatTime(start)}${end ? ` – ${formatTime(end)}` : ''}`}
+          ? t('calendar.allDayShort')
+          : `${formatGridTime(start, locale, general)}${end ? ` – ${formatGridTime(end, locale, general)}` : ''}`}
       </span>
 
       {/* Color dot */}

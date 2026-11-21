@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { RetryBanner } from '@/components/settings/shared/RetryBanner';
+import { useI18n } from '@/i18n';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useSecurityStore } from '@/stores/security.store';
 import type { ApprovalDecision } from '@/services/approvals.service';
@@ -36,53 +37,56 @@ interface ApprovalInboxProps {
   defaultTab?: 'pending' | 'history';
 }
 
-const RISK_STYLES: Record<string, { label: string; color: string }> = {
-  low: { label: 'Low risk', color: '#22c55e' },
-  medium: { label: 'Medium risk', color: '#f59e0b' },
-  high: { label: 'High risk', color: '#f97316' },
-  critical: { label: 'Critical risk', color: '#ef4444' },
+const RISK_STYLES: Record<string, { key: string; color: string }> = {
+  low: { key: 'approvals.riskLow', color: '#22c55e' },
+  medium: { key: 'approvals.riskMedium', color: '#f59e0b' },
+  high: { key: 'approvals.riskHigh', color: '#f97316' },
+  critical: { key: 'approvals.riskCritical', color: '#ef4444' },
 };
 
-const AUTHORITY_LABELS: Record<string, string> = {
-  core_action: 'Micelclaw action',
-  openclaw_exec: 'Host command',
-  openclaw_plugin: 'Runtime action',
-  runtime_native: 'Runtime approval',
-  external_mcp: 'External MCP',
+const AUTHORITY_KEYS: Record<string, string> = {
+  core_action: 'approvals.authorityCore', openclaw_exec: 'approvals.authorityHost',
+  openclaw_plugin: 'approvals.authorityRuntime', runtime_native: 'approvals.authorityApproval',
+  external_mcp: 'approvals.authorityMcp',
 };
 
-const STATUS_META: Record<string, { label: string; color: string; icon: typeof Clock }> = {
-  pending: { label: 'Pending', color: '#f59e0b', icon: Clock },
-  approved: { label: 'Allowed', color: '#22c55e', icon: CheckCircle2 },
-  rejected: { label: 'Denied', color: '#ef4444', icon: XCircle },
-  expired: { label: 'Expired', color: '#6b7280', icon: Timer },
-  resolved_elsewhere: { label: 'Resolved elsewhere', color: '#60a5fa', icon: CheckCircle2 },
-  interrupted: { label: 'Interrupted', color: '#6b7280', icon: Timer },
-  provider_removed: { label: 'Provider removed', color: '#6b7280', icon: Timer },
-  blocked_by_policy: { label: 'Blocked by policy', color: '#ef4444', icon: XCircle },
-  executed: { label: 'Executed', color: '#22c55e', icon: CheckCircle2 },
+const STATUS_META: Record<string, { key: string; color: string; icon: typeof Clock }> = {
+  pending: { key: 'approvals.statusPending', color: '#f59e0b', icon: Clock },
+  approved: { key: 'approvals.statusAllowed', color: '#22c55e', icon: CheckCircle2 },
+  rejected: { key: 'approvals.statusDenied', color: '#ef4444', icon: XCircle },
+  expired: { key: 'approvals.statusExpired', color: '#6b7280', icon: Timer },
+  resolved_elsewhere: { key: 'approvals.statusResolvedElsewhere', color: '#60a5fa', icon: CheckCircle2 },
+  interrupted: { key: 'approvals.statusInterrupted', color: '#6b7280', icon: Timer },
+  provider_removed: { key: 'approvals.statusProviderRemoved', color: '#6b7280', icon: Timer },
+  blocked_by_policy: { key: 'approvals.statusBlocked', color: '#ef4444', icon: XCircle },
+  executed: { key: 'approvals.statusExecuted', color: '#22c55e', icon: CheckCircle2 },
 };
 
 const PAGE_SIZE = 50;
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: ReturnType<typeof useI18n>['t'], locale: string): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  if (Number.isNaN(date.getTime())) return t('approvals.unknownTime');
   const minutes = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t('approvals.justNow');
+  if (minutes < 60) return t('approvals.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return date.toLocaleDateString();
+  if (hours < 24) return t('approvals.hoursAgo', { count: hours });
+  return date.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US');
 }
 
-function expiryLabel(iso: string): string {
+function expiryLabel(iso: string, t: ReturnType<typeof useI18n>['t']): string {
   const milliseconds = new Date(iso).getTime() - Date.now();
-  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return 'Expired';
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return t('approvals.statusExpired');
   const minutes = Math.max(1, Math.floor(milliseconds / 60_000));
-  if (minutes < 60) return `${minutes}m left`;
+  if (minutes < 60) return t('approvals.minutesLeft', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m left`;
+  return t('approvals.hoursMinutesLeft', { hours, minutes: minutes % 60 });
+}
+
+function authorityLabel(authority: string, t: ReturnType<typeof useI18n>['t']): string {
+  const key = AUTHORITY_KEYS[authority];
+  return key ? t(key) : authority;
 }
 
 function authorityFor(approval: ApprovalRequest): ApprovalRequest['authority'] {
@@ -94,7 +98,7 @@ function authorityFor(approval: ApprovalRequest): ApprovalRequest['authority'] {
   return 'core_action';
 }
 
-function decisionsFor(approval: ApprovalRequest): Array<{ decision: ApprovalDecision; label: string }> {
+function decisionsFor(approval: ApprovalRequest, t: ReturnType<typeof useI18n>['t']): Array<{ decision: ApprovalDecision; label: string }> {
   const authority = authorityFor(approval);
   const offered = new Set(approval.allowed_decisions ?? []);
   const decisions: Array<{ decision: ApprovalDecision; label: string }> = [];
@@ -102,28 +106,31 @@ function decisionsFor(approval: ApprovalRequest): Array<{ decision: ApprovalDeci
   // Core approvals predate `allowed_decisions`; their stable compatibility
   // contract is allow-once/deny. Provider-owned requests advertise choices.
   if (authority === 'core_action' || offered.has('allow-once')) {
-    decisions.push({ decision: 'allow_once', label: 'Allow once' });
+    decisions.push({ decision: 'allow_once', label: t('approvals.allowOnce') });
   }
   if (offered.has('allow-always')) {
     decisions.push(authority === 'openclaw_exec'
-      ? { decision: 'allow_persistent_rule', label: 'Create persistent rule' }
-      : { decision: 'allow_session', label: 'Allow for this session' });
+      ? { decision: 'allow_persistent_rule', label: t('approvals.createPersistentRule') }
+      : { decision: 'allow_session', label: t('approvals.allowSession') });
   }
   if (authority === 'core_action' || offered.has('deny')) {
-    decisions.push({ decision: 'deny', label: 'Deny' });
+    decisions.push({ decision: 'deny', label: t('approvals.deny') });
   }
   return decisions;
 }
 
-function presentationFacts(approval: ApprovalRequest): Array<[string, string]> {
+function presentationFacts(approval: ApprovalRequest, t: ReturnType<typeof useI18n>['t']): Array<[string, string]> {
   const facts: Array<[string, string]> = [];
-  if (approval.subject_type) facts.push(['Subject', approval.subject_type]);
-  if (approval.subject_ref) facts.push(['Target', approval.subject_ref]);
-  const visibleKeys = ['command', 'cwd', 'target', 'resource', 'scope', 'description'];
-  for (const key of visibleKeys) {
+  if (approval.subject_type) facts.push([t('approvals.subject'), approval.subject_type]);
+  if (approval.subject_ref) facts.push([t('approvals.target'), approval.subject_ref]);
+  const visibleKeys: Array<[string, string]> = [
+    ['command', 'approvals.command'], ['cwd', 'approvals.workingDirectory'], ['target', 'approvals.target'],
+    ['resource', 'approvals.resource'], ['scope', 'approvals.scope'], ['description', 'approvals.description'],
+  ];
+  for (const [key, labelKey] of visibleKeys) {
     const value = approval.presentation?.[key];
     if ((typeof value === 'string' || typeof value === 'number') && String(value).trim()) {
-      facts.push([key === 'cwd' ? 'Working directory' : key[0]!.toUpperCase() + key.slice(1), String(value)]);
+      facts.push([t(labelKey), String(value)]);
     }
   }
   return facts.slice(0, 5);
@@ -142,6 +149,7 @@ function DecisionDialog({
   onClose: () => void;
   onConfirm: (credential?: string) => void;
 }) {
+  const { t } = useI18n();
   const [credential, setCredential] = useState('');
   const requiresCredential = Boolean(
     approval && decision !== 'deny' && (approval.core_level === 3 || approval.level === 3),
@@ -155,25 +163,25 @@ function DecisionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[var(--text)]">
             <KeyRound size={18} className="text-[var(--amber)]" />
-            {isPersistent ? 'Confirm persistent command rule' : 'Confirm protected action'}
+            {isPersistent ? t('approvals.confirmPersistentTitle') : t('approvals.confirmProtectedTitle')}
           </DialogTitle>
           <DialogDescription id="approval-decision-description">
             {isPersistent
-              ? 'This choice can affect future matching commands. Review the request before confirming.'
-              : 'This action requires your security PIN or account password.'}
+              ? t('approvals.persistentDescription')
+              : t('approvals.credentialDescription')}
           </DialogDescription>
         </DialogHeader>
         {approval && (
           <div className="my-4 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--text)]">
             <div className="font-medium">{approval.summary}</div>
             <div className="mt-1 text-xs text-[var(--text-muted)]">
-              {AUTHORITY_LABELS[authorityFor(approval)] ?? authorityFor(approval)}
+              {authorityLabel(authorityFor(approval), t)}
             </div>
           </div>
         )}
         {requiresCredential && (
           <label className="block text-xs font-medium text-[var(--text-dim)]">
-            PIN or password
+            {t('approvals.pinPassword')}
             <input
               autoFocus
               type="password"
@@ -188,14 +196,14 @@ function DecisionDialog({
           </label>
         )}
         <DialogFooter className="mt-5 gap-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>{t('approvals.cancel')}</Button>
           <Button
             type="button"
             onClick={() => onConfirm(requiresCredential ? credential : undefined)}
             disabled={loading || (requiresCredential && !credential)}
           >
             {loading && <Loader2 size={14} className="animate-spin" />}
-            Confirm
+            {t('approvals.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -212,9 +220,10 @@ function ApprovalCard({
   resolving: boolean;
   onDecision: (approval: ApprovalRequest, decision: ApprovalDecision) => void;
 }) {
+  const { t, locale } = useI18n();
   const risk = RISK_STYLES[approval.risk] ?? RISK_STYLES.medium!;
   const authority = authorityFor(approval);
-  const facts = presentationFacts(approval);
+  const facts = presentationFacts(approval, t);
 
   return (
     <article className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby={`approval-${approval.id}`}>
@@ -230,15 +239,15 @@ function ApprovalCard({
           className="rounded-full border px-2 py-0.5 text-[11px] font-medium"
           style={{ color: risk.color, borderColor: `${risk.color}66`, background: `${risk.color}12` }}
         >
-          {risk.label}
+          {t(risk.key)}
         </span>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
-        <span>{AUTHORITY_LABELS[authority] ?? authority}</span>
-        <span>Requested by {approval.requested_by}</span>
-        <span>{timeAgo(approval.created_at)}</span>
-        <span className="text-[var(--amber)]">{expiryLabel(approval.expires_at)}</span>
+        <span>{authorityLabel(authority, t)}</span>
+        <span>{t('approvals.requestedBy', { name: approval.requested_by })}</span>
+        <span>{timeAgo(approval.created_at, t, locale)}</span>
+        <span className="text-[var(--amber)]">{expiryLabel(approval.expires_at, t)}</span>
       </div>
 
       {facts.length > 0 && (
@@ -253,7 +262,7 @@ function ApprovalCard({
       )}
 
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {decisionsFor(approval).map(({ decision, label }) => (
+        {decisionsFor(approval, t).map(({ decision, label }) => (
           <Button
             key={decision}
             type="button"
@@ -273,26 +282,28 @@ function ApprovalCard({
 }
 
 function HistoryRow({ approval }: { approval: ApprovalRequest }) {
-  const status = STATUS_META[approval.status] ?? STATUS_META.expired!;
-  const Icon = status.icon;
-  const resolution = approval.resolution?.replaceAll('_', ' ') ?? status.label;
+  const { t, locale } = useI18n();
+  const status = STATUS_META[approval.status];
+  const Icon = status?.icon ?? Timer;
+  const resolution = status ? t(status.key) : (approval.resolution?.replaceAll('_', ' ') ?? approval.status);
   return (
     <div className="flex items-start gap-3 border-b border-[var(--border)] py-3 last:border-0">
-      <Icon size={16} style={{ color: status.color }} className="mt-0.5 shrink-0" />
+      <Icon size={16} style={{ color: status?.color ?? '#6b7280' }} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm text-[var(--text)]">{approval.summary}</div>
         <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-[var(--text-muted)]">
-          <span>{AUTHORITY_LABELS[authorityFor(approval)] ?? authorityFor(approval)}</span>
+          <span>{authorityLabel(authorityFor(approval), t)}</span>
           <span>{approval.requested_by}</span>
-          <span>{timeAgo(approval.created_at)}</span>
+          <span>{timeAgo(approval.created_at, t, locale)}</span>
         </div>
       </div>
-      <span className="shrink-0 text-xs capitalize" style={{ color: status.color }}>{resolution}</span>
+      <span className="shrink-0 text-xs capitalize" style={{ color: status?.color ?? '#6b7280' }}>{resolution}</span>
     </div>
   );
 }
 
 export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: ApprovalInboxProps) {
+  const { t } = useI18n();
   const approvals = useSecurityStore((state) => state.approvals);
   const history = useSecurityStore((state) => state.approvalHistory);
   const loading = useSecurityStore((state) => state.approvalsLoading);
@@ -342,12 +353,12 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
     setResolvingId(approval.id);
     try {
       await resolveApproval(approval.id, decision, credential);
-      toast.success(decision === 'deny' ? 'Approval denied' : 'Approval resolved');
+      toast.success(decision === 'deny' ? t('approvals.approvalDenied') : t('approvals.approvalResolved'));
       setDialogApproval(null);
       setDialogDecision(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not resolve approval');
+      toast.error(err instanceof Error ? err.message : t('approvals.resolveFailed'));
     } finally {
       setResolvingId(null);
     }
@@ -378,19 +389,20 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
     <section
       className={embedded ? '' : 'flex h-full flex-col overflow-hidden'}
       aria-labelledby={embedded ? undefined : 'approval-inbox-title'}
-      aria-label={embedded ? 'Action approvals' : undefined}
+      aria-label={embedded ? t('approvals.title') : undefined}
+      aria-busy={loading && pending.length === 0 && history.length === 0}
     >
       {!embedded && (
         <header className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] px-6 py-4">
           <ShieldCheck size={20} className="text-[var(--amber)]" />
-          <h1 id="approval-inbox-title" className="m-0 text-lg font-semibold text-[var(--text)]">Action approvals</h1>
+          <h1 id="approval-inbox-title" className="m-0 text-lg font-semibold text-[var(--text)]">{t('approvals.title')}</h1>
           {approvalTotal > 0 && (
             <span className="rounded-full bg-[var(--amber)] px-2 py-0.5 text-xs font-semibold text-[#06060a]">{approvalTotal}</span>
           )}
         </header>
       )}
 
-      <div className="flex shrink-0 items-center border-b border-[var(--border)]" role="tablist" aria-label="Approval views">
+      <div className="flex shrink-0 items-center border-b border-[var(--border)]" role="tablist" aria-label={t('approvals.views')}>
         {(['pending', 'history'] as const).map((value) => (
           <button
             key={value}
@@ -407,7 +419,7 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-dim)]'
             }`}
           >
-            {value === 'pending' ? `Pending (${approvalTotal})` : 'History'}
+            {value === 'pending' ? t('approvals.pending', { count: approvalTotal }) : t('approvals.history')}
           </button>
         ))}
         <button
@@ -415,7 +427,7 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
           onClick={() => void load()}
           disabled={loading}
           className="mr-1 inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-hover)]"
-          aria-label="Refresh approvals"
+          aria-label={t('approvals.refresh')}
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -428,18 +440,18 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
         className={embedded ? 'pt-4' : 'flex-1 overflow-y-auto p-4 sm:px-6'}
       >
         {error && (
-          <RetryBanner severity="error" title="Approvals unavailable" message={error} onRetry={() => void load()} loading={loading} />
+          <RetryBanner severity="error" title={t('approvals.unavailable')} message={error} onRetry={() => void load()} loading={loading} />
         )}
 
         {loading && (tab === 'pending' ? pending.length === 0 : history.length === 0) ? (
           <div className="flex items-center gap-2 py-10 text-sm text-[var(--text-muted)]">
-            <Loader2 size={16} className="animate-spin" /> Loading approvals…
+            <Loader2 size={16} className="animate-spin" /> {t('approvals.loading')}
           </div>
         ) : tab === 'pending' ? (
           pending.length === 0 ? (
             <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center text-sm text-[var(--text-muted)]">
               <ShieldCheck size={42} strokeWidth={1.2} />
-              <div>No pending approvals</div>
+              <div>{t('approvals.nonePending')}</div>
             </div>
           ) : (
             <div className="grid gap-3 xl:grid-cols-2">
@@ -456,7 +468,7 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
         ) : historyItems.length === 0 ? (
           <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center text-sm text-[var(--text-muted)]">
             <Clock size={42} strokeWidth={1.2} />
-            <div>No approval history</div>
+              <div>{t('approvals.noneHistory')}</div>
           </div>
         ) : (
           <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-4">
@@ -464,16 +476,16 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
           </div>
         )}
 
-        {!error && pending.some((approval) => decisionsFor(approval).length === 0) && (
+        {!error && pending.some((approval) => decisionsFor(approval, t).length === 0) && (
           <div className="mt-3 flex items-center gap-2 text-xs text-[var(--amber)]">
-            <AlertTriangle size={13} /> Some provider approvals cannot be resolved from this surface.
+            <AlertTriangle size={13} /> {t('approvals.providerWarning')}
           </div>
         )}
 
         {!error && activeTotal > 0 && (
-          <nav className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3" aria-label={`${tab === 'pending' ? 'Pending approvals' : 'Approval history'} pages`}>
+          <nav className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3" aria-label={tab === 'pending' ? t('approvals.pendingPages') : t('approvals.historyPages')}>
             <span className="text-xs text-[var(--text-muted)]" aria-live="polite">
-              Showing {pageStart}–{pageEnd} of {activeTotal}
+              {t('approvals.showing', { start: pageStart, end: pageEnd, total: activeTotal })}
             </span>
             <div className="flex gap-2">
               <Button
@@ -483,7 +495,7 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
                 onClick={() => setActiveOffset(activeOffset - PAGE_SIZE)}
                 disabled={loading || activeOffset === 0}
               >
-                Previous
+                {t('approvals.previous')}
               </Button>
               <Button
                 type="button"
@@ -492,7 +504,7 @@ export function ApprovalInbox({ embedded = false, defaultTab = 'pending' }: Appr
                 onClick={() => setActiveOffset(activeOffset + PAGE_SIZE)}
                 disabled={loading || activeOffset + activeItems.length >= activeTotal}
               >
-                Next
+                {t('approvals.next')}
               </Button>
             </div>
           </nav>

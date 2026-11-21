@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import type { ApiListResponse } from '@/types/api';
+import { useI18n } from '@/i18n';
 
 interface InventoryProposalRow {
   id: string;
@@ -61,6 +62,7 @@ function SoonBadge() {
 }
 
 export function MailAIActionsMenu({ emailId }: { emailId: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -89,9 +91,9 @@ export function MailAIActionsMenu({ emailId }: { emailId: string }) {
     setAnalyzing(true);
     try {
       await api.post('/inventory/proposals/from-email', { email_id: emailId });
-      toast.success('Analyzing locally — you will get a notification with the proposals');
+      toast.success(t('mail.aiAnalysisStarted'));
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to analyze email');
+      toast.error(err?.message || t('mail.aiAnalysisFailed'));
     }
     // Visual analyzing state ~4s (backend responds 202 and notifies via the bell)
     setTimeout(() => setAnalyzing(false), 4000);
@@ -145,16 +147,16 @@ export function MailAIActionsMenu({ emailId }: { emailId: string }) {
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <Boxes size={14} /> Analyze for Inventory
+            <Boxes size={14} /> {t('mail.analyzeInventory')}
           </button>
           <button disabled style={{ ...itemStyle, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
-            <AlignLeft size={14} /> Summarize <SoonBadge />
+            <AlignLeft size={14} /> {t('mail.summarize')} <SoonBadge />
           </button>
           <button disabled style={{ ...itemStyle, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
-            <CalendarPlus size={14} /> Extract event <SoonBadge />
+            <CalendarPlus size={14} /> {t('mail.extractEvent')} <SoonBadge />
           </button>
           <button disabled style={{ ...itemStyle, color: 'var(--text-muted)', cursor: 'not-allowed' }}>
-            <PenLine size={14} /> Draft reply <SoonBadge />
+            <PenLine size={14} /> {t('mail.draftReply')} <SoonBadge />
           </button>
         </div>
       )}

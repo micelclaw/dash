@@ -66,3 +66,7 @@ tree. Unmodified npm dependencies are covered by their own licenses under
   `src/assets/brand-icons/ATTRIBUTION.md` (it also documents the four logos that
   are *not* vendored and are painted from the CC0 `simple-icons` package
   instead). Regenerate: `node scripts/fetch-brand-icons.mjs`.
+
+## Source alpha licensing boundary
+
+The first-party BSL grant does not replace these licenses. This distribution licenses the entire `src/modules/video/lib/stream-resolver.ts` file under MPL-2.0, preserving its adaptation notice. npm dependencies and compiled distributions require notices for their actual versions; do not ship node_modules or private runtime material. See LICENSING.md.

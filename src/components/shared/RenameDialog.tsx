@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/i18n';
 
 interface RenameDialogProps {
   open: boolean;
@@ -24,11 +25,12 @@ interface RenameDialogProps {
 export function RenameDialog({
   open,
   currentName,
-  title = 'New name:',
-  confirmLabel = 'Accept',
+  title,
+  confirmLabel,
   onConfirm,
   onClose,
 }: RenameDialogProps) {
+  const { t } = useI18n();
   const [value, setValue] = useState(currentName);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +96,7 @@ export function RenameDialog({
             marginBottom: 8,
           }}
         >
-          {title}
+          {title ?? t('shared.rename.title')}
         </label>
         <input
           ref={inputRef}
@@ -130,7 +132,7 @@ export function RenameDialog({
               color: 'var(--text-dim)',
             }}
           >
-            Cancel
+            {t('shared.action.cancel')}
           </button>
           <button
             onClick={handleConfirm}
@@ -146,7 +148,7 @@ export function RenameDialog({
               fontWeight: 600,
             }}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('shared.action.accept')}
           </button>
         </div>
       </div>

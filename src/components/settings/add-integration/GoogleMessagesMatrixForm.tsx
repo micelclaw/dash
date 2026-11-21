@@ -26,25 +26,26 @@ import { Smartphone, BatteryWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FormActions } from './shared';
 import { MatrixBridgeForm, CALLOUT, type LoginPaneContext } from './MatrixBridgeForm';
+import { useI18n } from '@/i18n';
 
 function GoogleMessagesLoginPane({
   ctx, step,
 }: { ctx: LoginPaneContext; step: 'login' | 'awaiting-pair' }) {
   const { login, submitting, send, checkLinked, bridgeMessage, onCancel } = ctx;
+  const { t } = useI18n();
 
   if (step === 'login') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          This pairs with the Messages app on your Android phone, the same way the web version
-          does. You&apos;ll scan a QR code and then confirm an emoji.
+          {t('settings.matrix.googleMessagesIntro')}
         </p>
         {bridgeMessage}
         <FormActions
           onBack={onCancel}
           saving={submitting}
           onConfirm={() => void send('start')}
-          submitLabel={submitting ? 'Getting QR…' : 'Show QR code'}
+          submitLabel={submitting ? t('settings.matrix.gettingQr') : t('settings.matrix.showQr')}
         />
       </div>
     );
@@ -55,42 +56,40 @@ function GoogleMessagesLoginPane({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {qr && (
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <img src={qr} alt="Google Messages pairing QR" style={{ width: 220, height: 220, borderRadius: 8, background: '#fff', padding: 8 }} />
+          <img src={qr} alt={t('settings.matrix.qrAltGoogleMessages')} style={{ width: 220, height: 220, borderRadius: 8, background: '#fff', padding: 8 }} />
         </div>
       )}
       <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
         <Smartphone size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          On your phone: <strong>Messages → menu → Device pairing → Pair device</strong>, scan the
-          QR, then check that the emoji shown on the phone matches the one here. The QR expires
-          after a couple of minutes.
+          {t('settings.matrix.phoneInstruction', { steps: 'Messages → menu → Device pairing → Pair device' })} {t('settings.matrix.expiringQr')}
         </span>
       </div>
       <div style={{ ...CALLOUT, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
         <BatteryWarning size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          Your phone does the actual sending. If it&apos;s off or out of data, messages won&apos;t
-          go through — that&apos;s how Messages for web works, not a Micelclaw failure.
+          {t('settings.matrix.phoneOffline')}
         </span>
       </div>
       {bridgeMessage}
       <Button variant="outline" className="w-full" disabled={submitting} onClick={() => void send('qr')}>
-        New QR code
+        {t('settings.matrix.newQr')}
       </Button>
       <FormActions
         onBack={() => void send('cancel')}
         saving={submitting}
         onConfirm={() => void checkLinked(false)}
-        submitLabel="I've paired it"
+        submitLabel={t('settings.matrix.paired')}
       />
       <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-        This screen checks automatically every few seconds while you pair.
+        {t('settings.matrix.autoPairCheck')}
       </p>
     </div>
   );
 }
 
 export function GoogleMessagesMatrixForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return (
     <MatrixBridgeForm
       onComplete={onComplete}
@@ -101,9 +100,7 @@ export function GoogleMessagesMatrixForm({ onComplete, onCancel }: { onComplete:
         connectorDisplayName: 'Google Messages',
         hubSetupBlurb: (
           <>
-            Your phone&apos;s SMS and RCS connect through a private Matrix bridge that runs on your
-            own server. Set it up once — everyone on this instance can then pair their own phone.
-            Your messages never leave your server.
+            {t('settings.matrix.googleMessagesSetup')}
           </>
         ),
         // Sin disclaimer de riesgo: emparejar un dispositivo web es una función
@@ -114,8 +111,7 @@ export function GoogleMessagesMatrixForm({ onComplete, onCancel }: { onComplete:
         renderLogin: (ctx, step) => <GoogleMessagesLoginPane ctx={ctx} step={step} />,
         readyBlurb: (
           <>
-            Your phone is paired and the bridge is importing your conversations. Next, choose which
-            ones Micelclaw should observe — you don&apos;t have to sync everything.
+            {t('settings.matrix.googleMessagesReady')}
           </>
         ),
       }}

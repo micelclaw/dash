@@ -10,13 +10,14 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { TagInput } from '@/components/shared/TagInput';
 import { formatFileSize } from '@/lib/file-utils';
 import { api } from '@/services/api';
 import type { ApiResponse } from '@/types/api';
+import { useI18n } from '@/i18n';
 
 interface SnapshotSettings {
   enabled: boolean;
@@ -61,10 +62,14 @@ interface SnapshotSettingsFormProps {
  * → Versioning section render the exact same form with zero duplication.
  */
 export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsFormProps) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
   const [settings, setSettings] = useState<SnapshotSettings>(DEFAULTS);
   const [stats, setStats] = useState<SnapshotStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => { tRef.current = t; }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,10 +104,10 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
           },
         },
       });
-      toast.success('Snapshot settings saved');
+      toast.success(tRef.current('drive.snapshotSettings.toast.saved'));
       onSaved?.();
     } catch {
-      toast.error('Could not save settings');
+      toast.error(tRef.current('drive.snapshotSettings.toast.saveFailed'));
     }
     setSaving(false);
   };
@@ -111,7 +116,7 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
     <div style={{ display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-sans)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {loading ? (
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading…</div>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('drive.snapshotSettings.loading')}</div>
         ) : (
           <>
             {/* Stats */}
@@ -123,12 +128,15 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
               <Database size={14} style={{ color: 'var(--mod-drive)', flexShrink: 0 }} />
               {stats ? (
                 <span>
-                  <strong style={{ color: 'var(--text)' }}>{stats.total_snapshots}</strong> snapshot{stats.total_snapshots === 1 ? '' : 's'} across{' '}
-                  <strong style={{ color: 'var(--text)' }}>{stats.total_files_with_snapshots}</strong> file{stats.total_files_with_snapshots === 1 ? '' : 's'} ·{' '}
-                  <strong style={{ color: 'var(--text)' }}>{formatFileSize(stats.total_snapshot_size_bytes)}</strong> used
+                  <strong style={{ color: 'var(--text)' }}>{stats.total_snapshots}</strong>{' '}
+                  {t(stats.total_snapshots === 1 ? 'drive.snapshotSettings.stats.snapshotOne' : 'drive.snapshotSettings.stats.snapshotMany')}{' '}
+                  <strong style={{ color: 'var(--text)' }}>{stats.total_files_with_snapshots}</strong>{' '}
+                  {t(stats.total_files_with_snapshots === 1 ? 'drive.snapshotSettings.stats.fileOne' : 'drive.snapshotSettings.stats.fileMany')} ·{' '}
+                  <strong style={{ color: 'var(--text)' }}>{formatFileSize(stats.total_snapshot_size_bytes)}</strong>{' '}
+                  {t('drive.snapshotSettings.stats.used')}
                 </span>
               ) : (
-                <span>Snapshot stats unavailable</span>
+                <span>{t('drive.snapshotSettings.stats.unavailable')}</span>
               )}
             </div>
 
@@ -142,10 +150,10 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
               />
               <div>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
-                  Automatic snapshots
+                  {t('drive.snapshotSettings.automatic.title')}
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                  Keep a version every time a file changes
+                  {t('drive.snapshotSettings.automatic.description')}
                 </div>
               </div>
             </label>
@@ -154,10 +162,10 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
-                  Max versions per file
+                  {t('drive.snapshotSettings.maxVersions.title')}
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                  Older snapshots are rotated out
+                  {t('drive.snapshotSettings.maxVersions.description')}
                 </div>
               </div>
               <input
@@ -182,10 +190,10 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
-                  Rotation policy
+                  {t('drive.snapshotSettings.rotation.title')}
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                  Smart keeps daily/weekly milestones; simple drops the oldest
+                  {t('drive.snapshotSettings.rotation.description')}
                 </div>
               </div>
               <select
@@ -198,24 +206,24 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
                   fontFamily: 'var(--font-sans)', cursor: 'pointer',
                 }}
               >
-                <option value="smart">Smart</option>
-                <option value="simple">Simple</option>
+                <option value="smart">{t('drive.snapshotSettings.rotation.smart')}</option>
+                <option value="simple">{t('drive.snapshotSettings.rotation.simple')}</option>
               </select>
             </div>
 
             {/* Excluded patterns */}
             <div>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500, marginBottom: 2 }}>
-                Excluded patterns
+                {t('drive.snapshotSettings.excludedPatterns.title')}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-                Files matching these globs are never snapshotted
+                {t('drive.snapshotSettings.excludedPatterns.description')}
               </div>
               <TagInput
                 tags={settings.excluded_patterns}
                 onChange={next => setSettings(s => ({ ...s, excluded_patterns: next }))}
                 placeholder="*.tmp"
-                addLabel="pattern"
+                addLabel={t('drive.snapshotSettings.excludedPatterns.addLabel')}
                 size="xs"
               />
             </div>
@@ -242,7 +250,7 @@ export function SnapshotSettingsForm({ onSaved, footerExtra }: SnapshotSettingsF
             fontFamily: 'var(--font-sans)',
           }}
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('drive.snapshotSettings.save.saving') : t('drive.snapshotSettings.save.save')}
         </button>
       </div>
     </div>

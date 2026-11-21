@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 interface Contact {
   id: string;
@@ -33,6 +34,7 @@ interface ContactLinkDialogProps {
 export function ContactLinkDialog({
   open, clusterName, linkedContactId, onClose, onLink, onUnlink, onCreateAndLink,
 }: ContactLinkDialogProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,6 +84,9 @@ export function ContactLinkDialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('photos.extra.linkToContactTitle')}
         style={{
           background: 'var(--card)', border: '1px solid var(--border)',
           borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
@@ -89,10 +94,10 @@ export function ContactLinkDialog({
         }}
       >
         <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>
-          Link to Contact
+          {t('photos.extra.linkToContactTitle')}
         </h3>
         <p style={{ margin: '4px 0 16px', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-          {clusterName ?? 'Unknown face'}
+          {clusterName ?? t('photos.extra.unknownFace')}
         </p>
 
         {linkedContactId && (
@@ -106,7 +111,7 @@ export function ContactLinkDialog({
               textAlign: 'left',
             }}
           >
-            Unlink current contact
+            {t('photos.extra.unlinkContact')}
           </button>
         )}
 
@@ -114,7 +119,7 @@ export function ContactLinkDialog({
           ref={inputRef}
           value={query}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Search contacts..."
+          placeholder={t('photos.extra.searchContacts')}
           style={{
             width: '100%', background: 'var(--surface)',
             border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
@@ -125,11 +130,11 @@ export function ContactLinkDialog({
 
         <div style={{ marginTop: 8, maxHeight: 240, overflowY: 'auto' }}>
           {loading && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>Searching...</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>{t('photos.extra.searching')}</p>
           )}
           {!loading && query && results.length === 0 && (
             <div style={{ padding: '8px 0' }}>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>No contacts found</p>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>{t('photos.extra.noContactsFound')}</p>
               {onCreateAndLink && (
                 <button
                   onClick={() => { onCreateAndLink(query.trim()); onClose(); }}
@@ -141,7 +146,7 @@ export function ContactLinkDialog({
                     fontFamily: 'var(--font-sans)', textAlign: 'left',
                   }}
                 >
-                  + Create &ldquo;{query.trim()}&rdquo; as contact
+                  + {t('photos.extra.createContactNamed', { name: query.trim() })}
                 </button>
               )}
             </div>
@@ -191,7 +196,7 @@ export function ContactLinkDialog({
               background: 'transparent', color: 'var(--text-dim)',
             }}
           >
-            Cancel
+            {t('photos.extra.cancel')}
           </button>
         </div>
       </div>

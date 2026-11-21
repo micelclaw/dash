@@ -30,6 +30,8 @@ export interface UiModule {
   group: string | null;
   order_after: string | null;
   iframe_url: string;
+  parent_module?: 'office';
+  office_provider?: { slot: string; protocol_version: number };
 }
 
 /** Apps que el usuario actual puede ver (para el gating del dash). */

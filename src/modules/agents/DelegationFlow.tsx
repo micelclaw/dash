@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Wrench, Loader2 } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { useAgentDelegations } from './hooks/use-agent-delegations';
 import { formatRelativeTime } from './shared/format';
 import type { AgentDelegation, ManagedAgent } from './types';
@@ -22,6 +23,7 @@ interface DelegationFlowProps {
 }
 
 export function DelegationFlow({ agentId, agents }: DelegationFlowProps) {
+  const { t } = useI18n();
   const { delegations, bySession, loading, loadingMore, error, hasMore, loadMore } = useAgentDelegations(agentId);
 
   // name (minúscula) → display_name. NUNCA mostrar el name crudo si hay display.
@@ -44,7 +46,7 @@ export function DelegationFlow({ agentId, agents }: DelegationFlowProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-        Delegaciones {bySession.length > 0 && <span style={{ color: 'var(--text-muted)' }}>· {bySession.length} sesión{bySession.length !== 1 ? 'es' : ''}</span>}
+        {t('agents.delegations.title')} {bySession.length > 0 && <span style={{ color: 'var(--text-muted)' }}>· {t(bySession.length === 1 ? 'agents.delegations.sessionOne' : 'agents.delegations.sessionMany', { count: bySession.length })}</span>}
       </span>
 
       {error && <span style={{ fontSize: '0.6875rem', color: 'var(--error)' }}>{error}</span>}
@@ -58,7 +60,7 @@ export function DelegationFlow({ agentId, agents }: DelegationFlowProps) {
       )}
 
       {!loading && delegations.length === 0 && (
-        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Este agente no ha delegado ni recibido delegaciones.</span>
+        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('agents.delegations.empty')}</span>
       )}
 
       {[...grouped.entries()].map(([sessionId, items], gi) => (
@@ -67,7 +69,7 @@ export function DelegationFlow({ agentId, agents }: DelegationFlowProps) {
             // Etiqueta opaca: el session_id crudo contiene el agentId interno
             // (agent:paco--atlas:deleg:…) — NUNCA mostrarlo. Solo un contador.
             <div style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', paddingLeft: 2 }}>
-              Sesión {gi + 1} · {items.length} mensaje{items.length !== 1 ? 's' : ''}
+              {t('agents.delegations.sessionIndex', { index: gi + 1 })} · {t(items.length === 1 ? 'agents.delegations.messageOne' : 'agents.delegations.messageMany', { count: items.length })}
             </div>
           )}
           {items.map((d) => <DelegationRow key={d.id} d={d} display={display} />)}
@@ -86,7 +88,7 @@ export function DelegationFlow({ agentId, agents }: DelegationFlowProps) {
           }}
         >
           {loadingMore && <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />}
-          Cargar más
+          {t('agents.timeline.loadMore')}
         </button>
       )}
     </div>
@@ -94,12 +96,13 @@ export function DelegationFlow({ agentId, agents }: DelegationFlowProps) {
 }
 
 function DelegationRow({ d, display }: { d: AgentDelegation; display: (n: string | null) => string }) {
+  const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const out = d.direction === 'outgoing';
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '7px 9px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <span style={{ flexShrink: 0, marginTop: 1, color: out ? 'var(--amber)' : 'var(--success)' }} title={out ? 'delegó a' : 'recibió de'}>
+        <span style={{ flexShrink: 0, marginTop: 1, color: out ? 'var(--amber)' : 'var(--success)' }} title={out ? t('agents.activity.delegatedTo') : t('agents.activity.receivedFrom')}>
           {out ? <ArrowUpRight size={13} /> : <ArrowDownLeft size={13} />}
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -110,19 +113,19 @@ function DelegationRow({ d, display }: { d: AgentDelegation; display: (n: string
             {d.briefing && (
               <span style={{ fontSize: '0.5625rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--amber)', border: '1px solid var(--amber-dim)', borderRadius: 'var(--radius-sm)', padding: '1px 5px' }}>briefing</span>
             )}
-            <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatRelativeTime(d.created_at)}</span>
+            <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{formatRelativeTime(d.created_at, locale)}</span>
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {d.preview || <span style={{ fontStyle: 'italic' }}>(sin texto)</span>}
+            {d.preview || <span style={{ fontStyle: 'italic' }}>{t('agents.activity.noText')}</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: '0.5625rem', color: 'var(--text-muted)' }}>
-            {typeof d.tokens_used === 'number' && d.tokens_used > 0 && <span>{d.tokens_used.toLocaleString('es-ES')} tok</span>}
+            {typeof d.tokens_used === 'number' && d.tokens_used > 0 && <span>{d.tokens_used.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US')} tok</span>}
             {d.tool_calls.length > 0 && (
               <button
                 onClick={() => setOpen((o) => !o)}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.5625rem', padding: 0, fontFamily: 'var(--font-sans)' }}
               >
-                <Wrench size={10} /> {d.tool_calls.length} tool{d.tool_calls.length !== 1 ? 's' : ''}
+                <Wrench size={10} /> {t(d.tool_calls.length === 1 ? 'agents.delegations.toolOne' : 'agents.delegations.toolMany', { count: d.tool_calls.length })}
               </button>
             )}
           </div>

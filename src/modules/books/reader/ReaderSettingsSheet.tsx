@@ -19,6 +19,7 @@
 import { RotateCcw } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
+import { useI18n } from '@/i18n';
 import {
   DEFAULT_PREFS,
   READER_THEMES,
@@ -51,22 +52,28 @@ export function ReaderSettingsSheet({
   prefs,
   onChange,
 }: ReaderSettingsSheetProps) {
+  const { t } = useI18n();
   const set = (patch: Partial<ReaderPrefs>) => onChange({ ...prefs, ...patch });
+  const themeLabels: Record<ReaderTheme, string> = {
+    light: t('books.themeLight'),
+    sepia: t('books.themeSepia'),
+    dark: t('books.themeDark'),
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" style={{ width: 300 }} aria-describedby={undefined}>
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
           <h2 className="pr-8 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-            Reader settings
+            {t('books.readerSettings')}
           </h2>
 
           {/* Theme */}
           <div className="flex flex-col gap-2">
-            <SectionLabel>Theme</SectionLabel>
+            <SectionLabel>{t('books.readerTheme')}</SectionLabel>
             <div className="flex gap-2">
               {(Object.keys(READER_THEMES) as ReaderTheme[]).map((theme) => {
-                const t = READER_THEMES[theme];
+                const themeConfig = READER_THEMES[theme];
                 const active = prefs.theme === theme;
                 return (
                   <button
@@ -74,14 +81,14 @@ export function ReaderSettingsSheet({
                     onClick={() => set({ theme })}
                     className="flex flex-1 flex-col items-center gap-1 rounded-lg border p-2 text-xs transition-colors"
                     style={{
-                      background: t.bg,
-                      color: t.fg,
+                      background: themeConfig.bg,
+                      color: themeConfig.fg,
                       borderColor: active ? 'var(--accent, #3b82f6)' : 'var(--border)',
                       borderWidth: active ? 2 : 1,
                     }}
                   >
                     <span className="font-serif text-base leading-none">Aa</span>
-                    {t.label}
+                    {themeLabels[theme]}
                   </button>
                 );
               })}
@@ -90,13 +97,13 @@ export function ReaderSettingsSheet({
 
           {/* Font family */}
           <div className="flex flex-col gap-2">
-            <SectionLabel>Font</SectionLabel>
+            <SectionLabel>{t('books.readerFont')}</SectionLabel>
             <div className="flex gap-2">
               {(
                 [
-                  { id: 'serif', label: 'Serif', className: 'font-serif' },
-                  { id: 'sans', label: 'Sans', className: 'font-sans' },
-                ] as Array<{ id: ReaderFontFamily; label: string; className: string }>
+                  { id: 'serif', labelKey: 'books.fontSerif', className: 'font-serif' },
+                  { id: 'sans', labelKey: 'books.fontSans', className: 'font-sans' },
+                ] as Array<{ id: ReaderFontFamily; labelKey: string; className: string }>
               ).map((f) => {
                 const active = prefs.fontFamily === f.id;
                 return (
@@ -111,7 +118,7 @@ export function ReaderSettingsSheet({
                       borderWidth: active ? 2 : 1,
                     }}
                   >
-                    {f.label}
+                    {t(f.labelKey)}
                   </button>
                 );
               })}
@@ -121,7 +128,7 @@ export function ReaderSettingsSheet({
           {/* Font size */}
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between">
-              <SectionLabel>Font size</SectionLabel>
+              <SectionLabel>{t('books.fontSize')}</SectionLabel>
               <span className="text-xs tabular-nums" style={{ color: 'var(--text)' }}>
                 {prefs.fontSize}%
               </span>
@@ -142,7 +149,7 @@ export function ReaderSettingsSheet({
           {/* Line height */}
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between">
-              <SectionLabel>Line spacing</SectionLabel>
+              <SectionLabel>{t('books.lineSpacing')}</SectionLabel>
               <span className="text-xs tabular-nums" style={{ color: 'var(--text)' }}>
                 {prefs.lineHeight.toFixed(2)}
               </span>
@@ -162,7 +169,7 @@ export function ReaderSettingsSheet({
             style={{ color: 'var(--text-dim)', borderColor: 'var(--border)' }}
           >
             <RotateCcw size={13} />
-            Reset to defaults
+            {t('books.resetDefaults')}
           </button>
         </div>
       </SheetContent>

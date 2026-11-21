@@ -12,6 +12,7 @@
 
 import { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import type { CreateMeetingPayload, EditMeetingPayload } from './hooks/use-meetings';
 import { ParticipantPreview } from './ParticipantPreview';
 import type { ManagedAgent, Meeting } from '../types';
@@ -63,6 +64,7 @@ export function NewMeetingModal({
   createMeeting, editMeeting,
   existingMeeting, onUpdated,
 }: NewMeetingModalProps) {
+  const { t } = useI18n();
   const [submitting, setSubmitting] = useState(false);
   const isEdit = !!existingMeeting;
 
@@ -225,10 +227,11 @@ export function NewMeetingModal({
             fontWeight: 600,
             color: 'var(--text)',
           }}>
-            {isEdit ? 'Edit Council Meeting' : 'Schedule Council Meeting'}
+            {t(isEdit ? 'council.meeting.editTitle' : 'council.meeting.newTitle')}
           </h2>
           <button
             onClick={onClose}
+            aria-label={t('council.meeting.close')}
             style={{
               background: 'none',
               border: 'none',
@@ -246,24 +249,24 @@ export function NewMeetingModal({
         {/* Topic */}
         <div>
           <label style={labelStyle}>
-            Topic <span style={{ color: 'var(--error)' }}>*</span>
+            {t('council.meeting.topic')} <span style={{ color: 'var(--error)' }}>*</span>
           </label>
           <input
             type="text"
             value={topic}
             onChange={e => setTopic(e.target.value)}
-            placeholder="e.g. Q1 Strategy Review"
+            placeholder={t('council.meeting.topicPlaceholder')}
             style={inputStyle}
           />
         </div>
 
         {/* Description */}
         <div>
-          <label style={labelStyle}>Description</label>
+          <label style={labelStyle}>{t('council.meeting.description')}</label>
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="Optional meeting description..."
+            placeholder={t('council.meeting.descriptionPlaceholder')}
             rows={3}
             style={{
               ...inputStyle,
@@ -275,7 +278,7 @@ export function NewMeetingModal({
 
         {/* Participants */}
         <div>
-          <label style={labelStyle}>Participants</label>
+          <label style={labelStyle}>{t('council.meeting.participants')}</label>
           {/* Preview visual de quién asistirá (avatares con color del agente) */}
           <ParticipantPreview
             agents={agents}
@@ -330,7 +333,7 @@ export function NewMeetingModal({
                       color: 'var(--text-muted)',
                       fontStyle: 'italic',
                     }}>
-                      (always included)
+                      {t('council.meeting.alwaysIncluded')}
                     </span>
                   )}
                 </label>
@@ -363,13 +366,13 @@ export function NewMeetingModal({
               />
               <span>👤</span>
               <span style={{ color: 'var(--amber)', fontWeight: 500 }}>
-                Paco (You)
+                {t('council.meeting.userName')}
               </span>
               <span style={{
                 fontSize: '0.6875rem',
                 color: 'var(--text-muted)',
               }}>
-                Participate in meeting
+                {t('council.meeting.userParticipates')}
               </span>
             </label>
 
@@ -377,8 +380,8 @@ export function NewMeetingModal({
             {userParticipates && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px 2px 28px' }}>
                 {([
-                  { value: 'before_conclusion', label: 'Solo antes de concluir', hint: 'una pausa, tras el debate' },
-                  { value: 'each_round', label: 'Tras la intro y cada ronda', hint: 'máximo control' },
+                  { value: 'before_conclusion', label: t('council.meeting.intervention.beforeConclusion'), hint: t('council.meeting.intervention.beforeConclusionHint') },
+                  { value: 'each_round', label: t('council.meeting.intervention.eachRound'), hint: t('council.meeting.intervention.eachRoundHint') },
                 ] as const).map(opt => (
                   <label
                     key={opt.value}
@@ -428,15 +431,16 @@ export function NewMeetingModal({
               color: 'var(--text)',
             }}
           >
-            <span>⚙ Advanced options</span>
+            <span>⚙ {t('council.meeting.advanced.title')}</span>
             <span style={{
               fontSize: '0.6875rem',
               color: 'var(--text-muted)',
               fontWeight: 400,
             }}>
-              {rounds} round{rounds !== 1 ? 's' : ''} · {maxWords}w
+              {t(`council.meeting.advanced.round.${rounds === 1 ? 'one' : 'other'}`, { count: rounds })}
+              {' · '}{t('council.meeting.advanced.words', { count: maxWords })}
               {devilsAdvocate ? ' · 😈' : ''}
-              {!extractActionItems ? ' · no items' : ''}
+              {!extractActionItems ? t('council.meeting.advanced.noActionItems') : ''}
               <span style={{ marginLeft: 8 }}>{advancedOpen ? '▴' : '▾'}</span>
             </span>
           </button>
@@ -450,26 +454,26 @@ export function NewMeetingModal({
             }}>
               {/* Rounds */}
               <div>
-                <label style={{ ...labelStyle, marginBottom: 4 }}>Number of rounds</label>
+                <label style={{ ...labelStyle, marginBottom: 4 }}>{t('council.meeting.rounds')}</label>
                 <select
                   value={rounds}
                   onChange={e => setRounds(parseInt(e.target.value, 10))}
                   style={inputStyle}
                 >
-                  <option value={3}>3 — intro + 1 development + conclusion</option>
-                  <option value={4}>4 — intro + 2 development + conclusion</option>
-                  <option value={5}>5 — intro + 3 development + conclusion</option>
-                  <option value={6}>6 — intro + 4 development + conclusion</option>
+                  <option value={3}>{t('council.meeting.roundOption', { count: 3, description: t('council.meeting.rounds.introOne') })}</option>
+                  <option value={4}>{t('council.meeting.roundOption', { count: 4, description: t('council.meeting.rounds.introTwo') })}</option>
+                  <option value={5}>{t('council.meeting.roundOption', { count: 5, description: t('council.meeting.rounds.introThree') })}</option>
+                  <option value={6}>{t('council.meeting.roundOption', { count: 6, description: t('council.meeting.rounds.introFour') })}</option>
                 </select>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>
-                  Francis opens (assigning angles), agents respond, Francis moderates the development rounds choosing who speaks next, and the chief closes with a final decision.
+                  {t('council.meeting.rounds.explanation')}
                 </div>
               </div>
 
               {/* Max words */}
               <div>
                 <label style={{ ...labelStyle, marginBottom: 4 }}>
-                  Max words per response
+                  {t('council.meeting.maxWords')}
                   <span style={{ float: 'right', color: 'var(--amber)', fontWeight: 700 }}>{maxWords}</span>
                 </label>
                 <input
@@ -486,7 +490,7 @@ export function NewMeetingModal({
                   <span>200</span>
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>
-                  Francis intro and final conclusion get up to 1.5x more (capped at 200).
+                  {t('council.meeting.maxWords.explanation')}
                 </div>
               </div>
 
@@ -506,10 +510,10 @@ export function NewMeetingModal({
                 />
                 <span>
                   <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
-                    Devil&apos;s advocate
+                    {t('council.meeting.devilsAdvocate')}
                   </span>
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
-                    One non-Francis participant (chosen at random) defends the opposite stance during development rounds — forces real tension instead of yes-men cascade.
+                    {t('council.meeting.devilsAdvocate.explanation')}
                   </div>
                 </span>
               </label>
@@ -530,10 +534,10 @@ export function NewMeetingModal({
                 />
                 <span>
                   <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
-                    Extract action items at the end
+                    {t('council.meeting.extractActionItems')}
                   </span>
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
-                    Adds a final LLM pass that converts Francis&apos;s closing decision into structured action items. Off → no extra pass, just the debate text.
+                    {t('council.meeting.extractActionItems.explanation')}
                   </div>
                 </span>
               </label>
@@ -543,7 +547,7 @@ export function NewMeetingModal({
 
         {/* Schedule */}
         <div>
-          <label style={labelStyle}>Schedule</label>
+          <label style={labelStyle}>{t('council.meeting.schedule')}</label>
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -567,7 +571,7 @@ export function NewMeetingModal({
                 onChange={() => setScheduleMode('now')}
                 style={{ accentColor: 'var(--amber)' }}
               />
-              Start now
+              {t('council.meeting.startNow')}
             </label>
             <label
               style={{
@@ -587,7 +591,7 @@ export function NewMeetingModal({
                 onChange={() => setScheduleMode('later')}
                 style={{ accentColor: 'var(--amber)' }}
               />
-              Schedule for:
+              {t('council.meeting.scheduleFor')}
             </label>
             {scheduleMode === 'later' && (
               <div style={{
@@ -597,12 +601,14 @@ export function NewMeetingModal({
               }}>
                 <input
                   type="date"
+                  aria-label={t('council.meeting.date')}
                   value={scheduleDate}
                   onChange={e => setScheduleDate(e.target.value)}
                   style={{ ...inputStyle, width: 'auto', flex: 1 }}
                 />
                 <input
                   type="time"
+                  aria-label={t('council.meeting.time')}
                   value={scheduleTime}
                   onChange={e => setScheduleTime(e.target.value)}
                   style={{ ...inputStyle, width: 'auto', flex: 1 }}
@@ -637,7 +643,7 @@ export function NewMeetingModal({
               transition: 'var(--transition-fast)',
             }}
           >
-            Cancel
+            {t('council.meeting.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -661,10 +667,10 @@ export function NewMeetingModal({
             }}
           >
             {submitting
-              ? (isEdit ? 'Saving...' : 'Starting...')
+              ? t(isEdit ? 'council.meeting.saving' : 'council.meeting.starting')
               : isEdit
-                ? 'Save changes'
-                : scheduleMode === 'now' ? 'Start Meeting' : 'Schedule Meeting'}
+                ? t('council.meeting.saveChanges')
+                : t(scheduleMode === 'now' ? 'council.meeting.start' : 'council.meeting.scheduleAction')}
           </button>
         </div>
       </div>

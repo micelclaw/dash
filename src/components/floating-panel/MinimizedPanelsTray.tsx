@@ -12,15 +12,17 @@
 
 import { Calculator, ArrowLeftRight, Timer, Mic } from 'lucide-react';
 import { useFloatingPanelsStore, type PanelId } from '@/stores/floating-panels.store';
+import { useI18n } from '@/i18n';
 
-const PANEL_ICONS: Record<PanelId, { icon: React.ReactNode; label: string }> = {
-  calculator:       { icon: <Calculator size={16} />,      label: 'Calculator' },
-  converter:        { icon: <ArrowLeftRight size={16} />,  label: 'Converter' },
-  pomodoro:         { icon: <Timer size={16} />,           label: 'Pomodoro' },
-  'voice-recorder': { icon: <Mic size={16} />,            label: 'Voice Recorder' },
+const PANEL_ICONS: Record<PanelId, { icon: React.ReactNode }> = {
+  calculator:       { icon: <Calculator size={16} /> },
+  converter:        { icon: <ArrowLeftRight size={16} /> },
+  pomodoro:         { icon: <Timer size={16} /> },
+  'voice-recorder': { icon: <Mic size={16} /> },
 };
 
 export function MinimizedPanelsTray() {
+  const { t } = useI18n();
   const panels = useFloatingPanelsStore((s) => s.panels);
   const restorePanel = useFloatingPanelsStore((s) => s.restorePanel);
 
@@ -29,6 +31,8 @@ export function MinimizedPanelsTray() {
 
   return (
     <div
+      role="toolbar"
+      aria-label={t('floating.tray')}
       style={{
         position: 'fixed',
         bottom: 52,
@@ -40,11 +44,13 @@ export function MinimizedPanelsTray() {
     >
       {minimized.map(([id]) => {
         const meta = PANEL_ICONS[id];
+        const panelLabel = t(`floating.restore.${id === 'voice-recorder' ? 'voiceRecorder' : id}`);
         return (
           <button
             key={id}
             onClick={() => restorePanel(id)}
-            title={meta.label}
+            title={panelLabel}
+            aria-label={t('floating.restorePanel', { panel: panelLabel })}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 36, height: 36,

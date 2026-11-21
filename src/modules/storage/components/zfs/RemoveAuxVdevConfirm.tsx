@@ -17,10 +17,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Zap } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, ZFS_COPY } from '../ZfsHelp';
+import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, WarnBox } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function RemoveAuxVdevConfirm({ pool, vdevName, vdevLabel, onClose }: { pool: string; vdevName: string; vdevLabel: string; onClose: () => void }) {
+  const { t } = useI18n();
   const demo = useStorageStore((s) => s.zfs_demo);
   const removeAux = useStorageStore((s) => s.zfsRemoveAuxVdev);
   const [busy, setBusy] = useState(false);
@@ -28,21 +30,17 @@ export function RemoveAuxVdevConfirm({ pool, vdevName, vdevLabel, onClose }: { p
     setBusy(true);
     try {
       await removeAux(pool, vdevName);
-      toast.success(`«${vdevLabel}» retirado de "${pool}"${demo ? ' (demo)' : ''}`);
+      toast.success(t('storage.aux.removed', { device: vdevLabel, pool, demo: demo ? t('storage.common.demoSuffix') : '' }));
       onClose();
     } catch (e) {
-      toast.error(`No se pudo quitar el dispositivo: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('storage.aux.removeError', { error: e instanceof Error ? e.message : String(e) }));
     } finally { setBusy(false); }
   };
   return (
-    <ZfsModal title={`Quitar «${vdevLabel}» de "${pool}"`} icon={<Zap size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton danger disabled={busy} onClick={submit}>{busy ? 'Quitando…' : 'Quitar dispositivo'}</ZfsButton></>}>
-      <WarnBox>
-        Vas a retirar el dispositivo de aceleración <strong>«{vdevLabel}»</strong> del almacén <strong>{pool}</strong>.
-        El pool seguirá funcionando con todos sus datos, pero perderá esta aceleración hasta que vuelvas a añadir otro.
-        No se borra ningún dato.
-      </WarnBox>
-      <SectionIntro>{ZFS_COPY.cache}</SectionIntro>
+    <ZfsModal title={t('storage.aux.removeTitle', { device: vdevLabel, pool })} icon={<Zap size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton danger disabled={busy} onClick={submit}>{busy ? t('storage.aux.removeBusy') : t('storage.aux.remove')}</ZfsButton></>}>
+      <WarnBox>{t('storage.aux.removeWarning')}</WarnBox>
+      <SectionIntro>{t('storage.help.cache')}</SectionIntro>
     </ZfsModal>
   );
 }

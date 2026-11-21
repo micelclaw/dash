@@ -12,6 +12,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
+import { useI18n } from '@/i18n';
 import {
   Bold, Italic, Copy, Trash2, Palette,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
@@ -148,6 +149,7 @@ export function FloatingToolbar() {
 // ─── Single Node Toolbar ────────────────────────────────
 
 function SingleNodeToolbar({ id, onShowColors }: { id: string; onShowColors: () => void }) {
+  const { t } = useI18n();
   const node = useDiagramsStore((s) => s.nodes.find((n) => n.id === id));
   const updateNodeData = useDiagramsStore((s) => s.updateNodeData);
   const duplicateNodes = useDiagramsStore((s) => s.duplicateNodes);
@@ -161,28 +163,28 @@ function SingleNodeToolbar({ id, onShowColors }: { id: string; onShowColors: () 
   return (
     <>
       <FBtn
-        title="Bold"
+        title={t('sketches.floating.bold')}
         active={isBold}
         onClick={() => updateNodeData(id, { fontWeight: isBold ? 'normal' : 'bold' })}
       >
         <Bold size={13} />
       </FBtn>
       <FBtn
-        title="Italic"
+        title={t('sketches.floating.italic')}
         active={isItalic}
         onClick={() => updateNodeData(id, { fontStyle: isItalic ? 'normal' : 'italic' })}
       >
         <Italic size={13} />
       </FBtn>
       <FDivider />
-      <FBtn title="Color" onClick={onShowColors}>
+      <FBtn title={t('sketches.floating.color')} onClick={onShowColors}>
         <Palette size={13} />
       </FBtn>
       <FDivider />
-      <FBtn title="Duplicate" onClick={() => duplicateNodes([id])}>
+      <FBtn title={t('sketches.floating.duplicate')} onClick={() => duplicateNodes([id])}>
         <Copy size={13} />
       </FBtn>
-      <FBtn title="Delete" onClick={() => removeNode(id)} variant="danger">
+      <FBtn title={t('sketches.floating.delete')} onClick={() => removeNode(id)} variant="danger">
         <Trash2 size={13} />
       </FBtn>
     </>
@@ -192,6 +194,7 @@ function SingleNodeToolbar({ id, onShowColors }: { id: string; onShowColors: () 
 // ─── Multi-Select Toolbar ───────────────────────────────
 
 function MultiSelectToolbar({ selectedIds, onShowColors }: { selectedIds: string[]; onShowColors: () => void }) {
+  const { t } = useI18n();
   const alignNodes = useDiagramsStore((s) => s.alignNodes);
   const distributeNodes = useDiagramsStore((s) => s.distributeNodes);
   const groupNodes = useDiagramsStore((s) => s.groupNodes);
@@ -199,31 +202,31 @@ function MultiSelectToolbar({ selectedIds, onShowColors }: { selectedIds: string
 
   return (
     <>
-      <FBtn title="Align Left" onClick={() => alignNodes(selectedIds, 'left')}>
+      <FBtn title={t('sketches.floating.alignLeft')} onClick={() => alignNodes(selectedIds, 'left')}>
         <AlignStartVertical size={13} />
       </FBtn>
-      <FBtn title="Align Center" onClick={() => alignNodes(selectedIds, 'center')}>
+      <FBtn title={t('sketches.floating.alignCenter')} onClick={() => alignNodes(selectedIds, 'center')}>
         <AlignCenterVertical size={13} />
       </FBtn>
-      <FBtn title="Align Right" onClick={() => alignNodes(selectedIds, 'right')}>
+      <FBtn title={t('sketches.floating.alignRight')} onClick={() => alignNodes(selectedIds, 'right')}>
         <AlignEndVertical size={13} />
       </FBtn>
       <FDivider />
-      <FBtn title="Distribute Horizontal" onClick={() => distributeNodes(selectedIds, 'horizontal')}>
+      <FBtn title={t('sketches.floating.distributeHorizontal')} onClick={() => distributeNodes(selectedIds, 'horizontal')}>
         <ArrowLeftRight size={13} />
       </FBtn>
-      <FBtn title="Distribute Vertical" onClick={() => distributeNodes(selectedIds, 'vertical')}>
+      <FBtn title={t('sketches.floating.distributeVertical')} onClick={() => distributeNodes(selectedIds, 'vertical')}>
         <ArrowUpDown size={13} />
       </FBtn>
       <FDivider />
-      <FBtn title="Group" onClick={() => groupNodes(selectedIds)}>
+      <FBtn title={t('sketches.floating.group')} onClick={() => groupNodes(selectedIds)}>
         <Group size={13} />
       </FBtn>
-      <FBtn title="Color" onClick={onShowColors}>
+      <FBtn title={t('sketches.floating.color')} onClick={onShowColors}>
         <Palette size={13} />
       </FBtn>
       <FDivider />
-      <FBtn title="Delete All" onClick={deleteSelected} variant="danger">
+      <FBtn title={t('sketches.floating.deleteSelected')} onClick={deleteSelected} variant="danger">
         <Trash2 size={13} />
       </FBtn>
     </>
@@ -233,6 +236,7 @@ function MultiSelectToolbar({ selectedIds, onShowColors }: { selectedIds: string
 // ─── Single Edge Toolbar ────────────────────────────────
 
 function SingleEdgeToolbar({ id }: { id: string }) {
+  const { t } = useI18n();
   const edge = useDiagramsStore((s) => s.edges.find((e) => e.id === id));
   const updateEdgeAnimated = useDiagramsStore((s) => s.updateEdgeAnimated);
   const updateEdgeData = useDiagramsStore((s) => s.updateEdgeData);
@@ -245,21 +249,21 @@ function SingleEdgeToolbar({ id }: { id: string }) {
   return (
     <>
       <FBtn
-        title={edge.animated ? 'Disable Animation' : 'Enable Animation'}
+        title={t(edge.animated ? 'sketches.floating.disableAnimation' : 'sketches.floating.enableAnimation')}
         active={!!edge.animated}
         onClick={() => updateEdgeAnimated(id, !edge.animated)}
       >
         <Zap size={13} />
       </FBtn>
       <FBtn
-        title={edgeData.dashed ? 'Solid Line' : 'Dashed Line'}
+        title={t(edgeData.dashed ? 'sketches.floating.solidLine' : 'sketches.floating.dashedLine')}
         active={!!edgeData.dashed}
         onClick={() => updateEdgeData(id, { dashed: !edgeData.dashed })}
       >
         <Minus size={13} />
       </FBtn>
       <FDivider />
-      <FBtn title="Delete" onClick={() => removeEdge(id)} variant="danger">
+      <FBtn title={t('sketches.floating.delete')} onClick={() => removeEdge(id)} variant="danger">
         <Trash2 size={13} />
       </FBtn>
     </>
@@ -269,6 +273,7 @@ function SingleEdgeToolbar({ id }: { id: string }) {
 // ─── Color Dropdown ─────────────────────────────────────
 
 function ColorDropdown({ nodeIds, onClose }: { nodeIds: string[]; onClose: () => void }) {
+  const { t } = useI18n();
   const updateNodeData = useDiagramsStore((s) => s.updateNodeData);
 
   return (
@@ -292,6 +297,8 @@ function ColorDropdown({ nodeIds, onClose }: { nodeIds: string[]; onClose: () =>
       {COLOR_PALETTE.slice(0, 16).map((c) => (
         <button
           key={c}
+          title={t('sketches.floating.setColor', { color: c })}
+          aria-label={t('sketches.floating.setColor', { color: c })}
           onClick={() => {
             nodeIds.forEach((id) => updateNodeData(id, { color: c }));
             onClose();
@@ -330,6 +337,7 @@ function FBtn({
     <button
       onClick={onClick}
       title={title}
+      aria-label={title}
       style={{
         display: 'flex',
         alignItems: 'center',

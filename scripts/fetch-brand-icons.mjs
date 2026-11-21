@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'src', 'assets', 'brand-icons');
 
-const UA = 'micelclaw-dash-icon-vendor/1.0 (+https://micelclaw.com; contacto: vgvaldunciel@gmail.com)';
+const UA = 'micelclaw-dash-icon-vendor/1.0 (+https://micelclaw.com; contacto: legal@micelclaw.com)';
 
 /**
  * Cada entrada: { slug, service, url, filename, source }

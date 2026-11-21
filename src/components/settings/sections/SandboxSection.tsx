@@ -96,8 +96,8 @@ export function SandboxSection() {
 
   return (
     <SectionShell
-      title="Sandbox"
-      description="Run agent tools in isolated Docker containers. Per-agent overrides below and in Agent → Advanced."
+      title="Default isolation"
+      description="Global defaults inherited by agents. Individual exceptions are configured in each agent's Security settings."
       loading={loading}
       dirty={dirty}
       saving={saving}
@@ -214,7 +214,7 @@ export function SandboxSection() {
       <SandboxImageBlock />
 
       {/* Per-agent overrides table — read-only summary, edit lives in
-          Agent → Advanced. */}
+          Agent → Security. */}
       <PerAgentSandboxTable />
     </SectionShell>
   );
@@ -470,7 +470,7 @@ function DockerUnavailableMessage({ kind, detail }: { kind: string; detail?: str
 // ─── Per-agent overrides table ────────────────────────────────
 // Reads /managed-agents/:id/sandbox for each agent and renders a
 // summary row. "inherit" = no override. "✎" deep-links to the
-// Advanced tab of the agent so the user can edit there.
+// Security tab of the agent so the user can edit there.
 
 interface AgentSandboxSummary {
   id: string;
@@ -542,7 +542,7 @@ function PerAgentSandboxTable() {
         Per-agent overrides
       </h3>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 12px' }}>
-        Effective config per agent. Italic = inherits from defaults above. Click ✎ to edit in the agent's Advanced tab.
+        Configured values per agent. Italic = inherits the global defaults above. Click ✎ to edit the agent's Security settings.
       </p>
       <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         {/* Header */}
@@ -593,7 +593,7 @@ function PerAgentSandboxTable() {
               <div style={{ color, fontStyle }}>{r?.effective_workspace_access ?? '…'}</div>
               <a
                 href={`/agents?selected=${a.id}&tab=security`}
-                title="Edit in Advanced tab"
+                title="Edit agent security"
                 style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   width: 26, height: 26, borderRadius: 'var(--radius-sm)',

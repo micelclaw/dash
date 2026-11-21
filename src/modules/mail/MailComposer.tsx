@@ -16,6 +16,7 @@ import { api } from '@/services/api';
 import { toast } from 'sonner';
 import type { ComposeData, EmailAccount } from './types';
 import type { ApiListResponse } from '@/types/api';
+import { useI18n } from '@/i18n';
 
 interface Attachment {
   filename: string;
@@ -68,6 +69,7 @@ function contactEmail(c: ContactResult): string {
 }
 
 export function MailComposer({ data, onClose, onSend, accounts, inline = false }: MailComposerProps) {
+  const { t } = useI18n();
   // State
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
@@ -144,11 +146,11 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         display_name: name,
         emails: [address],
       });
-      toast.success(`Contact "${name}" saved`);
+      toast.success(t('mail.contactSaved', { name }));
     } catch {
-      toast.error('Failed to save contact');
+      toast.error(t('mail.contactSaveFailed'));
     }
-  }, []);
+  }, [t]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -166,7 +168,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           content_type: file.type || 'application/octet-stream',
         }]);
       } catch {
-        toast.error(`No se pudo adjuntar ${file.name}`);
+        toast.error(t('mail.attachmentAddFailed', { filename: file.name }));
       }
     }
     // Reset input so same file can be selected again
@@ -189,10 +191,10 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         in_reply_to: data.in_reply_to,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
-      if (!silent) toast.success('Draft saved');
+      if (!silent) toast.success(t('mail.draftSaved'));
       return true;
     } catch (err: any) {
-      if (!silent) toast.error(err?.message || 'Failed to save draft');
+      if (!silent) toast.error(err?.message || t('mail.draftSaveFailed'));
       return false;
     }
   };
@@ -228,10 +230,10 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         has_attachments: attachments.length > 0,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
-      toast.success('Email sent');
+      toast.success(t('mail.sentSuccess'));
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send email');
+      toast.error(err?.message || t('mail.sendFailed'));
       setSending(false);
     }
   };
@@ -243,23 +245,23 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
     }
     // Auto-save as draft instead of discarding
     await saveDraft(true);
-    toast('Draft saved', { duration: 2000 });
+    toast(t('mail.draftSaved'), { duration: 2000 });
     onClose();
   };
 
   const handleDiscard = () => {
-    if (isDirty && !window.confirm('Discard this email? It will not be saved.')) return;
+    if (isDirty && !window.confirm(t('mail.discardConfirm'))) return;
     onClose();
   };
 
   // Title text
-  let title = 'New message';
+  let title = t('mail.newMessage');
   if (data.mode === 'edit_draft') {
-    title = `Draft: ${data.subject ?? ''}`;
+    title = t('mail.draftTitle', { subject: data.subject ?? '' });
   } else if (data.mode === 'reply' || data.mode === 'reply_all') {
-    title = `Re: ${data.original_email?.subject ?? ''}`;
+    title = t('mail.replyTitle', { subject: data.original_email?.subject ?? '' });
   } else if (data.mode === 'forward') {
-    title = `Fwd: ${data.original_email?.subject ?? ''}`;
+    title = t('mail.forwardTitle', { subject: data.original_email?.subject ?? '' });
   }
 
   // Position styles
@@ -345,7 +347,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
 
       {/* From */}
       <div style={fieldRowStyle}>
-        <label style={fieldLabelStyle}>From</label>
+        <label style={fieldLabelStyle}>{t('mail.from')}</label>
         <div style={{ position: 'relative', flex: 1 }}>
           <select
             value={fromAccountId}
@@ -385,7 +387,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
 
       {/* To */}
       <ChipInput
-        label="To"
+        label={t('mail.to')}
         recipients={toRecipients}
         onRecipientsChange={setToRecipients}
         inputValue={toInput}
@@ -419,14 +421,14 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
             textDecoration: 'underline',
           }}
         >
-          {showCcBcc ? 'Ocultar Cc/Bcc' : 'Añadir Cc/Bcc'}
+          {showCcBcc ? t('mail.hideCcBcc') : t('mail.addCcBcc')}
         </button>
       </div>
 
       {/* Cc */}
       {showCcBcc && (
         <ChipInput
-          label="Cc"
+          label={t('mail.cc')}
           recipients={ccRecipients}
           onRecipientsChange={setCcRecipients}
           inputValue={ccInput}
@@ -448,7 +450,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
       {/* Bcc */}
       {showCcBcc && (
         <ChipInput
-          label="Bcc"
+          label={t('mail.bcc')}
           recipients={bccRecipients}
           onRecipientsChange={setBccRecipients}
           inputValue={bccInput}
@@ -473,7 +475,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           type="text"
           value={subject}
           onChange={e => setSubject(e.target.value)}
-          placeholder="Subject"
+          placeholder={t('mail.subject')}
           style={{
             width: '100%',
             background: 'transparent',
@@ -491,7 +493,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
       <textarea
         value={body}
         onChange={e => setBody(e.target.value)}
-        placeholder="Compose your message..."
+        placeholder={t('mail.composeMessage')}
         style={{
           flex: 1,
           padding: '8px 12px',
@@ -561,7 +563,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
       >
         <button
           onClick={() => fileInputRef.current?.click()}
-          title="Attach file"
+          title={t('mail.attachFile')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -582,7 +584,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
 
         <button
           onClick={handleDiscard}
-          title="Discard"
+          title={t('mail.discard')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -602,7 +604,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         <button
           onClick={handleSaveDraft}
           disabled={savingDraft}
-          title="Save as draft"
+          title={t('mail.saveDraft')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -619,7 +621,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           }}
         >
           <Save size={14} />
-          {savingDraft ? 'Saving...' : 'Draft'}
+          {savingDraft ? t('mail.saving') : t('mail.draft')}
         </button>
 
         <button
@@ -644,7 +646,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           }}
         >
           <Send size={14} />
-          {sending ? 'Sending...' : 'Send'}
+          {sending ? t('mail.sending') : t('mail.send')}
         </button>
       </div>
     </div>
@@ -706,6 +708,7 @@ function ChipInput({
   onSuggestionsClear,
   onSaveContact,
 }: ChipInputProps) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [saveContactMode, setSaveContactMode] = useState(false);
   const [saveContactName, setSaveContactName] = useState('');
@@ -916,7 +919,7 @@ function ChipInput({
                       ref={saveNameRef}
                       value={saveContactName}
                       onChange={(e) => setSaveContactName(e.target.value)}
-                      placeholder="Contact name"
+                      placeholder={t('mail.contactName')}
                       onMouseDown={(e) => e.stopPropagation()}
                       onKeyDown={(e) => {
                         e.stopPropagation();

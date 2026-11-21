@@ -15,6 +15,7 @@ import { useParams } from 'react-router';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Plus, Minimize2, Undo2, Redo2, Save, MoreVertical } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { DiagramToolbar } from './DiagramToolbar';
 import { DiagramCanvas } from './DiagramCanvas';
@@ -28,7 +29,26 @@ import { TabBar } from './components/TabBar';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import './diagrams.css';
 
+const MOBILE_SHAPE_LABEL_KEYS: Record<string, string> = {
+  rectangle: 'sketches.editor.mobile.shape.rectangle',
+  rounded: 'sketches.editor.mobile.shape.rounded',
+  diamond: 'sketches.editor.mobile.shape.diamond',
+  circle: 'sketches.editor.mobile.shape.circle',
+  cylinder: 'sketches.editor.mobile.shape.cylinder',
+  hexagon: 'sketches.editor.mobile.shape.hexagon',
+  cloud: 'sketches.editor.mobile.shape.cloud',
+  sticky: 'sketches.editor.mobile.shape.sticky',
+  table: 'sketches.editor.mobile.shape.table',
+  card: 'sketches.editor.mobile.shape.card',
+  triangle: 'sketches.editor.mobile.shape.triangle',
+  server: 'sketches.editor.mobile.shape.server',
+  database3d: 'sketches.editor.mobile.shape.database3d',
+  actor: 'sketches.editor.mobile.shape.actor',
+  note: 'sketches.editor.mobile.shape.note',
+};
+
 function DiagramEditorInner() {
+  const { t } = useI18n();
   const { fileId } = useParams<{ fileId?: string }>();
   const isMobile = useIsMobile();
   const undo = useDiagramsStore((s) => s.undo);
@@ -319,7 +339,7 @@ function DiagramEditorInner() {
             onMouseLeave={(e) => { (e.target as HTMLElement).style.opacity = '0.6'; }}
           >
             <Minimize2 size={14} />
-            ESC to exit
+            {t('sketches.editor.presentationExit')}
           </button>
         )}
 
@@ -343,10 +363,10 @@ function DiagramEditorInner() {
                 padding: '0 8px',
               }}
             >
-              <button onClick={undo} style={mobileBtnStyle} aria-label="Undo">
+              <button onClick={undo} style={mobileBtnStyle} aria-label={t('sketches.editor.mobile.undo')}>
                 <Undo2 size={20} />
               </button>
-              <button onClick={redo} style={mobileBtnStyle} aria-label="Redo">
+              <button onClick={redo} style={mobileBtnStyle} aria-label={t('sketches.editor.mobile.redo')}>
                 <Redo2 size={20} />
               </button>
               <button
@@ -361,14 +381,14 @@ function DiagramEditorInner() {
                   marginTop: -16,
                   boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                 }}
-                aria-label="Add Shape"
+                aria-label={t('sketches.editor.mobile.addShape')}
               >
                 <Plus size={22} />
               </button>
-              <button onClick={saveDiagram} style={mobileBtnStyle} aria-label="Save">
+              <button onClick={saveDiagram} style={mobileBtnStyle} aria-label={t('sketches.editor.mobile.save')}>
                 <Save size={20} />
               </button>
-              <button style={mobileBtnStyle} aria-label="More">
+              <button style={mobileBtnStyle} aria-label={t('sketches.editor.mobile.more')}>
                 <MoreVertical size={20} />
               </button>
             </div>
@@ -419,7 +439,7 @@ function DiagramEditorInner() {
                       touchAction: 'manipulation',
                     }}
                   >
-                    {shape.slice(0, 5)}
+                    {MOBILE_SHAPE_LABEL_KEYS[shape] ? t(MOBILE_SHAPE_LABEL_KEYS[shape]) : shape.slice(0, 5)}
                   </button>
                 ))}
               </div>

@@ -25,9 +25,10 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Boxes, Camera, ShieldAlert, ShieldCheck, Trash2, Upload, Database } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
+import { useI18n } from '@/i18n';
 import { ZfsManageBar, CreateSnapshotForm, ImportPoolModal } from './ZfsModals';
 import { ZfsPoolCard } from './ZfsPoolCard';
-import { SectionIntro, InfoTip, ZFS_COPY } from './ZfsHelp';
+import { SectionIntro, InfoTip } from './ZfsHelp';
 
 const actBtn: React.CSSProperties = {
   padding: '6px 12px', fontSize: '0.8125rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
@@ -68,53 +69,56 @@ export function healthColor(state: string): string {
 }
 
 // Salud del pool en lenguaje llano (no la etiqueta cruda de ZFS).
-export function healthLabel(state: string): string {
+type Translate = (key: string, values?: Record<string, string | number>) => string;
+
+export function healthLabel(state: string, t: Translate): string {
   const s = state.toUpperCase();
-  if (s === 'ONLINE') return 'Saludable';
-  if (s === 'DEGRADED') return 'Degradado (sigue funcionando, repáralo cuanto antes)';
-  if (s === 'SCRUBBING') return 'Verificando integridad…';
-  if (s === 'RESILVERING') return 'Reconstruyendo…';
-  if (s === 'FAULTED' || s === 'UNAVAIL') return 'Con fallo (datos en riesgo)';
-  if (s === 'SUSPENDED') return 'Suspendido';
+  if (s === 'ONLINE') return t('storage.poolcard.healthOnline');
+  if (s === 'DEGRADED') return t('storage.poolcard.healthDegraded');
+  if (s === 'SCRUBBING') return t('storage.poolcard.healthScrubbing');
+  if (s === 'RESILVERING') return t('storage.poolcard.healthRebuilding');
+  if (s === 'FAULTED' || s === 'UNAVAIL') return t('storage.poolcard.healthFaulted');
+  if (s === 'SUSPENDED') return t('storage.poolcard.healthSuspended');
   return state;
 }
 
 // Etiqueta humana del tipo de vdev (caché/log/metadatos vs vdev de datos).
-export function vdevLabel(type: string): { label: string; aux: boolean } {
-  const t = type.toLowerCase();
-  if (t === 'cache') return { label: 'Caché SSD (lectura)', aux: true };
-  if (t === 'log') return { label: 'Log SSD (escritura)', aux: true };
-  if (t === 'special') return { label: 'Metadatos (SSD)', aux: true };
-  if (t === 'spare') return { label: 'Disco de repuesto', aux: true };
-  if (t.startsWith('mirror')) return { label: 'Espejo (mirror)', aux: false };
-  if (t.startsWith('raidz3')) return { label: 'RAID-Z3', aux: false };
-  if (t.startsWith('raidz2')) return { label: 'RAID-Z2', aux: false };
-  if (t.startsWith('raidz')) return { label: 'RAID-Z1', aux: false };
+export function vdevLabel(type: string, t: Translate): { label: string; aux: boolean } {
+  const kind = type.toLowerCase();
+  if (kind === 'cache') return { label: t('storage.poolcard.vdevCache'), aux: true };
+  if (kind === 'log') return { label: t('storage.poolcard.vdevLog'), aux: true };
+  if (kind === 'special') return { label: t('storage.poolcard.vdevSpecial'), aux: true };
+  if (kind === 'spare') return { label: t('storage.poolcard.vdevSpare'), aux: true };
+  if (kind.startsWith('mirror')) return { label: t('storage.poolcard.vdevMirror'), aux: false };
+  if (kind.startsWith('raidz3')) return { label: 'RAID-Z3', aux: false };
+  if (kind.startsWith('raidz2')) return { label: 'RAID-Z2', aux: false };
+  if (kind.startsWith('raidz')) return { label: 'RAID-Z1', aux: false };
   return { label: type, aux: false };
 }
 
 // Convierte los contadores de error de un disco en texto humano.
-export function errorText(read: number, write: number, cksum: number): string | null {
+export function errorText(read: number, write: number, cksum: number, t: Translate): string | null {
   const parts: string[] = [];
-  if (read > 0) parts.push(`${read} error${read === 1 ? '' : 'es'} de lectura`);
-  if (write > 0) parts.push(`${write} error${write === 1 ? '' : 'es'} de escritura`);
-  if (cksum > 0) parts.push(`${cksum} error${cksum === 1 ? '' : 'es'} de integridad`);
+  if (read > 0) parts.push(t(read === 1 ? 'storage.poolcard.readError' : 'storage.poolcard.readErrors', { count: read }));
+  if (write > 0) parts.push(t(write === 1 ? 'storage.poolcard.writeError' : 'storage.poolcard.writeErrors', { count: write }));
+  if (cksum > 0) parts.push(t(cksum === 1 ? 'storage.poolcard.checksumError' : 'storage.poolcard.checksumErrors', { count: cksum }));
   return parts.length ? parts.join(' · ') : null;
 }
 
 // Estado de disco en lenguaje llano.
-export function diskStateLabel(state: string): string {
+export function diskStateLabel(state: string, t: Translate): string {
   const s = state.toUpperCase();
-  if (s === 'ONLINE') return 'En línea';
-  if (s === 'FAULTED') return 'Con fallo';
-  if (s === 'DEGRADED') return 'Degradado';
-  if (s === 'UNAVAIL') return 'No disponible';
-  if (s === 'REMOVED') return 'Retirado';
-  if (s === 'OFFLINE') return 'Desconectado';
+  if (s === 'ONLINE') return t('storage.poolcard.stateOnline');
+  if (s === 'FAULTED') return t('storage.poolcard.stateFaulted');
+  if (s === 'DEGRADED') return t('storage.poolcard.stateDegraded');
+  if (s === 'UNAVAIL') return t('storage.poolcard.stateUnavailable');
+  if (s === 'REMOVED') return t('storage.poolcard.stateRemoved');
+  if (s === 'OFFLINE') return t('storage.poolcard.stateOffline');
   return state;
 }
 
 export function ZfsSection() {
+  const { t, locale } = useI18n();
   const caps = useStorageStore((s) => s.zfs_capabilities);
   const pools = useStorageStore((s) => s.zfs_pools);
   const datasets = useStorageStore((s) => s.zfs_datasets);
@@ -127,8 +131,8 @@ export function ZfsSection() {
   const [importOpen, setImportOpen] = useState(false);
 
   const onDestroySnap = async (full: string) => {
-    if (!window.confirm(`¿Destruir la instantánea "${full}"?`)) return;
-    try { await destroySnap(full); toast.success('Instantánea destruida'); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); }
+    if (!window.confirm(t('storage.section.destroyConfirm', { name: full }))) return;
+    try { await destroySnap(full); toast.success(t('storage.section.snapshotDestroyed')); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); }
   };
 
   useEffect(() => { fetchZfs(); }, [fetchZfs]);
@@ -140,7 +144,7 @@ export function ZfsSection() {
     // zona (SectionHeader "Almacenamiento ZFS") ya da el título; aquí solo el motivo.
     return (
       <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-        ZFS no disponible en este entorno. Actívalo con el botón «Vista previa (demo)» de arriba.
+        {t('storage.section.unavailable')}
       </div>
     );
   }
@@ -150,7 +154,7 @@ export function ZfsSection() {
     // SectionHeader de la zona en StoragePage; aquí va solo el contenido.
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Intro didáctica de la sección */}
-      <SectionIntro>{ZFS_COPY.pool}</SectionIntro>
+      <SectionIntro>{t('storage.help.pool')}</SectionIntro>
 
       {/* Banner de degradado honesto (no zfs-hardened) */}
       {!hardened && (
@@ -160,12 +164,12 @@ export function ZfsSection() {
           borderRadius: 'var(--radius)', fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.5,
         }}>
           <ShieldAlert size={18} style={{ color: 'var(--warning, #f59e0b)', flexShrink: 0, marginTop: 1 }} />
-          <span>{caps.degraded_reason ?? 'La gestión ZFS no está disponible en este entorno.'}</span>
+          <span>{caps.degraded_reason ?? t('storage.section.degraded')}</span>
         </div>
       )}
       {hardened && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.8125rem', color: 'var(--success, #22c55e)' }}>
-          <ShieldCheck size={16} /> Gestión ZFS activa{demo ? ' (demo: los cambios son locales y no tocan el servidor)' : ' (las escrituras requieren token + aprobación)'}.
+          <ShieldCheck size={16} /> {t('storage.section.active')}{demo ? t('storage.section.demoWrites') : t('storage.section.approvedWrites')}.
         </div>
       )}
 
@@ -174,8 +178,8 @@ export function ZfsSection() {
         <ZfsManageBar />
         {caps.can_import !== false && (
           <button style={actBtn} onClick={() => setImportOpen(true)}>
-            <Upload size={14} /> Importar pool
-            <InfoTip text={ZFS_COPY.import_pool} />
+            <Upload size={14} /> {t('storage.section.import')}
+            <InfoTip text={t('storage.help.importPool')} />
           </button>
         )}
       </div>
@@ -192,27 +196,26 @@ export function ZfsSection() {
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <Database size={16} style={{ color: 'var(--mod-storage)' }} />
-            <strong style={{ fontSize: '0.9375rem', color: 'var(--text)' }}>Carpetas y discos virtuales</strong>
+            <strong style={{ fontSize: '0.9375rem', color: 'var(--text)' }}>{t('storage.section.datasets')} / {t('storage.section.volumes')}</strong>
           </div>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 12 }}>
-            Las <strong>carpetas gestionadas</strong> (datasets) son donde organizas tus datos; los
-            <strong> discos virtuales</strong> (zvols) solo se usan para máquinas virtuales o iSCSI.
+            {t('storage.section.datasetsIntro')}
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr>
-                <th style={th}>Nombre</th>
-                <th style={th}>Tipo</th>
-                <th style={th}>Usado</th>
-                <th style={th}>Disponible</th>
+                <th style={th}>{t('storage.section.datasetName')}</th>
+                <th style={th}>{t('storage.disk.type')}</th>
+                <th style={th}>{t('storage.section.used')}</th>
+                <th style={th}>{t('storage.section.available')}</th>
                 <th style={th}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    Compresión <InfoTip text="Reduce el espacio ocupado al vuelo. lz4 es rápida y casi gratis; zstd comprime más." />
+                    {t('storage.section.compression')} <InfoTip text={t('storage.dataset.compressionHint')} />
                   </span>
                 </th>
                 <th style={th}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    Cifrado <InfoTip text="Si está activo, los datos en reposo se guardan cifrados (AES-256-GCM) y no se pueden leer sin la clave." />
+                    {t('storage.section.encryption')} <InfoTip text={t('storage.poolWizard.encryptHint')} />
                   </span>
                 </th>
                 <th style={th}></th>
@@ -221,14 +224,14 @@ export function ZfsSection() {
                 {[...datasets, ...zvols].map((d) => (
                   <tr key={d.name}>
                     <td style={{ ...td, ...mono, wordBreak: 'break-all' }}>{d.name}</td>
-                    <td style={td}>{d.type === 'volume' ? 'Disco virtual' : 'Carpeta'}</td>
+                    <td style={td}>{d.type === 'volume' ? t('storage.manage.zvol').replace(/^\+\s*/, '') : t('storage.manage.dataset').replace(/^\+\s*/, '')}</td>
                     <td style={td}>{fmtBytes(d.used_bytes)}</td>
                     <td style={td}>{fmtBytes(d.available_bytes)}</td>
                     <td style={td}>{d.compression && d.compression !== 'off' ? d.compression : '—'}</td>
-                    <td style={td}>{d.encryption && d.encryption !== 'off' ? 'Sí' : '—'}</td>
+                    <td style={td}>{d.encryption && d.encryption !== 'off' ? t('storage.data.yes') : '—'}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       {caps.can_snapshot && (
-                        <button style={actBtn} onClick={() => setSnapTarget(d.name)}><Camera size={13} /> Instantánea</button>
+                        <button style={actBtn} onClick={() => setSnapTarget(d.name)}><Camera size={13} /> {t('storage.section.snapshot')}</button>
                       )}
                     </td>
                   </tr>
@@ -244,13 +247,13 @@ export function ZfsSection() {
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <Camera size={16} style={{ color: 'var(--mod-storage)' }} />
-            <strong style={{ fontSize: '0.9375rem', color: 'var(--text)' }}>Instantáneas ({snapshots.length})</strong>
-            <InfoTip text="Una instantánea (snapshot) congela el estado de una carpeta en un momento dado, casi sin ocupar espacio. Si borras o estropeas archivos, puedes volver a ese punto. Las marcadas «auto» las crea el sistema según la política de retención." />
+            <strong style={{ fontSize: '0.9375rem', color: 'var(--text)' }}>{t('storage.section.snapshots', { count: snapshots.length })}</strong>
+            <InfoTip text={t('storage.section.snapshotHelp')} />
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr>
-                <th style={th}>Instantánea</th><th style={th}>Espacio</th><th style={th}>Creada</th><th style={th}></th>
+                <th style={th}>{t('storage.section.snapshot')}</th><th style={th}>{t('storage.section.space')}</th><th style={th}>{t('storage.section.created')}</th><th style={th}></th>
               </tr></thead>
               <tbody>
                 {snapshots.slice(0, 50).map((s) => {
@@ -259,12 +262,12 @@ export function ZfsSection() {
                     <tr key={s.full_name}>
                       <td style={{ ...td, ...mono, wordBreak: 'break-all' }}>
                         {s.full_name}
-                        {auto && <span style={{ marginLeft: 6, fontSize: '0.625rem', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px' }}>auto</span>}
+                        {auto && <span style={{ marginLeft: 6, fontSize: '0.625rem', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px' }}>{t('storage.section.auto')}</span>}
                       </td>
                       <td style={td}>{fmtBytes(s.used_bytes)}</td>
-                      <td style={td}>{s.creation ? new Date(s.creation * 1000).toLocaleString() : '—'}</td>
+                      <td style={td}>{s.creation ? new Date(s.creation * 1000).toLocaleString(locale) : '—'}</td>
                       <td style={{ ...td, textAlign: 'right' }}>
-                        {caps.can_snapshot && <button style={{ ...actBtn, color: 'var(--error,#ef4444)', padding: '5px 9px' }} onClick={() => onDestroySnap(s.full_name)}><Trash2 size={13} /></button>}
+                        {caps.can_snapshot && <button aria-label={t('storage.section.destroy')} title={t('storage.section.destroy')} style={{ ...actBtn, color: 'var(--error,#ef4444)', padding: '5px 9px' }} onClick={() => onDestroySnap(s.full_name)}><Trash2 size={13} /></button>}
                       </td>
                     </tr>
                   );
@@ -279,7 +282,7 @@ export function ZfsSection() {
       {hardened && pools.length === 0 && !demo && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', color: 'var(--text-dim)', padding: 12 }}>
           <Boxes size={16} />
-          Todavía no hay ningún almacén. Crea el primero con «+ Crear almacén» (requiere token + aprobación).
+          {t('storage.section.noPools')}
         </div>
       )}
 

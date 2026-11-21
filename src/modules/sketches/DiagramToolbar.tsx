@@ -32,24 +32,25 @@ import { useAutoLayout, type LayoutDirection } from './hooks/use-auto-layout';
 import { useElkLayout } from './hooks/use-elk-layout';
 import { api } from '@/services/api';
 import type { DiagramFile } from './types';
+import { useI18n } from '@/i18n';
 
 // ─── Layout Options ─────────────────────────────────────
 
-const LAYOUT_OPTIONS: { direction: LayoutDirection; label: string; icon: typeof ArrowDown }[] = [
-  { direction: 'TB', label: 'Top \u2192 Bottom', icon: ArrowDown },
-  { direction: 'LR', label: 'Left \u2192 Right', icon: ArrowRight },
-  { direction: 'BT', label: 'Bottom \u2192 Top', icon: ArrowUp },
-  { direction: 'RL', label: 'Right \u2192 Left', icon: ArrowLeft },
+const LAYOUT_OPTIONS: { direction: LayoutDirection; labelKey: string; icon: typeof ArrowDown }[] = [
+  { direction: 'TB', labelKey: 'sketches.diagramToolbar.layout.topBottom', icon: ArrowDown },
+  { direction: 'LR', labelKey: 'sketches.diagramToolbar.layout.leftRight', icon: ArrowRight },
+  { direction: 'BT', labelKey: 'sketches.diagramToolbar.layout.bottomTop', icon: ArrowUp },
+  { direction: 'RL', labelKey: 'sketches.diagramToolbar.layout.rightLeft', icon: ArrowLeft },
 ];
 
 // ─── Template Types ─────────────────────────────────────
 
 const TEMPLATE_TYPES = [
-  { type: 'flowchart', label: 'Flowchart' },
-  { type: 'orgchart', label: 'Org Chart' },
-  { type: 'erd', label: 'Entity Relationship' },
-  { type: 'mindmap', label: 'Mind Map' },
-  { type: 'architecture', label: 'Architecture' },
+  { type: 'flowchart', labelKey: 'sketches.diagramToolbar.templates.flowchart' },
+  { type: 'orgchart', labelKey: 'sketches.diagramToolbar.templates.orgchart' },
+  { type: 'erd', labelKey: 'sketches.diagramToolbar.templates.erd' },
+  { type: 'mindmap', labelKey: 'sketches.diagramToolbar.templates.mindmap' },
+  { type: 'architecture', labelKey: 'sketches.diagramToolbar.templates.architecture' },
 ];
 
 // ─── Props ──────────────────────────────────────────────
@@ -63,6 +64,7 @@ interface DiagramToolbarProps {
 // ─── Main Toolbar ───────────────────────────────────────
 
 export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarProps) {
+  const { t } = useI18n();
   const title = useDiagramsStore((s) => s.title);
   const isDirty = useDiagramsStore((s) => s.isDirty);
   const setTitle = useDiagramsStore((s) => s.setTitle);
@@ -214,7 +216,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
 
-      if (isDirty && !window.confirm('Current diagram has unsaved changes. Import anyway?')) return;
+      if (isDirty && !window.confirm(t('sketches.diagramToolbar.confirm.import'))) return;
 
       const text = await file.text();
       const ext = file.name.split('.').pop()?.toLowerCase();
@@ -236,17 +238,17 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
           loadDiagram(diagram);
         }
       } catch {
-        alert('Failed to import file. The format may not be supported.');
+        alert(t('sketches.diagramToolbar.error.import'));
       }
     };
     input.click();
-  }, [isDirty, loadDiagram]);
+  }, [isDirty, loadDiagram, t]);
 
   // ─── Template loading ─────────────────────────────────
 
   const handleLoadTemplate = useCallback(
     async (type: string) => {
-      if (isDirty && !window.confirm('Current diagram has unsaved changes. Load template anyway?')) return;
+      if (isDirty && !window.confirm(t('sketches.diagramToolbar.confirm.template'))) return;
       setTemplateLoading(true);
       try {
         const res = await api.get<{ data: DiagramFile }>(`/diagrams/templates/${type}`);
@@ -257,7 +259,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         setTemplateLoading(false);
       }
     },
-    [isDirty, loadDiagram],
+    [isDirty, loadDiagram, t],
   );
 
   // ─── AI handlers ──────────────────────────────────────
@@ -278,7 +280,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
           setAiResult({ type: 'suggest', items: res.data.suggestions });
         }
       } catch (err) {
-        setAiError(err instanceof Error ? err.message : 'AI request failed');
+        setAiError(err instanceof Error ? err.message : t('sketches.diagramToolbar.error.ai'));
       } finally {
         setAiLoading(false);
       }
@@ -320,11 +322,11 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
       setAiMode(null);
       setAiPrompt('');
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'AI request failed');
+      setAiError(err instanceof Error ? err.message : t('sketches.diagramToolbar.error.ai'));
     } finally {
       setAiLoading(false);
     }
-  }, [aiMode, aiPrompt, aiDiagramType, aiModifySelected, loadDiagram, toDiagramFile, addToPromptHistory]);
+  }, [aiMode, aiPrompt, aiDiagramType, aiModifySelected, loadDiagram, toDiagramFile, addToPromptHistory, setAiLoading, t]);
 
   const handleExplainOrSuggest = useCallback(async (mode: 'explain' | 'suggest') => {
     setAiMode(mode);
@@ -341,18 +343,18 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         setAiResult({ type: 'suggest', items: res.data.suggestions });
       }
     } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'AI request failed');
+      setAiError(err instanceof Error ? err.message : t('sketches.diagramToolbar.error.ai'));
     } finally {
       setAiLoading(false);
     }
-  }, [toDiagramFile]);
+  }, [toDiagramFile, setAiLoading, t]);
 
   // ─── Save status label ────────────────────────────────
 
-  const saveLabel = saveStatus === 'saving' ? 'Saving...'
-    : saveStatus === 'saved' ? 'Saved'
-    : saveStatus === 'error' ? 'Save failed'
-    : isDirty ? 'Unsaved' : null;
+  const saveLabel = saveStatus === 'saving' ? t('sketches.diagramToolbar.saveStatus.saving')
+    : saveStatus === 'saved' ? t('sketches.diagramToolbar.saveStatus.saved')
+    : saveStatus === 'error' ? t('sketches.diagramToolbar.saveStatus.failed')
+    : isDirty ? t('sketches.diagramToolbar.saveStatus.unsaved') : null;
 
   const SaveStatusIcon = saveStatus === 'saving' ? Loader2
     : saveStatus === 'saved' ? CheckCircle2
@@ -377,6 +379,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <input
             type="text"
+            aria-label={t('sketches.diagramToolbar.title')}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             style={{
@@ -411,17 +414,17 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         <Divider />
 
         {/* Save button */}
-        <ToolbarButton onClick={onSave} title="Save (Ctrl+S)" disabled={saveStatus === 'saving'}>
+        <ToolbarButton onClick={onSave} title={t('sketches.diagramToolbar.save')} disabled={saveStatus === 'saving'}>
           <Save size={14} />
         </ToolbarButton>
 
         <Divider />
 
         {/* Undo / Redo */}
-        <ToolbarButton onClick={undo} disabled={undoStack.length === 0} title="Undo (Ctrl+Z)">
+        <ToolbarButton onClick={undo} disabled={undoStack.length === 0} title={t('sketches.diagramToolbar.undo')}>
           <Undo2 size={14} />
         </ToolbarButton>
-        <ToolbarButton onClick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Shift+Z)">
+        <ToolbarButton onClick={redo} disabled={redoStack.length === 0} title={t('sketches.diagramToolbar.redo')}>
           <Redo2 size={14} />
         </ToolbarButton>
 
@@ -430,48 +433,48 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         {/* Layout dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button style={dropdownBtnStyle} title="Auto Layout">
+            <button style={dropdownBtnStyle} title={t('sketches.diagramToolbar.layout.auto')}>
               <ArrowDown size={12} />
-              {!isMobile && <span>Layout</span>}
+              {!isMobile && <span>{t('sketches.diagramToolbar.layout.title')}</span>}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <MenuLabel>Hierarchical (Dagre)</MenuLabel>
-            {LAYOUT_OPTIONS.map(({ direction, label, icon: Icon }) => (
+            <MenuLabel>{t('sketches.diagramToolbar.layout.hierarchical')}</MenuLabel>
+            {LAYOUT_OPTIONS.map(({ direction, labelKey, icon: Icon }) => (
               <DropdownMenuItem key={direction} onClick={() => applyLayout(direction)}>
                 <Icon size={14} />
-                {label}
+                {t(labelKey)}
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <MenuLabel>ELK Algorithms</MenuLabel>
+            <MenuLabel>{t('sketches.diagramToolbar.layout.elk')}</MenuLabel>
             <DropdownMenuItem onClick={() => applyElkLayout('layered')}>
               <Network size={14} />
-              Layered
+              {t('sketches.diagramToolbar.layout.layered')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => applyElkLayout('mrtree')}>
               <TreePine size={14} />
-              Tree
+              {t('sketches.diagramToolbar.layout.tree')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => applyElkLayout('radial')}>
               <Circle size={14} />
-              Radial
+              {t('sketches.diagramToolbar.layout.radial')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => applyElkLayout('force')}>
               <Zap size={14} />
-              Force-Directed
+              {t('sketches.diagramToolbar.layout.force')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => applyElkLayout('stress')}>
               <GitBranch size={14} />
-              Stress
+              {t('sketches.diagramToolbar.layout.stress')}
             </DropdownMenuItem>
             {selectedCount >= 2 && (
               <>
                 <DropdownMenuSeparator />
-                <MenuLabel>Selected Only</MenuLabel>
+                <MenuLabel>{t('sketches.diagramToolbar.layout.selectedOnly')}</MenuLabel>
                 <DropdownMenuItem onClick={() => applyElkLayout('layered', true)}>
                   <Network size={14} />
-                  Layout Selected
+                  {t('sketches.diagramToolbar.layout.layoutSelected')}
                 </DropdownMenuItem>
               </>
             )}
@@ -481,15 +484,15 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         {/* Templates dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button style={dropdownBtnStyle} title="Templates" disabled={templateLoading}>
+            <button style={dropdownBtnStyle} title={t('sketches.diagramToolbar.templates.title')} disabled={templateLoading}>
               {templateLoading ? <Loader2 size={12} className="animate-spin" /> : null}
-              {!isMobile && <span>Templates</span>}
+              {!isMobile && <span>{t('sketches.diagramToolbar.templates.title')}</span>}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {TEMPLATE_TYPES.map(({ type, label }) => (
+            {TEMPLATE_TYPES.map(({ type, labelKey }) => (
               <DropdownMenuItem key={type} onClick={() => handleLoadTemplate(type)}>
-                {label}
+                {t(labelKey)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -501,28 +504,28 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         <ToolbarButton
           onClick={() => updateSettings({ showGrid: !settings.showGrid })}
           active={settings.showGrid}
-          title="Toggle Grid"
+          title={t('sketches.diagramToolbar.toggle.grid')}
         >
           <Grid3X3 size={14} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => updateSettings({ snapToGrid: !settings.snapToGrid })}
           active={settings.snapToGrid}
-          title="Snap to Grid"
+          title={t('sketches.diagramToolbar.toggle.snap')}
         >
           <Magnet size={14} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => updateSettings({ showMinimap: !settings.showMinimap })}
           active={settings.showMinimap}
-          title="Toggle Minimap"
+          title={t('sketches.diagramToolbar.toggle.minimap')}
         >
           <Map size={14} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => updateSettings({ autoSave: !settings.autoSave })}
           active={settings.autoSave}
-          title="Auto-save"
+          title={t('sketches.diagramToolbar.toggle.autoSave')}
         >
           <Save size={14} />
         </ToolbarButton>
@@ -532,13 +535,13 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         {/* Export dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button style={dropdownBtnStyle} title="Export">
+            <button style={dropdownBtnStyle} title={t('sketches.diagramToolbar.export.title')}>
               <Download size={12} />
-              {!isMobile && <span>Export</span>}
+              {!isMobile && <span>{t('sketches.diagramToolbar.export.title')}</span>}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <MenuLabel>Image</MenuLabel>
+            <MenuLabel>{t('sketches.diagramToolbar.export.image')}</MenuLabel>
             <DropdownMenuItem onClick={handleExportPNG}>
               <ImageIcon size={14} />
               PNG
@@ -552,7 +555,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
               PDF
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <MenuLabel>Data</MenuLabel>
+            <MenuLabel>{t('sketches.diagramToolbar.export.data')}</MenuLabel>
             <DropdownMenuItem onClick={handleExportJSON}>
               <Download size={14} />
               JSON
@@ -569,7 +572,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         </DropdownMenu>
 
         {/* Import button */}
-        <ToolbarButton onClick={handleImportFile} title="Import (.json, .drawio, .mmd)">
+        <ToolbarButton onClick={handleImportFile} title={t('sketches.diagramToolbar.import')}>
           <Upload size={14} />
         </ToolbarButton>
 
@@ -578,7 +581,7 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         {/* AI dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button style={aiBtnStyle} title="AI Actions">
+            <button style={aiBtnStyle} title={t('sketches.diagramToolbar.ai.title')}>
               <Sparkles size={12} />
               {!isMobile && <span>AI</span>}
               <ChevronDown size={10} />
@@ -587,20 +590,20 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
           <DropdownMenuContent align="start">
             <DropdownMenuItem onClick={() => { setAiMode('generate'); setAiPrompt(''); setAiError(''); setAiResult(null); }}>
               <Sparkles size={14} />
-              Generate Diagram
+              {t('sketches.diagramToolbar.ai.generate')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => { setAiMode('modify'); setAiPrompt(''); setAiError(''); setAiResult(null); }}>
               <Edit3 size={14} />
-              Modify Diagram
+              {t('sketches.diagramToolbar.ai.modify')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => handleExplainOrSuggest('explain')}>
               <Eye size={14} />
-              Explain Diagram
+              {t('sketches.diagramToolbar.ai.explain')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleExplainOrSuggest('suggest')}>
               <Lightbulb size={14} />
-              Suggest Improvements
+              {t('sketches.diagramToolbar.ai.suggest')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -616,20 +619,20 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
             whiteSpace: 'nowrap',
             marginRight: 4,
           }}>
-            {selectedCount} node{selectedCount !== 1 ? 's' : ''} selected
+            {selectedCount === 1 ? t('sketches.diagramToolbar.selection.one') : t('sketches.diagramToolbar.selection.many', { count: selectedCount })}
           </span>
         )}
 
         {selectedCount > 0 && <Divider />}
 
         {/* Zoom */}
-        <ToolbarButton onClick={handleZoomOut} title="Zoom Out">
+        <ToolbarButton onClick={handleZoomOut} title={t('sketches.diagramToolbar.zoom.out')}>
           <ZoomOut size={14} />
         </ToolbarButton>
         <button
           onClick={handleFitView}
           onDoubleClick={() => reactFlow.zoomTo(1, { duration: 200 })}
-          title="Fit View (double-click for 100%)"
+          title={t('sketches.diagramToolbar.zoom.fitDoubleClick')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -648,10 +651,10 @@ export function DiagramToolbar({ onSave, saveStatus, isMobile }: DiagramToolbarP
         >
           {zoomPercent}%
         </button>
-        <ToolbarButton onClick={handleZoomIn} title="Zoom In">
+        <ToolbarButton onClick={handleZoomIn} title={t('sketches.diagramToolbar.zoom.in')}>
           <ZoomIn size={14} />
         </ToolbarButton>
-        <ToolbarButton onClick={handleFitView} title="Fit View">
+        <ToolbarButton onClick={handleFitView} title={t('sketches.diagramToolbar.zoom.fit')}>
           <Maximize size={14} />
         </ToolbarButton>
       </div>

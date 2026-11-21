@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import * as syncSvc from '@/services/sync.service';
+import { useI18n } from '@/i18n';
 
 interface DavFormProps {
   type: 'caldav' | 'carddav';
@@ -23,6 +24,7 @@ interface DavFormProps {
 }
 
 export function DavForm({ type, preset, serviceName, onComplete, onCancel }: DavFormProps) {
+  const { t } = useI18n();
   const [displayName, setDisplayName] = useState(serviceName);
   const [serverUrl, setServerUrl] = useState('');
   const [username, setUsername] = useState('');
@@ -50,7 +52,7 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
       });
 
       if (!testResult.ok) {
-        setError(testResult.error || 'Connection failed. Check your credentials.');
+        setError(testResult.error || t('settings.forms.connectionFailed'));
         setSubmitting(false);
         return;
       }
@@ -68,7 +70,7 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
       });
       onComplete();
     } catch (err: any) {
-      setError(err?.message || 'Failed to connect');
+      setError(err?.message || t('settings.forms.connectionFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -98,8 +100,9 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
-        <label style={labelStyle}>Display Name</label>
+        <label htmlFor="dav-display-name" style={labelStyle}>{t('settings.connectors.displayName')}</label>
         <input
+          id="dav-display-name"
           style={inputStyle}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -108,8 +111,9 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
       </div>
 
       <div>
-        <label style={labelStyle}>Server URL</label>
+        <label htmlFor="dav-server-url" style={labelStyle}>{t('settings.connectors.serverUrl')}</label>
         <input
+          id="dav-server-url"
           style={inputStyle}
           value={serverUrl}
           onChange={(e) => setServerUrl(e.target.value)}
@@ -118,25 +122,27 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
         />
         {serviceName.includes('Synology') && (
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Use your Synology NAS address with port 5001 (HTTPS)
+            {t('settings.forms.synologyAddress')}
           </div>
         )}
       </div>
 
       <div>
-        <label style={labelStyle}>Username</label>
+        <label htmlFor="dav-username" style={labelStyle}>{t('settings.connectors.username')}</label>
         <input
+          id="dav-username"
           style={inputStyle}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder={serviceName.includes('Synology') ? 'DSM username' : 'Username'}
+          placeholder={serviceName.includes('Synology') ? t('settings.forms.dsmUsername') : t('settings.forms.username')}
           required
         />
       </div>
 
       <div>
-        <label style={labelStyle}>Password</label>
+        <label htmlFor="dav-password" style={labelStyle}>{t('settings.connectors.password')}</label>
         <input
+          id="dav-password"
           style={inputStyle}
           type="password"
           value={password}
@@ -146,21 +152,22 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
       </div>
 
       <div>
-        <label style={labelStyle}>Sync Interval</label>
+        <label htmlFor="dav-sync-interval" style={labelStyle}>{t('settings.connectors.syncInterval')}</label>
         <select
+          id="dav-sync-interval"
           value={interval}
           onChange={(e) => setInterval(Number(e.target.value))}
           style={{ ...inputStyle, cursor: 'pointer' }}
         >
-          <option value={5}>Every 5 minutes</option>
-          <option value={15}>Every 15 minutes</option>
-          <option value={30}>Every 30 minutes</option>
-          <option value={60}>Every hour</option>
+          <option value={5}>{t('settings.forms.everyFiveMinutes')}</option>
+          <option value={15}>{t('settings.forms.everyFifteenMinutes')}</option>
+          <option value={30}>{t('settings.forms.everyThirtyMinutes')}</option>
+          <option value={60}>{t('settings.connectors.everyHour')}</option>
         </select>
       </div>
 
       {error && (
-        <div style={{ fontSize: '0.75rem', color: 'var(--error)', padding: '4px 0' }}>
+        <div role="alert" style={{ fontSize: '0.75rem', color: 'var(--error)', padding: '4px 0' }}>
           {error}
         </div>
       )}
@@ -177,7 +184,7 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
             fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
           }}
         >
-          Back
+          {t('settings.forms.back')}
         </button>
         <button
           type="submit"
@@ -193,7 +200,7 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
           }}
         >
           {submitting && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-          Connect
+          {t('settings.forms.connect')}
         </button>
       </div>
     </form>

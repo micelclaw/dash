@@ -3,12 +3,13 @@
  * All rights reserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { RefreshCw, Check, X, Settings2, Monitor, Smartphone, Terminal, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import * as gwService from '@/services/gateway.service';
+import { useI18n } from '@/i18n';
 
 const PLATFORM_ICONS: Record<string, typeof Monitor> = {
   linux: Terminal,
@@ -18,16 +19,19 @@ const PLATFORM_ICONS: Record<string, typeof Monitor> = {
   android: Smartphone,
 };
 
-function formatTimestamp(ms: number | undefined): string {
-  if (!ms) return 'Never';
+function formatTimestamp(ms: number | undefined, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (!ms) return t('gateway.devices.never');
   const diff = Date.now() - ms;
-  if (diff < 60_000) return 'Just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
+  if (diff < 60_000) return t('gateway.devices.justNow');
+  if (diff < 3_600_000) return t('gateway.devices.minutesAgo', { count: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return t('gateway.devices.hoursAgo', { count: Math.floor(diff / 3_600_000) });
+  return t('gateway.devices.daysAgo', { count: Math.floor(diff / 86_400_000) });
 }
 
 export function DevicesTab() {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<gwService.PendingDevice[]>([]);
@@ -41,7 +45,7 @@ export function DevicesTab() {
       setPending(data.pending ?? []);
       setPaired(data.paired ?? []);
     } catch {
-      toast.error('Failed to load devices');
+      toast.error(tRef.current('gateway.devices.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -53,9 +57,9 @@ export function DevicesTab() {
     setActionLoading(`approve-${requestId}`);
     try {
       await gwService.approveDevice(requestId);
-      toast.success('Device approved');
+      toast.success(t('gateway.devices.approved'));
       fetchDevices();
-    } catch { toast.error('Failed to approve device'); }
+    } catch { toast.error(t('gateway.devices.approveFailed')); }
     finally { setActionLoading(null); }
   };
 
@@ -63,14 +67,14 @@ export function DevicesTab() {
     setActionLoading(`reject-${requestId}`);
     try {
       await gwService.rejectDevice(requestId);
-      toast.success('Device rejected');
+      toast.success(t('gateway.devices.rejected'));
       fetchDevices();
-    } catch { toast.error('Failed to reject device'); }
+    } catch { toast.error(t('gateway.devices.rejectFailed')); }
     finally { setActionLoading(null); }
   };
 
   if (loading) {
-    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading devices...</div>;
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('gateway.devices.loading')}</div>;
   }
 
   return (
@@ -79,7 +83,7 @@ export function DevicesTab() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            {paired.length} paired{pending.length > 0 ? `, ${pending.length} pending` : ''}
+            {t('gateway.devices.pairedCount', { count: paired.length })}{pending.length > 0 ? `, ${t('gateway.devices.pendingCount', { count: pending.length })}` : ''}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => navigate('/settings/devices')} style={{
@@ -88,13 +92,13 @@ export function DevicesTab() {
               borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-dim)',
               fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
             }}>
-              <Settings2 size={14} /> Manage in Settings
+              <Settings2 size={14} /> {t('gateway.devices.manage')}
             </button>
             <button onClick={fetchDevices} style={{
               background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
               padding: '6px 8px', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center',
             }}>
-              <RefreshCw size={14} />
+              <RefreshCw size={14} aria-label={t('gateway.common.refresh')} />
             </button>
           </div>
         </div>
@@ -103,7 +107,7 @@ export function DevicesTab() {
         {pending.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Pending ({pending.length})
+              {t('gateway.devices.pending')} ({pending.length})
             </h3>
             {pending.map(dev => {
               const Icon = PLATFORM_ICONS[dev.platform] ?? Globe;
@@ -118,7 +122,7 @@ export function DevicesTab() {
                       {dev.display_name ?? dev.client_id}
                     </span>
                     <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginLeft: 6 }}>
-                      {dev.platform} · {dev.role} · {formatTimestamp(dev.created_at_ms)}
+                      {dev.platform} · {dev.role} · {formatTimestamp(dev.created_at_ms, t)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 4 }}>
@@ -127,14 +131,14 @@ export function DevicesTab() {
                       background: '#22c55e', border: 'none', borderRadius: 'var(--radius-sm)',
                       color: '#fff', fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)',
                     }}>
-                      <Check size={10} /> Approve
+                      <Check size={10} /> {t('gateway.devices.approve')}
                     </button>
                     <button onClick={() => handleReject(dev.request_id)} disabled={!!actionLoading} style={{
                       display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px',
                       background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
                       color: 'var(--text-dim)', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                     }}>
-                      <X size={10} /> Reject
+                      <X size={10} /> {t('gateway.devices.reject')}
                     </button>
                   </div>
                 </div>
@@ -145,10 +149,10 @@ export function DevicesTab() {
 
         {/* Paired */}
         <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Paired ({paired.length})
+          {t('gateway.devices.paired')} ({paired.length})
         </h3>
         {paired.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>No devices paired</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>{t('gateway.devices.empty')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {paired.map(dev => {
@@ -170,7 +174,7 @@ export function DevicesTab() {
                     </span>
                     <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 2 }}>
                       {(dev.approved_scopes ?? dev.scopes).join(', ')}
-                      {lastUsed > 0 && ` · Last used ${formatTimestamp(lastUsed)}`}
+                      {lastUsed > 0 && ` · ${t('gateway.devices.lastUsed', { time: formatTimestamp(lastUsed, t) })}`}
                     </div>
                   </div>
                 </div>

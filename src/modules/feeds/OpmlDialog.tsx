@@ -13,6 +13,7 @@
 import { useState, useRef } from 'react';
 import { X, Upload, Download, FileText, Loader2, Check, AlertCircle } from 'lucide-react';
 import { useFeedsStore } from '@/stores/feeds.store';
+import { useI18n } from '@/i18n';
 
 interface OpmlImportResult {
   imported: number;
@@ -21,6 +22,7 @@ interface OpmlImportResult {
 }
 
 export function OpmlDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<'import' | 'export'>('import');
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<OpmlImportResult | null>(null);
@@ -56,14 +58,14 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message || 'Import failed');
+      if (!res.ok) throw new Error(json.error?.message || t('feeds.importFailed'));
       setResult(json.data);
 
       // Refresh feeds
       fetchFeeds();
       fetchUnreadCounts();
     } catch (err: any) {
-      setError(err.message || 'Import failed');
+      setError(err.message || t('feeds.importFailed'));
     } finally {
       setImporting(false);
     }
@@ -77,7 +79,7 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
 
-      if (!res.ok) throw new Error('Export failed');
+      if (!res.ok) throw new Error(t('feeds.exportFailed'));
       const xml = await res.text();
       const blob = new Blob([xml], { type: 'application/xml' });
       const url = URL.createObjectURL(blob);
@@ -87,7 +89,7 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      setError(err.message || 'Export failed');
+      setError(err.message || t('feeds.exportFailed'));
     }
   };
 
@@ -99,8 +101,8 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-          <h3 className="text-sm font-medium text-[var(--text)]">OPML Import / Export</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)]">
+          <h3 className="text-sm font-medium text-[var(--text)]">{t('feeds.opmlTitle')}</h3>
+          <button onClick={onClose} aria-label={t('feeds.closeDialog')} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)]">
             <X size={16} />
           </button>
         </div>
@@ -111,13 +113,13 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
             className={`flex-1 px-4 py-2 text-xs font-medium ${mode === 'import' ? 'text-[var(--amber)] border-b-2 border-[var(--amber)]' : 'text-[var(--text-dim)]'}`}
             onClick={() => { setMode('import'); setResult(null); setError(null); }}
           >
-            <Upload size={14} className="inline mr-1" /> Import
+            <Upload size={14} className="inline mr-1" /> {t('feeds.import')}
           </button>
           <button
             className={`flex-1 px-4 py-2 text-xs font-medium ${mode === 'export' ? 'text-[var(--amber)] border-b-2 border-[var(--amber)]' : 'text-[var(--text-dim)]'}`}
             onClick={() => { setMode('export'); setResult(null); setError(null); }}
           >
-            <Download size={14} className="inline mr-1" /> Export
+            <Download size={14} className="inline mr-1" /> {t('feeds.export')}
           </button>
         </div>
 
@@ -129,7 +131,7 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
               <label className="flex flex-col items-center gap-2 p-6 border-2 border-dashed border-[var(--border)] rounded-lg cursor-pointer hover:border-[var(--amber)] transition-colors">
                 <FileText size={24} className="text-[var(--text-dim)]" />
                 <span className="text-xs text-[var(--text-dim)]">
-                  {fileName || 'Click to select .opml or .xml file'}
+                  {fileName || t('feeds.pickOpml')}
                 </span>
                 <input
                   ref={fileRef}
@@ -146,21 +148,21 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
                 className="w-full py-2 text-sm bg-[var(--amber)] text-black rounded font-medium hover:bg-[var(--amber-hover)] disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                {importing ? 'Importing...' : 'Import'}
+                {importing ? t('feeds.importing') : t('feeds.import')}
               </button>
 
               {/* Result */}
               {result && (
                 <div className="p-3 rounded bg-[var(--surface)] border border-[var(--border)] space-y-1">
                   <p className="text-xs text-[var(--success)] flex items-center gap-1">
-                    <Check size={12} /> Imported: {result.imported}
+                    <Check size={12} /> {t('feeds.imported', { count: result.imported })}
                   </p>
                   {result.skipped > 0 && (
-                    <p className="text-xs text-[var(--text-dim)]">Skipped (duplicates): {result.skipped}</p>
+                    <p className="text-xs text-[var(--text-dim)]">{t('feeds.skipped', { count: result.skipped })}</p>
                   )}
                   {result.errors.length > 0 && (
                     <div className="text-xs text-[var(--error)]">
-                      <p className="flex items-center gap-1"><AlertCircle size={12} /> Errors: {result.errors.length}</p>
+                      <p className="flex items-center gap-1"><AlertCircle size={12} /> {t('feeds.importErrors', { count: result.errors.length })}</p>
                       {result.errors.slice(0, 3).map((err, i) => (
                         <p key={i} className="ml-4 truncate">{err}</p>
                       ))}
@@ -172,13 +174,13 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <p className="text-xs text-[var(--text-dim)]">
-                Export all your feed subscriptions as an OPML file. You can use this to back up your feeds or import them into another reader.
+                {t('feeds.exportDescription')}
               </p>
               <button
                 onClick={handleExport}
                 className="w-full py-2 text-sm bg-[var(--amber)] text-black rounded font-medium hover:bg-[var(--amber-hover)] flex items-center justify-center gap-2"
               >
-                <Download size={14} /> Download OPML
+                <Download size={14} /> {t('feeds.downloadOpml')}
               </button>
             </>
           )}

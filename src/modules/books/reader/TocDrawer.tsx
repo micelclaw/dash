@@ -19,6 +19,7 @@ import { ListX } from 'lucide-react';
 import type { FoliateTocItem } from '@/vendor/foliate-js/view.js';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useI18n } from '@/i18n';
 
 export interface TocDrawerProps {
   open: boolean;
@@ -83,6 +84,7 @@ export function TocDrawer({
   currentHref,
   onNavigate,
 }: TocDrawerProps) {
+  const { t } = useI18n();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" style={{ width: 320 }} aria-describedby={undefined}>
@@ -92,15 +94,15 @@ export function TocDrawer({
               {bookTitle}
             </h2>
             <p className="text-xs" style={{ color: 'var(--text-dim)' }}>
-              Table of contents
+              {t('books.tableOfContents')}
             </p>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {toc.length === 0 ? (
               <EmptyState
                 icon={ListX}
-                title="No table of contents"
-                description="This book does not include navigation entries."
+                title={t('books.noToc')}
+                description={t('books.noTocHint')}
               />
             ) : (
               <TocList items={toc} depth={0} currentHref={currentHref} onNavigate={onNavigate} />

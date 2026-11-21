@@ -10,18 +10,18 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { updateAgentModel } from '@/services/agents-admin.service';
 import type { ManagedAgent } from '@/modules/agents/types';
 import type { GatewayModel, CatalogModel } from '../../types';
 import { describeCredentialError, isProviderNotAuthenticated, providerFromAuthError } from '../../lib/credential-errors';
-import { loadsIntoVram } from './constants';
+import { useGatewayModelAddStore } from '@/stores/gateway-model-add.store';
 
 // Mutaciones de modelos (asignar a agente, add, remove, borrado en disco) +
 // el estado de progreso asociado. La UI del tab solo consume handlers y flags.
-export function useModelMutations({ addModel, removeModel, queueRemoveModel, fetchModels, fetchCatalog, fetchCustomProviders, onNeedsCredential, onAgentsChanged }: {
+export function useModelMutations({ removeModel, queueRemoveModel, fetchModels, fetchCatalog, fetchCustomProviders, onNeedsCredential, onAgentsChanged }: {
   addModel: (key: string) => Promise<void>;
   /** Borrado inmediato (delete-from-disk); el Remove normal va por la cola. */
   removeModel: (key: string) => Promise<void>;
@@ -37,10 +37,22 @@ export function useModelMutations({ addModel, removeModel, queueRemoveModel, fet
   onAgentsChanged?: () => void;
 }) {
   const [mutatingModel, setMutatingModel] = useState<string | null>(null);
-  const [addingKey, setAddingKey] = useState<string | null>(null);  // +Add en curso → la tarjeta se vuelve barra de carga (VRAM)
-  const [addProgress, setAddProgress] = useState(0);                // 0..100 fake-progress de esa barra
+  // El progreso de alta pertenece al store y es independiente por modelo.
+  const startModelAdd = useGatewayModelAddStore((state) => state.startModelAdd);
+  // Props legacy de ProviderModelsView: la fila ahora conserva su forma durante el alta.
+  const addingKey: string | null = null;
+  const addProgress = 0;
   // Asignación modelo→agente en vuelo (spinner en la fila del popover).
   const [assigning, setAssigning] = useState<{ model: string; agentId: string } | null>(null);
+
+  // El editor custom necesita la definición recién guardada, pero ese
+  // enriquecimiento no retrasa la confirmación de la fila.
+  useEffect(() => useGatewayModelAddStore.subscribe((state, previous) => {
+    for (const [key, operation] of Object.entries(state.modelAddOperations)) {
+      if (operation.kind === 'add-with-config' && operation.state === 'succeeded'
+        && previous.modelAddOperations[key]?.state !== 'succeeded') fetchCustomProviders();
+    }
+  }), [fetchCustomProviders]);
 
   const handleAssignAgent = async (agent: ManagedAgent, model: GatewayModel) => {
     const key = model.id || `${model.provider}/${model.model}`;
@@ -61,39 +73,18 @@ export function useModelMutations({ addModel, removeModel, queueRemoveModel, fet
     }
   };
 
-  // Barra de carga (tarjeta entera) durante un +Add que carga el modelo en VRAM.
-  // Ollama no expone % de carga en VRAM → fake-progress suave 0→90% + remate a 100%.
-  const startAddProgress = (key: string): ReturnType<typeof setInterval> => {
-    setAddingKey(key);
-    setAddProgress(8);
-    return setInterval(() => setAddProgress((p) => (p >= 90 ? 90 : p + 6)), 350);
-  };
-  const stopAddProgress = (iv: ReturnType<typeof setInterval>) => {
-    clearInterval(iv);
-    setAddProgress(100);
-    setTimeout(() => { setAddingKey(null); setAddProgress(0); }, 300);
-  };
-
   const handleAddModel = async (key: string) => {
-    const provider = key.split('/')[0] ?? '';
-    const vram = loadsIntoVram(provider);
-    setMutatingModel(key);
-    const iv = vram ? startAddProgress(key) : null;
     try {
-      await addModel(key);
-      toast.success(`Added ${key}`);
+      await startModelAdd(key);
     } catch (err) {
-      // 409 PROVIDER_NOT_AUTHENTICATED: no hay credencial → mostrar el
-      // mensaje del backend Y abrir el formulario de pegar-key del provider.
+      // Sólo errores definitivos se notifican aquí. Un transporte incierto
+      // conserva su recibo y se consulta en la fila, sin repetir el POST.
       if (isProviderNotAuthenticated(err)) {
         toast.error(describeCredentialError(err, 'Provider not authenticated'));
-        onNeedsCredential?.(providerFromAuthError(err) ?? provider);
+        onNeedsCredential?.(providerFromAuthError(err) ?? key.split('/')[0] ?? '');
       } else {
         toast.error(describeCredentialError(err, 'Failed to add model'));
       }
-    } finally {
-      setMutatingModel(null);
-      if (iv) stopAddProgress(iv);
     }
   };
 
@@ -132,50 +123,24 @@ export function useModelMutations({ addModel, removeModel, queueRemoveModel, fet
     }
   };
 
-  // Add a model from a custom-provider catalog directly, WITHOUT opening the
-  // modal. Uses sensible defaults (200K ctx, 8K maxTokens) — the user can fine-
-  // tune via Edit afterwards. Decision recorded in plan 2026-05-23: NVIDIA
-  // doesn't expose context_length in /v1/models, so we'd be asking the user
-  // for info they don't have. One-click Add + Edit-when-needed is simpler.
+  // Preserva el camino add-with-config para proveedores personalizados.
+  // Los metadatos se resuelven en Core; no se inventan valores de contexto.
   const handleAddCustomModelDirect = async (provider: string, modelId: string) => {
-    const key = `${provider}/${modelId}`;
-    const vram = loadsIntoVram(provider);
-    setMutatingModel(key);
-    const iv = vram ? startAddProgress(key) : null;
     try {
-      // Sin context_window/max_tokens: el server los resuelve con datos REALES
-      // (catálogo curado, o /api/show para Ollama) en vez de los antiguos
-      // defaults inventados 200K/8192 — que dejaban la config mintiendo
-      // (contextWindow 200000 sobre un modelo de 40k). 2026-07-14.
-      await gwService.addModelWithConfig({
-        model: key,
+      await startModelAdd(`${provider}/${modelId}`, {
         provider_id: provider,
         model_id: modelId,
         name: modelId,
       });
-      toast.success(`Added ${modelId}`);
-      // Refresh catalog + providers so the row immediately flips to
-      // "Configured" with Edit/Remove actions.
-      fetchModels();
-      fetchCatalog();
-      fetchCustomProviders();
     } catch (err) {
       if (isProviderNotAuthenticated(err)) {
-        // Sin credencial → mensaje del backend + abrir el formulario de key.
         toast.error(describeCredentialError(err, 'Provider not authenticated'));
         onNeedsCredential?.(providerFromAuthError(err) ?? provider);
       } else {
-        // Probe errors (MODEL_NOT_IN_CATALOG / MODEL_NOT_SERVING / etc.) come
-        // through with a structured shape from the api client. Surface the full
-        // message so the user sees what the provider said.
         const sample = (err as { available_sample?: string[] }).available_sample;
-        const msg = describeCredentialError(err, 'Failed to add model');
         const hint = sample?.length ? ` (ej.: ${sample.slice(0, 3).join(', ')})` : '';
-        toast.error(msg + hint);
+        toast.error(describeCredentialError(err, 'Failed to add model') + hint);
       }
-    } finally {
-      setMutatingModel(null);
-      if (iv) stopAddProgress(iv);
     }
   };
 

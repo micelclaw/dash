@@ -19,10 +19,12 @@ import { ArticleList } from './ArticleList';
 import { ArticleReader } from './ArticleReader';
 import { Columns3, Columns2, CheckCheck, ArrowLeft, Menu } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 type MobileView = 'list' | 'reader';
 
 export function Component() {
+  const { t } = useI18n();
   const layout = useFeedsStore(s => s.layout);
   const setLayout = useFeedsStore(s => s.setLayout);
   const fetchArticles = useFeedsStore(s => s.fetchArticles);
@@ -149,7 +151,7 @@ export function Component() {
             type="text"
             value={filters.search || ''}
             onChange={e => setFilter('search', e.target.value || undefined)}
-            placeholder="Search..."
+            placeholder={t('feeds.search')}
             className="flex-1 px-2 py-1 text-xs bg-transparent border border-[var(--border)] rounded text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--amber)]"
           />
           <button
@@ -187,7 +189,7 @@ export function Component() {
           type="text"
           value={filters.search || ''}
           onChange={e => setFilter('search', e.target.value || undefined)}
-          placeholder="Search articles..."
+          placeholder={t('feeds.searchArticles')}
           className="flex-1 px-2 py-1 text-xs bg-transparent border border-[var(--border)] rounded text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--amber)]"
         />
 
@@ -199,9 +201,9 @@ export function Component() {
           }}
           className="px-2 py-1 text-xs bg-[var(--surface)] border border-[var(--border)] rounded text-[var(--text-dim)]"
         >
-          <option value="">All</option>
-          <option value="unread">Unread</option>
-          <option value="read">Read</option>
+          <option value="">{t('feeds.all')}</option>
+          <option value="unread">{t('feeds.unread')}</option>
+          <option value="read">{t('feeds.read')}</option>
         </select>
 
         <select
@@ -209,16 +211,16 @@ export function Component() {
           onChange={e => setFilter('contentType', e.target.value || undefined)}
           className="px-2 py-1 text-xs bg-[var(--surface)] border border-[var(--border)] rounded text-[var(--text-dim)]"
         >
-          <option value="">All types</option>
-          <option value="blog">Blog</option>
+          <option value="">{t('feeds.allTypes')}</option>
+          <option value="blog">{t('feeds.blog')}</option>
           <option value="youtube">YouTube</option>
-          <option value="podcast">Podcast</option>
+          <option value="podcast">{t('feeds.podcast')}</option>
         </select>
 
         <button
           onClick={() => markAllRead(viewMode !== 'all' && viewMode !== 'favorites' ? { feedId: viewMode } : undefined)}
           className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)] hover:text-[var(--text)]"
-          title="Mark all read (Shift+A)"
+          title={t('feeds.markAllRead')}
         >
           <CheckCheck size={16} />
         </button>
@@ -226,7 +228,7 @@ export function Component() {
         <button
           onClick={() => setLayout(layout === 'three-column' ? 'two-column' : 'three-column')}
           className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)] hover:text-[var(--text)]"
-          title={layout === 'three-column' ? 'Two column layout' : 'Three column layout'}
+          title={layout === 'three-column' ? t('feeds.twoColumns') : t('feeds.threeColumns')}
         >
           {layout === 'three-column' ? <Columns2 size={16} /> : <Columns3 size={16} />}
         </button>

@@ -19,9 +19,10 @@ import { api } from './api';
 
 export interface ApiKey {
   id: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
+  label: string;
+  key_prefix: string;
+  /** Authentication scope from Core; not a granular permission-grant list. */
+  scope: string;
   last_used_at: string | null;
   created_at: string;
 }

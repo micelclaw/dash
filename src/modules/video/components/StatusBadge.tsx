@@ -15,6 +15,7 @@ import {
   REQUEST_STATUS,
   type MediaRequest,
 } from '@/services/video.service';
+import { useI18n } from '@/i18n';
 
 export type RequestDisplayStatus = 'pending' | 'approved' | 'declined' | 'available' | 'unknown';
 
@@ -29,17 +30,18 @@ export function requestDisplayStatus(req: MediaRequest): RequestDisplayStatus {
   }
 }
 
-const STATUS_STYLES: Record<RequestDisplayStatus, { label: string; color: string }> = {
-  pending: { label: 'Pending', color: '#f59e0b' },
-  approved: { label: 'Approved', color: '#3b82f6' },
-  declined: { label: 'Declined', color: '#ef4444' },
-  available: { label: 'Available', color: '#22c55e' },
-  unknown: { label: 'Unknown', color: 'var(--text-muted)' },
+const STATUS_STYLES: Record<RequestDisplayStatus, { key: string; color: string }> = {
+  pending: { key: 'video.requestPending', color: '#f59e0b' },
+  approved: { key: 'video.requestApproved', color: '#3b82f6' },
+  declined: { key: 'video.requestDeclined', color: '#ef4444' },
+  available: { key: 'video.requestAvailable', color: '#22c55e' },
+  unknown: { key: 'video.requestUnknown', color: 'var(--text-muted)' },
 };
 
 /** Small colored pill for a Jellyseerr request status. */
 export function StatusBadge({ status }: { status: RequestDisplayStatus }) {
-  const { label, color } = STATUS_STYLES[status];
+  const { t } = useI18n();
+  const { key, color } = STATUS_STYLES[status];
   return (
     <span
       style={{
@@ -66,7 +68,7 @@ export function StatusBadge({ status }: { status: RequestDisplayStatus }) {
           flexShrink: 0,
         }}
       />
-      {label}
+      {t(key)}
     </span>
   );
 }

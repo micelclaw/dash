@@ -14,6 +14,7 @@ import { entityTypeColor, entityTypeShape, communityColor, linkColor, linkDashAr
 import { svgShapePath } from './graph-svg-shapes';
 import { GRAPH_RECORD_TYPES } from '@/config/graph-domains';
 import type { GraphColorMode, GraphCommunity } from '@/types/intelligence';
+import { useI18n, hasMessage } from '@/i18n';
 
 interface GraphLegendProps {
   colorMode: GraphColorMode;
@@ -25,15 +26,15 @@ const ENTITY_TYPE_LIST = ['person', 'project', 'location', 'topic', 'organizatio
 const RECORD_TYPE_LIST = GRAPH_RECORD_TYPES; // SSOT del grafo (config/graph-domains.ts)
 
 const ENTITY_LINK_TYPES = [
-  { key: 'manual', label: 'Manual' },
-  { key: 'extracted', label: 'Extracted' },
-  { key: 'inferred', label: 'Inferred' },
-  { key: 'structural', label: 'Structural' },
+  { key: 'manual' },
+  { key: 'extracted' },
+  { key: 'inferred' },
+  { key: 'structural' },
 ];
 
 const RECORD_LINK_TYPES = [
-  { key: 'entity_link', label: 'Direct link' },
-  { key: 'co_entity', label: 'Shared entities' },
+  { key: 'entity_link' },
+  { key: 'co_entity' },
 ];
 
 function ShapeSwatch({ entityType, color: colorOverride }: { entityType: string; color?: string }) {
@@ -72,6 +73,11 @@ function LinkSwatch({ linkType }: { linkType: string }) {
 }
 
 export function GraphLegend({ colorMode, communities, mode = 'entities' }: GraphLegendProps) {
+  const { t } = useI18n();
+  const typeLabel = (type: string) => {
+    const key = `graph.type.${type}`;
+    return hasMessage(key) ? t(key) : type;
+  };
   const isRecords = mode === 'records';
   const typeList = isRecords ? RECORD_TYPE_LIST : ENTITY_TYPE_LIST;
   const linkTypes = isRecords ? RECORD_LINK_TYPES : ENTITY_LINK_TYPES;
@@ -100,10 +106,10 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
       {colorMode === 'community' ? (
         <>
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
-            Comunidades
+            {t('graph.legend.communities')}
           </div>
           {topCommunities.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)' }}>Sin comunidades calculadas</div>
+            <div style={{ color: 'var(--text-muted)' }}>{t('graph.legend.none')}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 280, overflowY: 'auto' }}>
               {topCommunities.map(c => (
@@ -115,7 +121,7 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
               ))}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <span style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0, background: communityColor(null), border: `1px solid ${communityColor(null)}` }} />
-                <span style={{ color: 'var(--text-muted)' }}>Sueltas / otras</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('graph.legend.other')}</span>
               </div>
             </div>
           )}
@@ -123,7 +129,7 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
       ) : colorMode === 'heat' ? (
         <>
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
-            Heat Map
+            {t('graph.legend.heatMap')}
           </div>
           <div style={{
             height: 8,
@@ -132,20 +138,20 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
             marginBottom: 4,
           }} />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Cold</span>
-            <span>Hot</span>
+            <span>{t('graph.legend.cold')}</span>
+            <span>{t('graph.legend.hot')}</span>
           </div>
 
           {/* Las figuras siguen indicando el TIPO en modo Calor (color = heat, forma = tipo). */}
           <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
-            {isRecords ? 'Record Types' : 'Entity Types'}
+            {isRecords ? t('graph.legend.recordTypes') : t('graph.legend.entityTypes')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {typeList.map(type => (
               <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <ShapeSwatch entityType={type} color="var(--text-dim)" />
-                <span style={{ textTransform: 'capitalize' }}>{type}</span>
+                <span>{typeLabel(type)}</span>
               </div>
             ))}
           </div>
@@ -153,13 +159,13 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
       ) : (
         <>
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
-            {isRecords ? 'Record Types' : 'Entity Types'}
+            {isRecords ? t('graph.legend.recordTypes') : t('graph.legend.entityTypes')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {typeList.map(type => (
               <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <ShapeSwatch entityType={type} />
-                <span style={{ textTransform: 'capitalize' }}>{type}</span>
+                <span>{typeLabel(type)}</span>
               </div>
             ))}
           </div>
@@ -167,13 +173,13 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
           <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
 
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
-            Link Types
+            {t('graph.legend.linkTypes')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {linkTypes.map(({ key, label }) => (
+            {linkTypes.map(({ key }) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <LinkSwatch linkType={key} />
-                <span>{label}</span>
+                <span>{hasMessage(`graph.link.${key}`) ? t(`graph.link.${key}`) : key}</span>
               </div>
             ))}
           </div>

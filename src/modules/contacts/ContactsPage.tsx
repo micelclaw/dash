@@ -26,8 +26,10 @@ import { ContactsList } from './ContactsList';
 import { ContactDetail } from './ContactDetail';
 import { ContactForm } from './ContactForm';
 import type { Contact, ContactCreateInput, ContactUpdateInput } from './types';
+import { useI18n } from '@/i18n';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
 
@@ -258,7 +260,7 @@ export function Component() {
     detailPanel = (
       <EmptyState
         icon={Users}
-        title="Select a contact"
+        title={t('contacts.select')}
         description="Choose a contact from the list or create a new one"
         actions={[{ label: '+ New Contact', onClick: handleCreateContact, variant: 'primary' }]}
       />
@@ -275,7 +277,7 @@ export function Component() {
         open={confirmDeleteId !== null}
         onClose={() => setConfirmDeleteId(null)}
         onConfirm={() => { if (confirmDeleteId) void performDelete(confirmDeleteId); setConfirmDeleteId(null); }}
-        title="Delete contact"
+        title={t('contacts.delete')}
         description={(() => {
           const c = contacts.find(x => x.id === confirmDeleteId) ?? (selectedContact?.id === confirmDeleteId ? selectedContact : null);
           return c ? `Delete "${c.display_name}"? You can undo this.` : 'Delete this contact? You can undo this.';

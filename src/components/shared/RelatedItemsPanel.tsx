@@ -22,6 +22,7 @@ import { resolveEntity } from '@/config/entity-registry';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { LinkedRecord } from '@/types/links';
+import { useI18n } from '@/i18n';
 
 interface RelatedItemsPanelProps {
   links: LinkedRecord[];
@@ -37,6 +38,7 @@ interface RelatedItemsPanelProps {
 const MAX_VISIBLE = 3;
 
 export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sourceId }: RelatedItemsPanelProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [relating, setRelating] = useState(false);
@@ -45,7 +47,8 @@ export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sour
   const linkBtn = canRelate ? (
     <button
       onClick={(e) => { e.stopPropagation(); setRelating(true); }}
-      title="Relacionar con otra entidad"
+      title={t('shared.relatedItems.relate')}
+      aria-label={t('shared.relatedItems.relate')}
       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: 2 }}
       onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--amber)')}
       onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
@@ -60,7 +63,7 @@ export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sour
   if (loading) {
     return (
       <>
-        <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
+        <IntelligencePanelHeader title={t('shared.relatedItems.title')} storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
           {[1, 2, 3].map(i => (
             <div key={i} style={{ height: 32, background: 'var(--surface)', borderRadius: 4, marginBottom: 4 }} />
           ))}
@@ -73,9 +76,9 @@ export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sour
   if (links.length === 0) {
     return (
       <>
-        <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
+        <IntelligencePanelHeader title={t('shared.relatedItems.title')} storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '2px 0' }}>
-            No linked records yet
+            {t('shared.relatedItems.empty')}
           </div>
         </IntelligencePanelHeader>
         {relateModal}
@@ -88,22 +91,22 @@ export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sour
 
   return (
     <>
-    <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
+    <IntelligencePanelHeader title={t('shared.relatedItems.title')} storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
       {visible.map(rec => {
         const { Icon, color } = resolveEntity(rec.domain, undefined, rec.record as Record<string, unknown> | null);
 
         const contextItems: ContextMenuItem[] = [
           {
-            label: 'Remove relation',
+            label: t('shared.relatedItems.remove'),
             icon: Trash2,
             variant: 'danger',
             onClick: async () => {
               try {
                 await api.delete(`/links/${rec.link.id}`);
-                toast.success('Relation removed');
+                toast.success(t('shared.relatedItems.removed'));
                 window.dispatchEvent(new CustomEvent('links-changed'));
               } catch {
-                toast.error('Failed to remove relation');
+                toast.error(t('shared.relatedItems.removeFailed'));
               }
             },
           },
@@ -145,7 +148,7 @@ export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sour
             fontFamily: 'var(--font-sans)',
           }}
         >
-          Show {remaining} more...
+          {t(remaining === 1 ? 'shared.relatedItems.showMore.one' : 'shared.relatedItems.showMore.many', { count: remaining })}
         </button>
       )}
       {expanded && links.length > MAX_VISIBLE && (
@@ -157,7 +160,7 @@ export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sour
             fontFamily: 'var(--font-sans)',
           }}
         >
-          Show less
+          {t('shared.relatedItems.showLess')}
         </button>
       )}
     </IntelligencePanelHeader>

@@ -19,6 +19,7 @@ import { useInventoryStore } from '@/stores/inventory.store';
 import { daysSince, daysUntil, fmtMoney } from '@/modules/inventory/types';
 import type { InventoryProposal } from '@/modules/inventory/types';
 import { PanelCharts } from '@/modules/inventory/components/PanelCharts';
+import { useI18n } from '@/i18n';
 
 // Estado por color → tokens del sistema (coherente con pills/botones del dash).
 const GREEN = 'var(--success)';
@@ -69,17 +70,17 @@ const fieldLabel: CSSProperties = {
   display: 'block',
 };
 
-function fmtDate(date: string | null | undefined): string {
+function fmtDate(date: string | null | undefined, locale = 'en'): string {
   if (!date) return '—';
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return date;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function fmtShortDate(date: string): string {
+function fmtShortDate(date: string, locale = 'en'): string {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return date;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short' });
 }
 
 function SourceChip({ source }: { source: InventoryProposal['source'] }) {
@@ -106,6 +107,7 @@ const WIDGET_LIMIT = 6;
 
 // Pie "ver N más" para widgets acotados — navega a la tab correspondiente.
 function MoreRow({ count, onClick }: { count: number; onClick: () => void }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   return (
     <button
@@ -125,7 +127,7 @@ function MoreRow({ count, onClick }: { count: number; onClick: () => void }) {
         width: '100%',
       }}
     >
-      +{count} more →
+      +{count} {t('inventory.panel.more')} →
     </button>
   );
 }
@@ -192,6 +194,7 @@ interface ProposalEditForm {
 }
 
 function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
+  const { t, locale } = useI18n();
   const { locations, approveProposal, rejectProposal } = useInventoryStore();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -217,10 +220,10 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
     setBusy(true);
     try {
       await approveProposal(proposal.id, payload);
-      toast.success(`"${payload && typeof payload.name === 'string' ? payload.name : p.name}" added to inventory`);
+      toast.success(t('inventory.panel.addedToInventory', { name: payload && typeof payload.name === 'string' ? payload.name : p.name }));
       setEditing(false);
     } catch {
-      toast.error('Could not approve proposal');
+      toast.error(t('inventory.panel.approveFailed'));
     } finally {
       setBusy(false);
     }
@@ -242,9 +245,9 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
     setBusy(true);
     try {
       await rejectProposal(proposal.id);
-      toast.success('Proposal rejected');
+      toast.success(t('inventory.panel.rejected'));
     } catch {
-      toast.error('Could not reject proposal');
+      toast.error(t('inventory.panel.rejectFailed'));
     } finally {
       setBusy(false);
     }
@@ -252,8 +255,8 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
 
   const metaParts: string[] = [];
   if (p.purchase_price !== undefined) metaParts.push(fmtMoney(p.purchase_price, p.currency ?? 'EUR'));
-  if (p.purchase_date) metaParts.push(fmtDate(p.purchase_date));
-  if (p.warranty_until) metaParts.push(`warranty until ${fmtDate(p.warranty_until)}`);
+  if (p.purchase_date) metaParts.push(fmtDate(p.purchase_date, locale));
+  if (p.warranty_until) metaParts.push(t('inventory.panel.warrantyUntil', { date: fmtDate(p.warranty_until, locale) }));
 
   return (
     <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -268,18 +271,18 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <button style={primaryBtn} disabled={busy} onClick={() => approve()} title="Approve proposal">
-            <Check size={13} /> Approve
+          <button style={primaryBtn} disabled={busy} onClick={() => approve()} title={t('inventory.panel.approve')}>
+            <Check size={13} /> {t('inventory.panel.approve')}
           </button>
           <button
             style={{ ...secondaryBtn, padding: 6 }}
             disabled={busy}
             onClick={() => (editing ? setEditing(false) : openEdit())}
-            title="Edit before approving"
+            title={t('inventory.panel.editBeforeApprove')}
           >
             <Pencil size={13} />
           </button>
-          <button style={{ ...secondaryBtn, padding: 6 }} disabled={busy} onClick={reject} title="Reject proposal">
+          <button style={{ ...secondaryBtn, padding: 6 }} disabled={busy} onClick={reject} title={t('inventory.panel.reject')}>
             <X size={13} />
           </button>
         </div>
@@ -298,16 +301,16 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
           }}
         >
           <div>
-            <label style={fieldLabel}>Name</label>
+            <label style={fieldLabel}>{t('inventory.panel.name')}</label>
             <input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
             <div>
-              <label style={fieldLabel}>Category</label>
+              <label style={fieldLabel}>{t('inventory.panel.category')}</label>
               <input style={inputStyle} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
             </div>
             <div>
-              <label style={fieldLabel}>Purchase price</label>
+              <label style={fieldLabel}>{t('inventory.panel.purchasePrice')}</label>
               <input
                 style={inputStyle}
                 type="number"
@@ -317,9 +320,9 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
               />
             </div>
             <div>
-              <label style={fieldLabel}>Location</label>
+              <label style={fieldLabel}>{t('inventory.panel.location')}</label>
               <select style={inputStyle} value={form.location_id} onChange={e => setForm({ ...form, location_id: e.target.value })}>
-                <option value="">No location</option>
+                <option value="">{t('inventory.panel.noLocation')}</option>
                 {locations.map(loc => (
                   <option key={loc.id} value={loc.id}>
                     {loc.name}
@@ -334,15 +337,15 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
               onClick={() => setViewing(true)}
               style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--mod-inventory)', fontSize: '0.8125rem', textDecoration: 'underline' }}
             >
-              Ver el ticket de origen
+              {t('inventory.panel.viewSourceReceipt')}
             </button>
           )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button style={secondaryBtn} disabled={busy} onClick={() => setEditing(false)}>
-              Cancel
+              {t('inventory.panel.cancel')}
             </button>
             <button style={primaryBtn} disabled={busy} onClick={approveEdited}>
-              <Check size={13} /> Approve with changes
+              <Check size={13} /> {t('inventory.panel.approveChanges')}
             </button>
           </div>
         </div>
@@ -355,7 +358,7 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
         >
           <img
             src={`/api/v1/files/${sourceFileId}/download`}
-            alt="Documento de origen"
+            alt={t('inventory.panel.sourceDocument')}
             onClick={e => e.stopPropagation()}
             style={{ maxWidth: '92vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 48px rgba(0,0,0,0.6)', background: 'var(--surface)' }}
           />
@@ -363,7 +366,7 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
             <a href={`/api/v1/files/${sourceFileId}/download`} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', color: 'var(--primary, var(--amber))' }}>
               Abrir original ↗
             </a>
-            <button style={secondaryBtn} onClick={() => setViewing(false)}>Cerrar</button>
+            <button style={secondaryBtn} onClick={() => setViewing(false)}>{t('inventory.panel.close')}</button>
           </div>
         </div>
       )}
@@ -409,6 +412,7 @@ function PanelSkeleton() {
 
 // Onboarding cuando el inventario está realmente vacío (0 items, 0 propuestas).
 function EmptyOnboarding({ onAdd }: { onAdd: () => void }) {
+  const { t } = useI18n();
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 20 }}>
       <div
@@ -427,12 +431,12 @@ function EmptyOnboarding({ onAdd }: { onAdd: () => void }) {
         <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'color-mix(in srgb, var(--mod-inventory) 14%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Boxes size={24} style={{ color: 'var(--mod-inventory)' }} />
         </div>
-        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>Tu inventario está vacío</div>
+        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>{t('inventory.panel.emptyTitle')}</div>
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', maxWidth: 420 }}>
-          Añade tu primer artículo para empezar a llevar el control de tus cosas: valor, garantías, préstamos y mantenimiento.
+          {t('inventory.panel.emptyDescription')}
         </div>
         <button style={{ ...primaryBtn, padding: '8px 16px', marginTop: 4 }} onClick={onAdd}>
-          <Plus size={15} /> Añadir primer artículo
+          <Plus size={15} /> {t('inventory.panel.addFirstItem')}
         </button>
       </div>
     </div>
@@ -441,6 +445,7 @@ function EmptyOnboarding({ onAdd }: { onAdd: () => void }) {
 
 // Nota "todo en orden" cuando hay artículos pero nada pendiente ni alertas.
 function AllClearNote() {
+  const { t } = useI18n();
   return (
     <div
       style={{
@@ -456,12 +461,13 @@ function AllClearNote() {
       }}
     >
       <CheckCircle2 size={16} style={{ color: 'var(--success)', flexShrink: 0 }} />
-      Todo en orden — sin propuestas ni alertas pendientes.
+      {t('inventory.panel.allClear')}
     </div>
   );
 }
 
 export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) {
+  const { t, locale } = useI18n();
   const {
     items,
     itemsTotal,
@@ -519,9 +525,9 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
   const handleCompleteMaintenance = async (eventId: string) => {
     try {
       await completeMaintenance(eventId);
-      toast.success('Maintenance marked as completed');
+      toast.success(t('inventory.panel.maintenanceCompleted'));
     } catch {
-      toast.error('Could not complete maintenance');
+      toast.error(t('inventory.panel.maintenanceCompleteFailed'));
     }
   };
 
@@ -538,11 +544,11 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
   // único canal de información).
   const loanDotLabel = (lentAt: string | null, lentUntil: string | null): string => {
     const until = daysUntil(lentUntil);
-    if (until !== null && until < 0) return `Overdue by ${Math.abs(until)}d`;
+    if (until !== null && until < 0) return t('inventory.panel.overdueByDays', { count: Math.abs(until) });
     const days = daysSince(lentAt) ?? 0;
-    if (days > 90) return `Out for ${days}d (review)`;
-    if (days >= 30) return `Out for ${days}d`;
-    return `Recently lent (${days}d)`;
+    if (days > 90) return t('inventory.panel.outForReview', { count: days });
+    if (days >= 30) return t('inventory.panel.outForDays', { count: days });
+    return t('inventory.panel.recentlyLent', { count: days });
   };
 
   const hasValue = (valuation?.total ?? 0) > 0;
@@ -564,30 +570,30 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         <MetricCard
           icon={Boxes}
-          label="Items"
+          label={t('inventory.panel.items')}
           value={itemsTotal}
-          subtitle={itemsTotal !== items.length ? `${items.length} shown` : undefined}
+          subtitle={itemsTotal !== items.length ? t('inventory.panel.shown', { count: items.length }) : undefined}
           accentColor="var(--mod-inventory)"
         />
         <MetricCard
           icon={Coins}
-          label="Total value"
+          label={t('inventory.panel.totalValue')}
           value={fmtMoney(totalValue)}
           accentColor="var(--mod-inventory)"
         />
         <MetricCard
           icon={HandHeart}
-          label="On loan"
+            label={t('inventory.panel.onLoan')}
           value={activeLoans.length}
-          subtitle={overdueLoans > 0 ? `${overdueLoans} overdue` : undefined}
+            subtitle={overdueLoans > 0 ? t('inventory.panel.overdue', { count: overdueLoans }) : undefined}
           accentColor="var(--mod-inventory)"
         />
         {lowStockCount > 0 && (
           <MetricCard
             icon={AlertTriangle}
-            label="Low stock"
+            label={t('inventory.panel.lowStock')}
             value={lowStockCount}
-            subtitle="below min qty"
+            subtitle={t('inventory.panel.belowMinimum')}
             accentColor="var(--amber)"
           />
         )}
@@ -614,7 +620,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
             <Inbox size={15} style={{ color: 'var(--mod-inventory)' }} />
             <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-              Review queue
+              {t('inventory.panel.reviewQueue')}
             </span>
             <span
               style={{
@@ -626,7 +632,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                 padding: '1px 8px',
               }}
             >
-              {proposals.length} from your agent
+              {t('inventory.panel.fromAgent', { count: proposals.length })}
             </span>
           </div>
           {proposals.map(proposal => (
@@ -640,10 +646,10 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
           {expiring.length > 0 && (
             <WidgetCard
-              title="Expiring < 90 days"
+              title={t('inventory.panel.expiring')}
               action={
                 <button style={{ ...secondaryBtn, padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => onNavigate('catalog')}>
-                  View all
+                  {t('inventory.panel.viewAll')}
                 </button>
               }
             >
@@ -655,7 +661,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                       {item.name}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', flexShrink: 0 }}>
-                      expires {fmtDate(item.warranty_until)}
+                      {t('inventory.panel.expires', { date: fmtDate(item.warranty_until, locale) })}
                     </span>
                     {d !== null && (
                       <span
@@ -683,7 +689,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
 
           {activeLoans.length > 0 && (
             <WidgetCard
-              title="Active loans"
+              title={t('inventory.panel.activeLoans')}
               action={
                 <button style={{ ...secondaryBtn, padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => onNavigate('lending')}>
                   View all
@@ -720,10 +726,10 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
 
           {maintenance.length > 0 && (
             <WidgetCard
-              title="Upcoming maintenance"
+              title={t('inventory.panel.upcomingMaintenance')}
               action={
                 <button style={{ ...secondaryBtn, padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => onNavigate('maintenance')}>
-                  View all
+                  {t('inventory.panel.viewAll')}
                 </button>
               }
             >
@@ -733,7 +739,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                     {event.type}
                   </span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', flexShrink: 0 }}>
-                    {fmtDate(event.next_due)}
+                    {fmtDate(event.next_due, locale)}
                   </span>
                   <button
                     style={{ ...secondaryBtn, padding: '2px 8px', fontSize: '0.75rem', flexShrink: 0 }}
@@ -742,7 +748,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                       handleCompleteMaintenance(event.id);
                     }}
                   >
-                    Complete
+                    {t('inventory.panel.complete')}
                   </button>
                 </HoverRow>
               ))}
@@ -753,7 +759,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
           )}
 
           {recentMoves.length > 0 && (
-            <WidgetCard title="Recent moves">
+            <WidgetCard title={t('inventory.panel.recentMoves')}>
               {recentMoves.map(move => {
                 const delta = parseFloat(move.qty_delta);
                 const deltaColor = delta > 0 ? GREEN : delta < 0 ? RED : 'var(--text-dim)';
@@ -762,10 +768,10 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                   <HoverRow
                     key={move.id}
                     onClick={() => selectItem(move.item_id)}
-                    title={moveItem ? undefined : 'Deleted item'}
+                    title={moveItem ? undefined : t('inventory.panel.deletedItem')}
                   >
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', width: 52, flexShrink: 0 }}>
-                      {fmtShortDate(move.occurred_at)}
+                      {fmtShortDate(move.occurred_at, locale)}
                     </span>
                     <span
                       style={{
@@ -792,7 +798,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                         color: moveItem ? 'var(--text)' : 'var(--text-dim)',
                       }}
                     >
-                      {moveItem ? moveItem.name : '(deleted item)'}
+                      {moveItem ? moveItem.name : t('inventory.panel.deletedItemLabel')}
                     </span>
                     {move.created_by === 'agent' && (
                       <span
@@ -808,7 +814,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                           flexShrink: 0,
                         }}
                       >
-                        agent
+                        {t('inventory.panel.agent')}
                       </span>
                     )}
                     <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: deltaColor, flexShrink: 0 }}>

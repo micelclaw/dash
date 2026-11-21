@@ -16,10 +16,12 @@ import { useProjectsStore } from '@/stores/projects.store';
 import { tagColor } from '@/lib/tag-color';
 import { PRIORITY_COLORS } from '../utils/design-tokens';
 import type { CardFilters } from '../types';
+import { useI18n } from '@/i18n';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const;
 
 export function FilterBar() {
+  const { t } = useI18n();
   const filters = useProjectsStore((s) => s.filters);
   const setFilters = useProjectsStore((s) => s.setFilters);
   const cards = useProjectsStore((s) => s.cards);
@@ -66,7 +68,7 @@ export function FilterBar() {
         <Search size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         <input
           type="text"
-          placeholder="Filter cards..."
+          placeholder={t('projects.filterCards')}
           value={filters.search ?? ''}
           onChange={(e) => updateFilter('search', e.target.value)}
           style={{
@@ -82,8 +84,8 @@ export function FilterBar() {
         {filters.search && (
           <button
             onClick={() => updateFilter('search', '')}
-            aria-label="Clear search"
-            title="Clear search"
+            aria-label={t('projects.clearSearch')}
+            title={t('projects.clearSearch')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}
           >
             <X size={12} />
@@ -110,7 +112,7 @@ export function FilterBar() {
         }}
       >
         <Filter size={12} />
-        Filters
+        {t('projects.filters')}
         {hasActive && <span style={{ fontWeight: 600 }}>*</span>}
       </button>
 
@@ -140,20 +142,20 @@ export function FilterBar() {
 
           {/* Dependencies filter */}
           <FilterChip
-            label="Has deps"
+            label={t('projects.hasDependencies')}
             active={!!filters.has_dependencies}
             onClick={() => updateFilter('has_dependencies', !filters.has_dependencies || undefined)}
           />
 
           <FilterChip
-            label="Blocked"
+            label={t('projects.blocked')}
             active={!!filters.is_blocked}
             color="var(--error)"
             onClick={() => updateFilter('is_blocked', !filters.is_blocked || undefined)}
           />
 
           <FilterChip
-            label="Archived"
+            label={t('projects.archived')}
             active={!!filters.show_archived}
             color="var(--text-muted)"
             onClick={() => updateFilter('show_archived', !filters.show_archived || undefined)}
@@ -175,7 +177,7 @@ export function FilterBar() {
             textDecoration: 'underline',
           }}
         >
-          Clear all
+          {t('projects.clearFilters')}
         </button>
       )}
     </div>

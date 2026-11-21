@@ -15,12 +15,13 @@
 // num_thread), con estimación de VRAM/RAM EN VIVO (lib/vram-estimate). Solo para
 // modelos Ollama. Chrome + estilo tomados de CustomModelConfigModal.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Loader2, Cpu, Clock, HardDrive, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import type { OllamaModelInfo, OllamaTuningParams } from '@/services/gateway.service';
 import { estimateVram, fmtGb } from '../lib/vram-estimate';
+import { useI18n } from '@/i18n';
 
 interface Props {
   modelId: string; // tag Ollama, p.ej. 'qwen3:14b' o 'hf.co/org/repo'
@@ -30,14 +31,15 @@ interface Props {
   onSuccess: () => void;
 }
 
-const KEEP_ALIVE_OPTS = [
-  { value: '5m', label: '5 min' },
-  { value: '30m', label: '30 min' },
+type KeepAliveOption = { value: string; kind: 'literal'; label: string } | { value: string; kind: 'translated'; key: string };
+const KEEP_ALIVE_OPTS: readonly KeepAliveOption[] = [
+  { value: '5m', kind: 'literal', label: '5 min' },
+  { value: '30m', kind: 'literal', label: '30 min' },
   // Ollama "keep forever": debe ser una duración válida ('-1m') o el número -1 — NUNCA
   // el string '-1' (Go duration parser lo rechaza: `time: missing unit in duration "-1"`
   // → 400 en TODAS las peticiones al modelo). Usamos '-1m' (string, negativo = indefinido).
-  { value: '-1m', label: 'Siempre' },
-  { value: '0', label: 'Descargar al terminar' },
+  { value: '-1m', kind: 'translated', key: 'gateway.ollamaSettings.always' },
+  { value: '0', kind: 'translated', key: 'gateway.ollamaSettings.unloadAfter' },
 ];
 
 /** Normaliza el keep_alive persistido (número -1, string '-1' o '-1m') a la opción 'Siempre'. */
@@ -48,6 +50,9 @@ function normalizeKeepAlive(v: string | number | null | undefined): string {
 }
 
 export function OllamaModelSettingsModal({ modelId, modelName, initialParams, onClose, onSuccess }: Props) {
+  const { t, locale } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const [info, setInfo] = useState<OllamaModelInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -66,7 +71,7 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
     setLoading(true);
     gwService.getOllamaModelInfo(modelId)
       .then((d) => { if (alive) { setInfo(d); if (d.context_length_max && numCtx > d.context_length_max) setNumCtx(d.context_length_max); } })
-      .catch((e) => { if (alive) setLoadErr(e instanceof Error ? e.message : 'No se pudo leer el modelo'); })
+      .catch((e) => { if (alive) setLoadErr(e instanceof Error ? e.message : tRef.current('gateway.ollamaSettings.readFailed')); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,11 +93,11 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
         num_thread: numThread === '' ? null : Number(numThread),
       };
       await gwService.updateOllamaParams(modelId, params);
-      toast.success(`Ajustes guardados: ${modelName ?? modelId}`);
+      toast.success(t('gateway.ollamaSettings.saved', { model: modelName ?? modelId }));
       onSuccess();
       onClose();
     } catch (e) {
-      toast.error(`Fallo al guardar: ${e instanceof Error ? e.message : 'error'}`);
+      toast.error(t('gateway.ollamaSettings.saveFailed', { error: e instanceof Error ? e.message : 'error' }));
     } finally {
       setSaving(false);
     }
@@ -100,6 +105,18 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
 
   const isTextOnly = true; // los modelos de chat Ollama del catálogo son input:['text']
   const barColor = est == null || est.status === 'unknown' ? 'var(--text-muted)' : est.status === 'fits' ? 'var(--green, #3fb950)' : est.status === 'over' ? 'var(--red, #f85149)' : 'var(--amber)';
+  const estimateReason = !est ? '' : est.status === 'over'
+    ? est.vramTotalGb != null && est.vramUsedGb > est.vramTotalGb + 0.05
+      ? t('gateway.ollamaSettings.gpuNeeds', { layers: est.gpuLayers, used: fmtGb(est.vramUsedGb), total: fmtGb(est.vramTotalGb) })
+      : t('gateway.ollamaSettings.ramShortage', { missing: fmtGb(Math.max(0, est.ramUsedGb - (est.ramAvailGb ?? 0))), used: fmtGb(est.ramUsedGb), total: fmtGb(est.ramAvailGb ?? 0) })
+    : est.partial && est.blockCount === 0
+      ? t('gateway.ollamaSettings.approximateNoMetadata')
+      : est.status === 'unknown'
+        ? t('gateway.ollamaSettings.unknownEstimate')
+        : est.status === 'spill'
+        ? est.vramTotalGb == null ? t('gateway.ollamaSettings.noGpuSlow') : t('gateway.ollamaSettings.spill', { gpu: est.gpuLayers, total: est.blockCount })
+        : t('gateway.ollamaSettings.allGpu');
+  const fmtCount = (value: number) => value.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US');
 
   const label: React.CSSProperties = { display: 'block', fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 4 };
   const numInput: React.CSSProperties = { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', width: 100, outline: 'none' };
@@ -109,53 +126,53 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 520, padding: 24, margin: 16, maxHeight: '90vh', overflowY: 'auto' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>⚙ Ajustes Ollama · {modelName ?? modelId}</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>⚙ {t('gateway.ollamaSettings.title', { model: modelName ?? modelId })}</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4 }}><X size={18} /></button>
         </div>
 
-        {loading && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', fontSize: '0.8125rem', padding: '20px 0' }}><Loader2 size={14} className="spin" /> Leyendo metadatos del modelo…</div>}
-        {loadErr && <div style={{ color: 'var(--amber)', fontSize: '0.8125rem', marginBottom: 12 }}>⚠ {loadErr}. Puedes guardar igualmente; la estimación no estará disponible.</div>}
+        {loading && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', fontSize: '0.8125rem', padding: '20px 0' }}><Loader2 size={14} className="spin" /> {t('gateway.ollamaSettings.readingMetadata')}</div>}
+        {loadErr && <div style={{ color: 'var(--amber)', fontSize: '0.8125rem', marginBottom: 12 }}>⚠ {loadErr}. {t('gateway.ollamaSettings.saveWithoutEstimate')}</div>}
 
         {!loading && (
           <>
             {/* num_ctx */}
             <div style={{ marginBottom: 16 }}>
-              <label style={label}>📐 Contexto (num_ctx) {info?.context_length_max ? <span style={{ color: 'var(--text-muted)' }}>· máx {ctxMax.toLocaleString()}</span> : null}</label>
+              <label style={label}>📐 {t('gateway.ollamaSettings.context')} {info?.context_length_max ? <span style={{ color: 'var(--text-muted)' }}>· {t('gateway.ollamaSettings.contextMax', { count: fmtCount(ctxMax) })}</span> : null}</label>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <input type="range" min={2048} max={ctxMax} step={1024} value={Math.min(numCtx, ctxMax)} onChange={(e) => setNumCtx(parseInt(e.target.value, 10))} style={{ flex: 1 }} />
                 <input type="number" value={numCtx} min={2048} max={ctxMax} step={1024} onChange={(e) => setNumCtx(parseInt(e.target.value, 10) || 0)} style={numInput} />
               </div>
               <p style={{ fontSize: '0.6875rem', color: numCtx < 21000 ? 'var(--amber)' : 'var(--text-muted)', margin: '4px 0 0' }}>
-                {numCtx < 21000 ? '⚠ El agente necesita ~21K tokens; por debajo se trunca el prompt (SOUL/TOOLS).' : 'Ventana de contexto del modelo.'}
+                {numCtx < 21000 ? `⚠ ${t('gateway.ollamaSettings.contextWarning')}` : t('gateway.ollamaSettings.contextDescription')}
               </p>
             </div>
 
             {/* num_gpu */}
             <div style={{ marginBottom: 16 }}>
-              <label style={label}><Cpu size={11} style={{ verticalAlign: -1 }} /> Offload a GPU (num_gpu){layers ? <span style={{ color: 'var(--text-muted)' }}> · {layers} capas</span> : null}</label>
+              <label style={label}><Cpu size={11} style={{ verticalAlign: -1 }} /> {t('gateway.ollamaSettings.offloadGpu')}{layers ? <span style={{ color: 'var(--text-muted)' }}> · {t('gateway.ollamaSettings.layers', { count: layers })}</span> : null}</label>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <input type="range" min={0} max={layers || 40} step={1} value={autoGpu ? (layers || 40) : numGpu} disabled={autoGpu} onChange={(e) => setNumGpu(parseInt(e.target.value, 10))} style={{ flex: 1, opacity: autoGpu ? 0.4 : 1 }} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-                  <input type="checkbox" checked={autoGpu} onChange={(e) => setAutoGpu(e.target.checked)} /> auto
+                  <input type="checkbox" checked={autoGpu} onChange={(e) => setAutoGpu(e.target.checked)} /> {t('gateway.ollamaSettings.auto')}
                 </label>
               </div>
-              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>{autoGpu ? 'Automático: Ollama carga las capas que quepan en VRAM.' : `${numGpu} de ${layers || '?'} capas en GPU (resto en CPU/RAM).`}</p>
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>{autoGpu ? t('gateway.ollamaSettings.gpuAutoDescription') : t('gateway.ollamaSettings.gpuManualDescription', { count: numGpu, total: layers || '?' })}</p>
             </div>
 
             {/* keep_alive */}
             <div style={{ marginBottom: 16 }}>
-              <label style={label}><Clock size={11} style={{ verticalAlign: -1 }} /> Mantener cargado (keep_alive)</label>
+              <label style={label}><Clock size={11} style={{ verticalAlign: -1 }} /> {t('gateway.ollamaSettings.keepLoaded')}</label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {KEEP_ALIVE_OPTS.map((o) => (
-                  <button key={o.value} type="button" onClick={() => setKeepAlive(o.value)} style={{ background: keepAlive === o.value ? 'var(--amber-dim)' : 'var(--surface)', color: keepAlive === o.value ? 'var(--amber)' : 'var(--text-dim)', border: `1px solid ${keepAlive === o.value ? 'var(--amber)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', padding: '4px 10px', fontSize: '0.6875rem', cursor: 'pointer' }}>{o.label}</button>
+                  <button key={o.value} type="button" onClick={() => setKeepAlive(o.value)} style={{ background: keepAlive === o.value ? 'var(--amber-dim)' : 'var(--surface)', color: keepAlive === o.value ? 'var(--amber)' : 'var(--text-dim)', border: `1px solid ${keepAlive === o.value ? 'var(--amber)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', padding: '4px 10px', fontSize: '0.6875rem', cursor: 'pointer' }}>{o.kind === 'translated' ? t(o.key) : o.label}</button>
                 ))}
               </div>
-              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>"Descargar al terminar" libera VRAM para visión/fotos tras cada chat.</p>
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('gateway.ollamaSettings.loadedAfterChat')}</p>
             </div>
 
             {/* Avanzado */}
             <div style={{ marginBottom: 14 }}>
-              <button type="button" onClick={() => setAdvOpen(!advOpen)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}>{advOpen ? '▾' : '▸'} Avanzado (num_batch, num_thread)</button>
+              <button type="button" onClick={() => setAdvOpen(!advOpen)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.75rem', padding: 0 }}>{advOpen ? '▾' : '▸'} {t('gateway.ollamaSettings.advanced')}</button>
               {advOpen && (
                 <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
                   <div><label style={label}>num_batch</label><input type="number" value={numBatch} min={0} step={64} placeholder="auto" onChange={(e) => setNumBatch(e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0)} style={numInput} /></div>
@@ -166,7 +183,7 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
 
             {isTextOnly && (
               <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', margin: '0 0 14px' }}>
-                ℹ️ Modelo de texto: Fotos, digests y memoria usan modelos aparte y siguen funcionando. Solo las imágenes que pegues al agente <b>en el chat</b> necesitan un modelo de visión (Settings → image model).
+                ℹ️ {t('gateway.ollamaSettings.textModelHelp')}
               </p>
             )}
 
@@ -174,18 +191,18 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
             {est && (
               <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 12, marginBottom: 6, background: 'var(--surface)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8 }}>
-                  <span><HardDrive size={11} style={{ verticalAlign: -1 }} /> Estimación de memoria (aprox.)</span>
-                  <button type="button" onClick={refreshSnapshot} title="Re-leer VRAM/RAM disponibles ahora" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}><RefreshCw size={10} /> snapshot</button>
+                  <span><HardDrive size={11} style={{ verticalAlign: -1 }} /> {t('gateway.ollamaSettings.memoryEstimate')}</span>
+                  <button type="button" onClick={refreshSnapshot} title={t('gateway.ollamaSettings.refreshMemory')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: 3 }}><RefreshCw size={10} /> {t('gateway.ollamaSettings.snapshot')}</button>
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 10 }}>
-                  Pesos {fmtGb(est.weightsGb)} + KV@{numCtx.toLocaleString()} {fmtGb(est.kvGb)} + buffer {fmtGb(est.computeBufferGb)} = <b>{fmtGb(est.totalGb)} GB</b>
+                  {t('gateway.ollamaSettings.weights')} {fmtGb(est.weightsGb)} + {t('gateway.ollamaSettings.kv')}@{fmtCount(numCtx)} {fmtGb(est.kvGb)} + {t('gateway.ollamaSettings.buffer')} {fmtGb(est.computeBufferGb)} = <b>{fmtGb(est.totalGb)} GB</b>
                 </div>
 
                 {/* Barra VRAM */}
                 {est.vramTotalGb != null && (
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 3 }}>
-                      <span>VRAM (GPU){est.blockCount ? ` · ${est.gpuLayers}/${est.blockCount} capas` : ''}</span>
+                      <span>{t('gateway.ollamaSettings.vram')}{est.blockCount ? ` · ${t('gateway.ollamaSettings.gpuLayers', { gpu: est.gpuLayers, total: est.blockCount })}` : ''}</span>
                       <span style={{ color: est.vramUsedGb > est.vramTotalGb ? 'var(--red, #f85149)' : 'var(--text-dim)' }}>{fmtGb(est.vramUsedGb)} / {fmtGb(est.vramTotalGb)} GB</span>
                     </div>
                     <div style={{ height: 9, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
@@ -198,8 +215,8 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
                 {est.ramUsedGb > 0.05 && est.ramAvailGb != null && (
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 3 }}>
-                      <span>RAM (CPU)</span>
-                      <span style={{ color: est.ramUsedGb > est.ramAvailGb ? 'var(--red, #f85149)' : 'var(--text-dim)' }}>{fmtGb(est.ramUsedGb)} / {fmtGb(est.ramAvailGb)} GB disp.</span>
+                      <span>{t('gateway.ollamaSettings.ram')}</span>
+                      <span style={{ color: est.ramUsedGb > est.ramAvailGb ? 'var(--red, #f85149)' : 'var(--text-dim)' }}>{fmtGb(est.ramUsedGb)} / {fmtGb(est.ramAvailGb)} GB {t('gateway.ollamaSettings.available')}</span>
                     </div>
                     <div style={{ height: 9, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
                       <div style={{ width: `${Math.min(100, (est.ramUsedGb / est.ramAvailGb) * 100)}%`, height: '100%', background: est.ramUsedGb > est.ramAvailGb ? 'var(--red, #f85149)' : 'var(--amber)', transition: 'width .15s' }} />
@@ -209,11 +226,11 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
 
                 {/* Estado */}
                 <div style={{ fontSize: '0.75rem', color: barColor, fontWeight: 500 }}>
-                  {est.status === 'fits' ? '🟢 ' : est.status === 'spill' ? '🟡 ' : est.status === 'over' ? '🔴 ' : ''}{est.reason}
+                  {est.status === 'fits' ? '🟢 ' : est.status === 'spill' ? '🟡 ' : est.status === 'over' ? '🔴 ' : ''}{estimateReason}
                 </div>
-                {est.vramTotalGb == null && <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Sin GPU NVIDIA detectada.</div>}
+                {est.vramTotalGb == null && <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{t('gateway.ollamaSettings.noNvidia')}</div>}
                 <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                  Snapshot al abrir{est.ramAvailGb != null ? ` · RAM disp. ${fmtGb(est.ramAvailGb)} GB` : ''}. Ollama carga de uno en uno; si coincide con fotos/embeddings, suman. Aprox (sin KV-quant ni flash-attn).
+                  {t('gateway.ollamaSettings.freedRamSnapshot', { ram: est.ramAvailGb != null ? ` · RAM ${t('gateway.ollamaSettings.available')} ${fmtGb(est.ramAvailGb)} GB` : '' })}
                 </p>
               </div>
             )}
@@ -222,9 +239,9 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
 
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-          <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', fontSize: '0.8125rem', cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', fontSize: '0.8125rem', cursor: 'pointer' }}>{t('gateway.ollamaSettings.cancel')}</button>
           <button onClick={handleSave} disabled={saving || loading} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--amber)', color: '#000', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 16px', fontSize: '0.8125rem', fontWeight: 600, cursor: saving || loading ? 'not-allowed' : 'pointer', opacity: saving || loading ? 0.6 : 1 }}>
-            {saving && <Loader2 size={12} className="spin" />}{saving ? 'Guardando…' : '💾 Guardar'}
+            {saving && <Loader2 size={12} className="spin" />}{saving ? t('gateway.modelSetup.saving') : `💾 ${t('gateway.ollamaSettings.save')}`}
           </button>
         </div>
       </div>

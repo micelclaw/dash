@@ -16,6 +16,7 @@
 // El dash gestiona la lista entera client-side y hace PUT del array completo.
 
 import { useEffect, useMemo, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { toast } from 'sonner';
 import { Plus, Trash2, Target, Check, X, CalendarClock, Pencil } from 'lucide-react';
 import { useFinancePersonalStore, type SavingsGoal } from '@/stores/finance-personal.store';
@@ -30,16 +31,17 @@ function daysLeft(deadline: string | null): number | null {
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
 
-function fmtDeadline(deadline: string | null): string {
+function fmtDeadline(deadline: string | null, locale: string): string {
   if (!deadline) return '';
   try {
-    return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(deadline + 'T00:00:00'));
+    return new Intl.DateTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(deadline + 'T00:00:00'));
   } catch { return deadline; }
 }
 
 const inputStyle: React.CSSProperties = { padding: '8px 9px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', fontSize: 13 };
 
 function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: SavingsGoal) => void; onDelete: () => void }) {
+  const { t, locale } = useI18n();
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState(goal.name);
   const [target, setTarget] = useState(String(goal.target));
@@ -54,23 +56,23 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
   const color = done ? 'var(--mod-finance)' : overdue ? 'var(--error)' : 'var(--info)';
 
   const commit = () => {
-    const t = Number(String(target).replace(',', '.'));
+    const targetAmount = Number(String(target).replace(',', '.'));
     const s = Number(String(saved).replace(',', '.'));
-    if (!name.trim()) { toast.error('Enter a name'); return; }
-    if (!Number.isFinite(t) || t <= 0) { toast.error('Invalid target amount'); return; }
-    onPatch({ ...goal, name: name.trim(), target: Math.round(t * 100) / 100, saved: Math.max(0, Math.round((s || 0) * 100) / 100), deadline: deadline || null });
+    if (!name.trim()) { toast.error(t('finance.goals.enterName')); return; }
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) { toast.error(t('finance.goals.invalidTarget')); return; }
+    onPatch({ ...goal, name: name.trim(), target: Math.round(targetAmount * 100) / 100, saved: Math.max(0, Math.round((s || 0) * 100) / 100), deadline: deadline || null });
     setEdit(false);
   };
 
   if (edit) {
     return (
       <div style={{ background: 'var(--card)', border: '1px solid var(--info)', borderRadius: 'var(--radius-md, 6px)', padding: '12px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Goal name" style={{ ...inputStyle, flex: '1 1 180px', minWidth: 140 }} />
-        <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder="Objetivo €" title="Importe objetivo" style={{ ...inputStyle, width: 110, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-        <input value={saved} onChange={(e) => setSaved(e.target.value)} inputMode="decimal" placeholder="Ahorrado €" title="Ahorrado hasta ahora" style={{ ...inputStyle, width: 110, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-        <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="Deadline (optional)" style={{ ...inputStyle, width: 150 }} />
-        <button onClick={commit} title="Save" style={{ padding: '7px 10px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Check size={15} /></button>
-        <button onClick={() => setEdit(false)} title="Cancel" style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={15} /></button>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('finance.goals.name')} aria-label={t('finance.goals.name')} style={{ ...inputStyle, flex: '1 1 180px', minWidth: 140 }} />
+        <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder={t('finance.goals.target')} title={t('finance.goals.target')} aria-label={t('finance.goals.target')} style={{ ...inputStyle, width: 110, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
+        <input value={saved} onChange={(e) => setSaved(e.target.value)} inputMode="decimal" placeholder={t('finance.goals.saved')} title={t('finance.goals.saved')} aria-label={t('finance.goals.saved')} style={{ ...inputStyle, width: 110, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
+        <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title={t('finance.goals.deadlineOptional')} aria-label={t('finance.goals.deadlineOptional')} style={{ ...inputStyle, width: 150 }} />
+        <button onClick={commit} title={t('finance.goals.save')} aria-label={t('finance.goals.save')} style={{ padding: '7px 10px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Check size={15} /></button>
+        <button onClick={() => setEdit(false)} title={t('finance.goals.cancel')} aria-label={t('finance.goals.cancel')} style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={15} /></button>
       </div>
     );
   }
@@ -83,17 +85,17 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
             <Target size={14} style={{ color }} />
           </span>
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goal.name}</span>
-          {done && <span style={{ fontSize: 11, color: 'var(--mod-finance)', fontWeight: 600 }}>✓ conseguido</span>}
+          {done && <span style={{ fontSize: 11, color: 'var(--mod-finance)', fontWeight: 600 }}>✓ {t('finance.goals.achieved')}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {goal.deadline && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: overdue ? 'var(--error)' : 'var(--text-muted)' }}>
               <CalendarClock size={12} />
-              {dl != null && dl >= 0 ? `${dl} días` : overdue ? 'vencido' : fmtDeadline(goal.deadline)}
+              {dl != null && dl >= 0 ? t('finance.goals.daysLeft', { count: dl }) : overdue ? t('finance.goals.overdue') : fmtDeadline(goal.deadline, locale)}
             </span>
           )}
-          <button onClick={() => { setName(goal.name); setTarget(String(goal.target)); setSaved(String(goal.saved)); setDeadline(goal.deadline ?? ''); setEdit(true); }} title="Edit" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Pencil size={14} /></button>
-          <button onClick={onDelete} title="Borrar objetivo" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Trash2 size={14} /></button>
+          <button onClick={() => { setName(goal.name); setTarget(String(goal.target)); setSaved(String(goal.saved)); setDeadline(goal.deadline ?? ''); setEdit(true); }} title={t('finance.goals.edit')} aria-label={t('finance.goals.edit')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Pencil size={14} /></button>
+          <button onClick={onDelete} title={t('finance.goals.delete')} aria-label={t('finance.goals.delete')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Trash2 size={14} /></button>
         </div>
       </div>
       <div style={{ height: 8, borderRadius: 999, background: 'var(--surface-hover)', overflow: 'hidden' }}>
@@ -101,10 +103,10 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 7, fontSize: 12 }}>
         <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
-          {fmtMoney(goal.saved)} <span style={{ color: 'var(--text-muted)' }}>de {fmtMoney(goal.target)}</span>
+          {fmtMoney(goal.saved)} <span style={{ color: 'var(--text-muted)' }}>{t('finance.goals.of')} {fmtMoney(goal.target)}</span>
         </span>
         <span style={{ color: 'var(--text-muted)' }}>
-          {done ? 'done!' : `faltan ${fmtMoney(remaining)}`} · {pct}%
+          {done ? t('finance.goals.done') : t('finance.goals.remaining', { amount: fmtMoney(remaining) })} · {pct}%
         </span>
       </div>
     </div>
@@ -112,6 +114,7 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
 }
 
 function AddGoal({ onAdd }: { onAdd: (g: Omit<SavingsGoal, 'id'>) => void }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
@@ -121,32 +124,33 @@ function AddGoal({ onAdd }: { onAdd: (g: Omit<SavingsGoal, 'id'>) => void }) {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-        <Plus size={15} /> Nuevo objetivo de ahorro
+        <Plus size={15} /> {t('finance.goals.new')}
       </button>
     );
   }
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const t = Number(String(target).replace(',', '.'));
+    const targetAmount = Number(String(target).replace(',', '.'));
     const s = Number(String(saved).replace(',', '.'));
-    if (!name.trim()) { toast.error('Enter a name'); return; }
-    if (!Number.isFinite(t) || t <= 0) { toast.error('Invalid target amount'); return; }
-    onAdd({ name: name.trim(), target: Math.round(t * 100) / 100, saved: Math.max(0, Math.round((s || 0) * 100) / 100), deadline: deadline || null });
+    if (!name.trim()) { toast.error(t('finance.goals.enterName')); return; }
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) { toast.error(t('finance.goals.invalidTarget')); return; }
+    onAdd({ name: name.trim(), target: Math.round(targetAmount * 100) / 100, saved: Math.max(0, Math.round((s || 0) * 100) / 100), deadline: deadline || null });
     setName(''); setTarget(''); setSaved(''); setDeadline(''); setOpen(false);
   };
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: 12, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
-      <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. Emergency fund, Holiday…" style={{ ...inputStyle, flex: '1 1 200px', minWidth: 160 }} />
-      <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder="Objetivo €" style={{ ...inputStyle, width: 120, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-      <input value={saved} onChange={(e) => setSaved(e.target.value)} inputMode="decimal" placeholder="Ya ahorrado €" style={{ ...inputStyle, width: 120, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-      <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="Deadline (optional)" style={{ ...inputStyle, width: 150 }} />
-      <button type="submit" style={{ padding: '8px 14px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Create</button>
-      <button type="button" onClick={() => setOpen(false)} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+      <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder={t('finance.goals.nameExample')} aria-label={t('finance.goals.name')} style={{ ...inputStyle, flex: '1 1 200px', minWidth: 160 }} />
+      <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder={t('finance.goals.target')} aria-label={t('finance.goals.target')} style={{ ...inputStyle, width: 120, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
+      <input value={saved} onChange={(e) => setSaved(e.target.value)} inputMode="decimal" placeholder={t('finance.goals.saved')} aria-label={t('finance.goals.saved')} style={{ ...inputStyle, width: 120, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
+      <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title={t('finance.goals.deadlineOptional')} aria-label={t('finance.goals.deadlineOptional')} style={{ ...inputStyle, width: 150 }} />
+      <button type="submit" style={{ padding: '8px 14px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>{t('finance.goals.create')}</button>
+      <button type="button" onClick={() => setOpen(false)} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.goals.cancel')}</button>
     </form>
   );
 }
 
 export function ObjetivosAhorroSection() {
+  const { t } = useI18n();
   const { fetchGoals, saveGoals } = useFinancePersonalStore();
   const [goals, setGoals] = useState<SavingsGoal[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -167,13 +171,13 @@ export function ObjetivosAhorroSection() {
   // Persiste la lista entera (PUT) y refleja el resultado validado por el backend.
   const persist = async (next: SavingsGoal[]) => {
     const prev = goals;
-    if (prev === null) { toast.error('Todavía no se han cargado tus objetivos'); return; } // guard anti-borrado
+    if (prev === null) { toast.error(t('finance.goals.notLoaded')); return; } // guard anti-borrado
     setGoals(next); // optimista
     try {
       const saved = await saveGoals(next);
       setGoals(saved);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t save the goal');
+      toast.error(e instanceof Error ? e.message : t('finance.goals.saveFailed'));
       setGoals(prev);
       setReloadKey((k) => k + 1);
     }
@@ -190,11 +194,11 @@ export function ObjetivosAhorroSection() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 7 }}>
-          <Target size={16} style={{ color: 'var(--info)' }} /> Objetivos de ahorro
+          <Target size={16} style={{ color: 'var(--info)' }} /> {t('finance.goals.title')}
         </div>
         {totals.count > 0 && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {fmtMoney(totals.saved)} de {fmtMoney(totals.target)} · {totals.pct}%
+            {fmtMoney(totals.saved)} {t('finance.goals.of')} {fmtMoney(totals.target)} · {totals.pct}%
           </div>
         )}
       </div>
@@ -202,15 +206,15 @@ export function ObjetivosAhorroSection() {
       {goals === null ? (
         loadFailed ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-dim)', padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
-            <span>No se han podido cargar tus objetivos de ahorro. No se puede crear ni editar hasta leerlos (guardar reemplaza la lista entera).</span>
-            <button onClick={() => setReloadKey((k) => k + 1)} style={{ marginLeft: 'auto', padding: '5px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>Reintentar</button>
+            <span>{t('finance.goals.loadFailed')}</span>
+            <button onClick={() => setReloadKey((k) => k + 1)} style={{ marginLeft: 'auto', padding: '5px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>{t('finance.goals.retry')}</button>
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Loading goals…</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>{t('finance.goals.loading')}</div>
         )
       ) : goals.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 14px', background: 'var(--card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
-          Marca metas de ahorro (un viaje, un colchón de emergencia…) y sigue tu progreso. Apunta cuánto llevas ahorrado y la app calcula lo que falta y los días restantes.
+          {t('finance.goals.empty')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

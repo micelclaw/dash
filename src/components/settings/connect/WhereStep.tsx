@@ -56,10 +56,11 @@ export interface ProviderChoice {
 
 interface WhereStepProps {
   dataType: DataTypeMeta;
+  fixedProvider?: string;
   onPick: (c: ProviderChoice) => void;
 }
 
-export function WhereStep({ dataType, onPick }: WhereStepProps) {
+export function WhereStep({ dataType, onPick, fixedProvider }: WhereStepProps) {
   const [providers, setProviders] = useState<syncSvc.DataProvider[] | null>(null);
   const [verTodos, setVerTodos] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export function WhereStep({ dataType, onPick }: WhereStepProps) {
   }, [dataType.providerDomain]);
 
   const { generic, marcas } = useMemo(() => {
-    const list = providers ?? [];
+    const list = (providers ?? []).filter(p => !fixedProvider || p.slug === fixedProvider);
     // El proveedor `generic` ES la baldosa "Otro servidor": el motor puro.
     const g = list.find((p) => p.slug === 'generic') ?? null;
     const resto = list.filter((p) => p.slug !== 'generic');
@@ -95,7 +96,7 @@ export function WhereStep({ dataType, onPick }: WhereStepProps) {
       return 0;
     });
     return { generic: g, marcas: resto };
-  }, [providers]);
+  }, [providers, fixedProvider]);
 
   if (providers === null) {
     return (

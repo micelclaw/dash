@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { useI18n } from '@/i18n';
 
 const CHANNEL_TYPES = [
   { value: 'telegram', label: 'Telegram', needsToken: true },
@@ -25,6 +26,7 @@ interface AddChannelDialogProps {
 }
 
 export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
+  const { t } = useI18n();
   const [channelType, setChannelType] = useState('telegram');
   const [name, setName] = useState('');
   const [account, setAccount] = useState('');
@@ -43,10 +45,10 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
         account: account || undefined,
         token: token || undefined,
       });
-      toast.success(`${selectedType?.label ?? channelType} channel added`);
+      toast.success(t('gateway.addChannel.added', { channel: selectedType?.label ?? channelType }));
       onAdded();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add channel');
+      toast.error(err instanceof Error ? err.message : t('gateway.addChannel.failed'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
             fontSize: '1rem', fontWeight: 600, color: 'var(--text)',
             margin: 0, fontFamily: 'var(--font-sans)',
           }}>
-            Add Channel
+            {t('gateway.addChannel.add')}
           </h2>
           <button
             onClick={onClose}
@@ -100,7 +102,7 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
-              Channel Type
+              {t('gateway.addChannel.type')}
             </span>
             <select
               value={channelType}
@@ -124,12 +126,12 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
-              Name (optional)
+              {t('gateway.addChannel.name')}
             </span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Bot"
+              placeholder={t('gateway.addChannel.namePlaceholder')}
               style={{
                 background: 'var(--surface)',
                 color: 'var(--text)',
@@ -145,7 +147,7 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
-              Account ID (optional)
+              {t('gateway.addChannel.account')}
             </span>
             <input
               value={account}
@@ -167,13 +169,13 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
           {selectedType?.needsToken && (
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
-                Bot Token
+              {t('gateway.addChannel.token')}
               </span>
               <input
                 type="password"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Bot token"
+                placeholder={t('gateway.addChannel.tokenPlaceholder')}
                 style={{
                   background: 'var(--surface)',
                   color: 'var(--text)',
@@ -207,7 +209,7 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('gateway.cron.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -225,7 +227,7 @@ export function AddChannelDialog({ onClose, onAdded }: AddChannelDialogProps) {
               opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? 'Adding...' : 'Add Channel'}
+            {loading ? t('gateway.addChannel.adding') : t('gateway.addChannel.add')}
           </button>
         </div>
       </div>

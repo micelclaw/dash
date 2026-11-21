@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { X, Loader2, CheckCircle, AlertTriangle, Shield, Zap, Download, HardDrive } from 'lucide-react';
 import { api } from '@/services/api';
 import { CryptoLogs } from '../shared/CryptoLogs';
@@ -73,6 +74,7 @@ async function waitForService(service: string, timeoutMs: number): Promise<boole
 }
 
 export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) {
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>('configure');
   const [config, setConfig] = useState<BtcConfig>({ ...DEFAULTS, ...initialConfig });
   const [configLoaded, setConfigLoaded] = useState(mode === 'install');
@@ -223,10 +225,10 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
             <span style={{ fontSize: 18 }}>&#8383;</span>
-            {step === 'configure' && (mode === 'install' ? 'Configure Bitcoin Core' : 'Bitcoin Core Settings')}
-            {step === 'installing' && (mode === 'install' ? 'Installing Bitcoin Core' : 'Restarting Bitcoin Core')}
-            {step === 'done' && 'Bitcoin Core Ready'}
-            {step === 'error' && 'Error'}
+            {step === 'configure' && (mode === 'install' ? t('crypto.wizard.configureBitcoin') : t('crypto.wizard.bitcoinSettings'))}
+            {step === 'installing' && (mode === 'install' ? t('crypto.wizard.installingBitcoin') : t('crypto.wizard.restartingBitcoin'))}
+            {step === 'done' && t('crypto.wizard.bitcoinReady')}
+            {step === 'error' && t('crypto.wizard.error')}
           </div>
           <button
             onClick={onClose}
@@ -246,7 +248,7 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
           {step === 'configure' && !configLoaded && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 8 }}>
               <Loader2 size={16} className="spin" style={{ color: 'var(--text-muted)' }} />
-              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading configuration...</span>
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('crypto.wizard.loadingConfig')}</span>
             </div>
           )}
 
@@ -256,7 +258,7 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
 
               {/* Storage Mode */}
               <div>
-                <div className="wizard-section-title">Storage Mode</div>
+                <div className="wizard-section-title">{t('crypto.wizard.storageMode')}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {PRUNE_OPTIONS.map(opt => (
                     <label key={opt.value} className="wizard-radio" style={{ border: config.prune_mb === opt.value ? '1px solid var(--amber)' : '1px solid var(--border)' }}>
@@ -294,7 +296,7 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
 
               {/* Performance */}
               <div>
-                <div className="wizard-section-title">Performance</div>
+                <div className="wizard-section-title">{t('crypto.wizard.performance')}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <div>
                     <div className="wizard-field-label">DB Cache</div>
@@ -526,8 +528,8 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
                     This will restart Bitcoin Core. Sync progress will be preserved.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button className="wizard-btn-secondary" onClick={() => setConfirmRestart(false)}>Cancel</button>
-                    <button className="wizard-btn-primary" onClick={handleConfigure}>Restart Now</button>
+                    <button className="wizard-btn-secondary" onClick={() => setConfirmRestart(false)}>{t('crypto.wizard.cancel')}</button>
+                    <button className="wizard-btn-primary" onClick={handleConfigure}>{t('crypto.wizard.restartNow')}</button>
                   </div>
                 </div>
               )}
@@ -535,11 +537,11 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
               {/* Action buttons */}
               {!confirmRestart && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <button className="wizard-btn-secondary" onClick={onClose}>Cancel</button>
+                  <button className="wizard-btn-secondary" onClick={onClose}>{t('crypto.wizard.cancel')}</button>
                   {mode === 'install' ? (
-                    <button className="wizard-btn-primary" onClick={handleInstall}>Install</button>
+                    <button className="wizard-btn-primary" onClick={handleInstall}>{t('crypto.wizard.install')}</button>
                   ) : (
-                    <button className="wizard-btn-primary" onClick={handleConfigure}>Apply &amp; Restart</button>
+                    <button className="wizard-btn-primary" onClick={handleConfigure}>{t('crypto.wizard.applyRestart')}</button>
                   )}
                 </div>
               )}
@@ -566,7 +568,7 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
               <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>
                 {mode === 'install' ? 'Bitcoin Core installed successfully' : 'Configuration applied'}
               </div>
-              <button className="wizard-btn-primary" onClick={onDone}>Done</button>
+              <button className="wizard-btn-primary" onClick={onDone}>{t('crypto.wizard.done')}</button>
             </div>
           )}
 
@@ -578,8 +580,8 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
                 {error}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="wizard-btn-secondary" onClick={onClose}>Close</button>
-                <button className="wizard-btn-primary" onClick={() => setStep('configure')}>Retry</button>
+                <button className="wizard-btn-secondary" onClick={onClose}>{t('crypto.wizard.close')}</button>
+                <button className="wizard-btn-primary" onClick={() => setStep('configure')}>{t('crypto.wizard.retry')}</button>
               </div>
             </div>
           )}

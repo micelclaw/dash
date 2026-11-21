@@ -1,3 +1,5 @@
+import {DemoAccount} from '@/components/onboarding/DemoAccount';
+import {useAuthStore} from '@/stores/auth.store';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -138,6 +140,7 @@ async function insertImages(ed: TiptapEditor, files: File[], pos?: number): Prom
 export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   useCoNavigation('note', noteId);
   const navigate = useNavigate();
+  const welcomeOwner=useAuthStore(s=>s.user?.role==='owner');
   const [note, setNote] = useState<Note | null>(null);
   const [attachmentState, setAttachmentState] = useState<{ noteId: string; items: NoteAttachment[] }>({ noteId, items: [] });
   const receiveAttachments = useCallback((items: NoteAttachment[]) => setAttachmentState({ noteId, items }), [noteId]);
@@ -538,6 +541,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {welcomeOwner&&note.custom_fields?.installation_welcome_v1===true&&note.source_id==='installation-welcome-v1'&&<div className="p-4 overflow-auto" style={{maxHeight:'35vh'}}><DemoAccount/></div>}
       {/* Header (incluye la toolbar de formato en modo renderizado → sin doble
           línea: si la toolbar se muestra, ella aporta el separador inferior). */}
       <div style={{ padding: '12px 16px 8px', borderBottom: (format !== 'plain' && !sourceMode) ? 'none' : '1px solid var(--border)' }}>

@@ -28,10 +28,12 @@ import { restartGateway } from '@/services/gateway.service';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useAppsStore } from '@/stores/apps.store';
 import { describeError } from '@/lib/api-errors';
+import { useI18n } from '@/i18n';
 
 type LogState = 'idle' | 'running' | 'ready' | 'failed';
 
 export function PluginsBrowser({ focusId }: { focusId?: string }) {
+  const { t } = useI18n();
   const setRestartRequired = useAppsStore((s) => s.setRestartRequired);
   const restartRequired = useAppsStore((s) => s.restartRequired);
 
@@ -146,7 +148,7 @@ export function PluginsBrowser({ focusId }: { focusId?: string }) {
         <div style={reloadBanner}>
           <TriangleAlert size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
           <span style={{ flex: 1 }}>{restartRequired.reason ?? 'Reload the Gateway to apply plugin changes.'}</span>
-          <button onClick={() => { void restartGateway().then(() => toast.success('Gateway reloading…')); }} style={btnAmber}>
+          <button onClick={() => { if (!window.confirm('¿Reiniciar Gateway? La conexión se interrumpirá brevemente. Comprueba que no haya cambios pendientes o sin confirmar; Micelclaw no puede verificarlos todos.')) return; void restartGateway().then(() => toast.success('Gateway responde. No se ha comprobado si los cambios se han aplicado.')).catch(() => toast.error('No se pudo confirmar el reinicio. Abre Gateway para revisar el estado o solicita ayuda a un administrador.')); }} style={btnAmber}>
             <RefreshCw size={13} /> Reload Gateway
           </button>
         </div>
@@ -155,19 +157,19 @@ export function PluginsBrowser({ focusId }: { focusId?: string }) {
       {/* Header + trust note */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <Puzzle size={16} style={{ color: 'var(--amber)' }} />
-        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>Plugins</h3>
-        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>tools &amp; runtimes · admin only</span>
+        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)' }}>{t('micelhub.plugins')}</h3>
+        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('micelhub.pluginsAdmin')}</span>
       </div>
       <div style={trustNote}>
         <TriangleAlert size={13} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
-        <span>Plugins run in the Gateway <b>without a sandbox</b> and affect all agents. Install only sources you trust. Model providers live in Gateway → Models, channels in Gateway → Channels.</span>
+        <span>{t('micelhub.pluginsTrustWarning')}</span>
       </div>
 
       {/* Install from source (power-user) + search */}
       <div style={{ display: 'flex', gap: 8, margin: '12px 0', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 6, flex: 1, minWidth: 280 }}>
           <input value={installRef} onChange={(e) => setInstallRef(e.target.value)}
-            placeholder="Install from source: clawhub:@openclaw/acpx · npm:… · git:…"
+            placeholder={t('micelhub.installSource')}
             onKeyDown={(e) => { if (e.key === 'Enter') void doInstall(installRef); }}
             style={{ ...input, flex: 1, fontFamily: 'var(--font-mono)' }} />
           <button onClick={() => void doInstall(installRef)} disabled={!installRef.trim() || logState === 'running'} style={btnAmber}>
@@ -178,7 +180,7 @@ export function PluginsBrowser({ focusId }: { focusId?: string }) {
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={13} style={{ position: 'absolute', left: 9, top: 9, color: 'var(--text-muted)' }} />
             <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void doSearch(); }}
-              placeholder="Search ClawHub…" style={{ ...input, paddingLeft: 28 }} />
+              placeholder={t('micelhub.searchClawHub')} style={{ ...input, paddingLeft: 28 }} />
           </div>
           <button onClick={() => void doSearch()} disabled={searching} style={btnGhost}>
             {searching ? <Loader2 size={13} className="spin" /> : 'Search'}
@@ -189,7 +191,7 @@ export function PluginsBrowser({ focusId }: { focusId?: string }) {
       {/* Search results */}
       {results.length > 0 && (
         <div style={{ marginBottom: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-          <div style={{ padding: '6px 10px', fontSize: '0.68rem', color: 'var(--text-muted)', background: 'var(--surface)' }}>ClawHub results</div>
+          <div style={{ padding: '6px 10px', fontSize: '0.68rem', color: 'var(--text-muted)', background: 'var(--surface)' }}>{t('micelhub.clawHubResults')}</div>
           {results.map((r) => (
             <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderTop: '1px solid var(--border)' }}>
               <div style={{ flex: 1 }}>
@@ -208,8 +210,8 @@ export function PluginsBrowser({ focusId }: { focusId?: string }) {
       {logState !== 'idle' && (
         <div style={{ marginBottom: 14, padding: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', marginBottom: 8 }}>
-            {logState === 'running' && <><Loader2 size={14} className="spin" style={{ color: 'var(--amber)' }} /> <span style={{ color: 'var(--text)' }}>Working on <code style={code}>{logName}</code>…</span></>}
-            {logState === 'ready' && <><Check size={14} style={{ color: '#22c55e' }} /> <span style={{ color: '#22c55e' }}>Done — reload the Gateway to finish.</span></>}
+            {logState === 'running' && <><Loader2 size={14} className="spin" style={{ color: 'var(--amber)' }} /> <span style={{ color: 'var(--text)' }}>{t('micelhub.workingOn')} <code style={code}>{logName}</code>…</span></>}
+            {logState === 'ready' && <><Check size={14} style={{ color: '#22c55e' }} /> <span style={{ color: '#22c55e' }}>{t('micelhub.installDone')}</span></>}
             {logState === 'failed' && <><X size={14} style={{ color: '#ef4444' }} /> <span style={{ color: '#ef4444' }}>Failed: {logError}</span></>}
           </div>
           {logLines.length > 0 && (
@@ -220,7 +222,7 @@ export function PluginsBrowser({ focusId }: { focusId?: string }) {
 
       {/* Grid */}
       {loading ? (
-        <div style={{ padding: 16, fontSize: '0.8rem', color: 'var(--text-dim)' }}>Loading plugins…</div>
+        <div style={{ padding: 16, fontSize: '0.8rem', color: 'var(--text-dim)' }}>{t('micelhub.loadingPlugins')}</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
           {sorted.map((p) => (
@@ -239,6 +241,7 @@ function PluginCard({ p, busy, focused, onInstall, onToggle, onUninstall, instal
   p: CatalogPlugin; busy: boolean; focused: boolean;
   onInstall: () => void; onToggle: () => void; onUninstall: () => void; installDisabled: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <div style={{
       padding: 12, background: 'var(--card)', borderRadius: 'var(--radius-md)',
@@ -254,17 +257,17 @@ function PluginCard({ p, busy, focused, onInstall, onToggle, onUninstall, instal
         <span style={badge('var(--text-muted)')}>{p.surface}</span>
         <span style={badge('var(--text-muted)')}>{p.distribution}</span>
         {p.installed
-          ? <span style={badge(p.enabled ? '#22c55e' : 'var(--text-dim)')}>{p.enabled ? 'enabled' : 'disabled'}</span>
-          : <span style={badge('var(--amber)')}>not installed</span>}
+          ? <span style={badge(p.enabled ? '#22c55e' : 'var(--text-dim)')}>{p.enabled ? t('micelhub.enabled') : t('micelhub.disabled')}</span>
+          : <span style={badge('var(--amber)')}>{t('micelhub.notInstalled')}</span>}
       </div>
       <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-dim)', lineHeight: 1.4, minHeight: 30 }}>{p.description}</p>
       <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
         {!p.installed ? (
-          <button onClick={onInstall} disabled={installDisabled} style={rowBtn}><Download size={12} /> Install</button>
+          <button onClick={onInstall} disabled={installDisabled} style={rowBtn}><Download size={12} /> {t('micelhub.install')}</button>
         ) : (
           <>
             <button onClick={onToggle} disabled={busy} style={rowBtn}>
-              {busy ? <Loader2 size={12} className="spin" /> : <Power size={12} />} {p.enabled ? 'Disable' : 'Enable'}
+              {busy ? <Loader2 size={12} className="spin" /> : <Power size={12} />} {p.enabled ? t('micelhub.disable') : t('micelhub.enable')}
             </button>
             {p.distribution !== 'bundled' && (
               <button onClick={onUninstall} disabled={busy} style={{ ...rowBtn, color: '#ef4444' }}><Trash2 size={12} /></button>

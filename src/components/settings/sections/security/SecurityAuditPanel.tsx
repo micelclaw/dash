@@ -43,7 +43,7 @@ export function SecurityAuditPanel() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><FileClock size={19} className="text-[var(--amber)]" />Security audit log</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Append-only changes to settings, profiles, agent policies, overrides and runtime reconciliation.</p></div>
+        <div><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><FileClock size={19} className="text-[var(--amber)]" />Security changes</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Changes to settings, profiles and agent policies. Approval decisions have their own history in Approvals.</p></div>
         <Button type="button" size="sm" variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} />Refresh</Button>
       </div>
       {error && <RetryBanner severity="error" title="Audit unavailable" message={error} onRetry={() => void load()} loading={loading} />}

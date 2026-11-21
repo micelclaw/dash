@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { bindProductivityProfiles } from './productivity-profile-binding.js';
+const conversation='43891788-a1a6-478d-8b0a-abd50159506e';
+function fixture(){const controller=new AbortController();let current={userId:'owner-fixture',sessionGeneration:1,profileId:'profile-a' as string|null};const snapshot={...current};const selected:string[]=[];
+ return {input:{snapshot,current:()=>current,conversations:[conversation,conversation,'invalid'],signal:controller.signal,status:async()=>({profile_binding_supported:true}),select:async(id:string)=>{selected.push(id);}},selected,cancel(){controller.abort();},profile(){current={...current,profileId:'profile-b'};},logout(){current={...current,userId:'another-fixture',sessionGeneration:2};}};
+}
+test('selection notifies once per real conversation only when Core advertises support',async()=>{const f=fixture();assert.equal(await bindProductivityProfiles(f.input),'bound');assert.deepEqual(f.selected,[conversation]);const old=fixture();old.input.status=async()=>({profile_binding_supported:false});assert.equal(await bindProductivityProfiles(old.input),'unsupported');assert.deepEqual(old.selected,[]);});
+test('logout, abort and profile changes while checking cause no request for the old session',async()=>{for(const operation of ['logout','cancel','profile'] as const){const f=fixture();f.input.status=async()=>{f[operation]();return {profile_binding_supported:true};};assert.equal(await bindProductivityProfiles(f.input),'superseded');assert.deepEqual(f.selected,[]);}});
+test('selection failure remains unavailable and does not retry; late completion is superseded',async()=>{const f=fixture();let attempts=0;f.input.select=async()=>{attempts++;throw Error('offline');};assert.equal(await bindProductivityProfiles(f.input),'unavailable');assert.equal(attempts,1);const late=fixture();late.input.select=async()=>{late.profile();};assert.equal(await bindProductivityProfiles(late.input),'superseded');});

@@ -25,6 +25,7 @@ import { useMusicStore } from '@/stores/music.store';
 import { coverUrl, type Playlist } from '@/services/music.service';
 import { playPlaylistById } from '../lib/playback';
 import { formatTotalDuration } from '../lib/format';
+import { useI18n } from '@/i18n';
 
 /** Create / rename dialog — single name field. */
 function PlaylistNameDialog({
@@ -42,6 +43,7 @@ function PlaylistNameDialog({
   onClose: () => void;
   onSubmit: (name: string) => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(initialName);
 
   useEffect(() => {
@@ -66,7 +68,8 @@ function PlaylistNameDialog({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-          placeholder="Playlist name"
+          placeholder={t('music.playlistName')}
+          aria-label={t('music.playlistName')}
           style={{
             width: '100%',
             margin: '12px 0',
@@ -89,7 +92,7 @@ function PlaylistNameDialog({
               border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
             }}
           >
-            Cancel
+            {t('music.cancel')}
           </button>
           <button
             onClick={submit}
@@ -110,6 +113,7 @@ function PlaylistNameDialog({
 }
 
 export function PlaylistsView() {
+  const { t } = useI18n();
   const playlists = useMusicStore((s) => s.playlists);
   const loading = useMusicStore((s) => s.loadingPlaylists);
   const [createOpen, setCreateOpen] = useState(false);
@@ -130,7 +134,7 @@ export function PlaylistsView() {
         border: 'none', background: 'var(--amber)', color: '#06060a', fontWeight: 600,
       }}
     >
-      <Plus size={14} /> New playlist
+      <Plus size={14} /> {t('music.newPlaylist')}
     </button>
   );
 
@@ -141,9 +145,9 @@ export function PlaylistsView() {
       {playlists !== null && playlists.length === 0 && !loading ? (
         <EmptyState
           icon={ListMusic}
-          title="No playlists"
-          description="Create a playlist to group your favorite tracks."
-          actions={[{ label: 'New playlist', onClick: () => setCreateOpen(true), variant: 'primary' }]}
+          title={t('music.noPlaylists')}
+          description={t('music.createPlaylistHint')}
+          actions={[{ label: t('music.newPlaylist'), onClick: () => setCreateOpen(true), variant: 'primary' }]}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -185,14 +189,15 @@ export function PlaylistsView() {
                   <EntitySource entity={pl} domain="music" native /> {pl.name}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                  {pl.song_count} song{pl.song_count === 1 ? '' : 's'} · {formatTotalDuration(pl.duration)}
+                  {t(pl.song_count === 1 ? 'music.song' : 'music.songs', { count: pl.song_count })} · {formatTotalDuration(pl.duration)}
                 </div>
               </div>
 
               {/* Play */}
               <button
-                onClick={(e) => { e.stopPropagation(); void playPlaylistById(pl.id); }}
-                title="Play"
+                onClick={(e) => { e.stopPropagation(); void playPlaylistById(pl.id, t); }}
+                title={t('music.play')}
+                aria-label={t('music.play')}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer', padding: 6,
                   color: 'var(--text-dim)', display: 'flex', flexShrink: 0,
@@ -206,7 +211,8 @@ export function PlaylistsView() {
                 <DropdownMenuTrigger asChild>
                   <button
                     onClick={(e) => e.stopPropagation()}
-                    title="More"
+                    title={t('music.more')}
+                    aria-label={t('music.more')}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer', padding: 6,
                       color: 'var(--text-dim)', display: 'flex', flexShrink: 0,
@@ -216,15 +222,15 @@ export function PlaylistsView() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenuItem onClick={() => void playPlaylistById(pl.id)}>
-                    <Play size={14} /> Play
+                  <DropdownMenuItem onClick={() => void playPlaylistById(pl.id, t)}>
+                    <Play size={14} /> {t('music.play')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setRenaming(pl)}>
-                    <Pencil size={14} /> Rename
+                    <Pencil size={14} /> {t('music.rename')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => setDeleting(pl)} style={{ color: 'var(--error)' }}>
-                    <Trash2 size={14} /> Delete
+                    <Trash2 size={14} /> {t('music.delete')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -236,9 +242,9 @@ export function PlaylistsView() {
       {/* Create */}
       <PlaylistNameDialog
         open={createOpen}
-        title="New playlist"
+        title={t('music.newPlaylist')}
         initialName=""
-        confirmLabel="Create"
+        confirmLabel={t('music.create')}
         onClose={() => setCreateOpen(false)}
         onSubmit={(name) => void useMusicStore.getState().createPlaylist(name)}
       />
@@ -246,9 +252,9 @@ export function PlaylistsView() {
       {/* Rename */}
       <PlaylistNameDialog
         open={renaming !== null}
-        title="Rename playlist"
+        title={t('music.renamePlaylist')}
         initialName={renaming?.name ?? ''}
-        confirmLabel="Rename"
+        confirmLabel={t('music.rename')}
         onClose={() => setRenaming(null)}
         onSubmit={(name) => {
           if (renaming) void useMusicStore.getState().renamePlaylist(renaming.id, name);
@@ -262,9 +268,9 @@ export function PlaylistsView() {
         onConfirm={() => {
           if (deleting) void useMusicStore.getState().removePlaylist(deleting.id);
         }}
-        title="Delete playlist"
-        description={deleting ? `"${deleting.name}" will be permanently deleted.` : undefined}
-        confirmLabel="Delete"
+        title={t('music.deletePlaylist')}
+        description={deleting ? t('music.deletePlaylistConfirm', { name: deleting.name }) : undefined}
+        confirmLabel={t('music.delete')}
         variant="danger"
       />
     </div>

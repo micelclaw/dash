@@ -12,6 +12,7 @@
 
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { useEffect, useMemo, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { ChevronUp, FileText } from 'lucide-react';
 import { formatEmailTime } from '@/lib/date-helpers';
 import { downloadAuthed } from '@/lib/file-download';
@@ -33,6 +34,7 @@ function formatFileSize(bytes: number): string {
 }
 
 export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLatest }: MailThreadMessageProps) {
+  const { t } = useI18n();
   // MISMA política de contenido remoto que el panel de lectura (y el MISMO
   // módulo): una conversación pinta N cuerpos, y cada uno avisaría a su
   // remitente. Este era el segundo punto de pintado que se quedaba fuera.
@@ -230,7 +232,7 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
         {cuerpo ? (
           <iframe
             key={`${email.id}:${mostrandoRemotas ? 'show' : 'block'}`}
-            title={email.subject || 'Email content'}
+            title={email.subject || t('mail.emailContent')}
             srcDoc={cuerpo.doc}
             // `allow-same-origin` SIN `allow-scripts` (igual que el panel de
             // lectura): un correo con <script> sigue sin ejecutarse, y el padre
@@ -313,7 +315,7 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
                 </button>
               ) : (
                 <span
-                  title="De este adjunto solo se guardó el nombre y el tamaño. Vuelve a sincronizar la cuenta."
+                  title={t('mail.attachmentStoredOnly')}
                   style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}
                 >
                   no disponible

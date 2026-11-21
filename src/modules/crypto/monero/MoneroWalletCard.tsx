@@ -11,6 +11,7 @@
  */
 
 import { useNavigate } from 'react-router';
+import { useI18n } from '@/i18n';
 import { ExternalLink, Loader2, Wallet, AlertCircle } from 'lucide-react';
 
 interface WalletStatus {
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function MoneroWalletCard({ monerodRunning, walletStatus, walletBalance, fiatPrice }: Props) {
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   const rpcUp = walletStatus?.rpc_reachable ?? false;
@@ -52,9 +54,9 @@ export function MoneroWalletCard({ monerodRunning, walletStatus, walletBalance, 
       <div className="crypto-card-header">
         <div className="crypto-card-dot" style={{ background: dotColor }} />
         <span style={{ fontSize: 11, color: '#ff6600' }}>&#9399;</span>
-        <span className="crypto-card-title">Monero Wallet</span>
+        <span className="crypto-card-title">{t('crypto.moneroWallet')}</span>
         <div style={{ flex: 1 }} />
-        <button className="crypto-btn-sm" onClick={() => navigate('/crypto/monero/wallet')} title="Open Wallet">
+        <button className="crypto-btn-sm" onClick={() => navigate('/crypto/monero/wallet')} title={t('crypto.openWallet')}>
           <ExternalLink size={12} />
         </button>
       </div>
@@ -62,30 +64,30 @@ export function MoneroWalletCard({ monerodRunning, walletStatus, walletBalance, 
       <div className="crypto-card-body">
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-            <Loader2 size={14} className="spin" /> Checking wallet...
+            <Loader2 size={14} className="spin" /> {t('crypto.checkingWallet')}
           </div>
         ) : !monerodRunning ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 11 }}>
-            <AlertCircle size={12} /> Monero Node must be running first
+            <AlertCircle size={12} /> {t('crypto.moneroMustRun')}
           </div>
         ) : !rpcUp ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Wallet size={12} /> Wallet RPC not running
+              <Wallet size={12} /> {t('crypto.walletRpcStopped')}
             </div>
-            <div style={{ fontStyle: 'italic' }}>Start from the wallet viewport</div>
+            <div style={{ fontStyle: 'italic' }}>{t('crypto.startFromWallet')}</div>
           </div>
         ) : !hasWallet ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <Wallet size={12} style={{ color: '#f59e0b' }} /> RPC connected — no wallet open
+              <Wallet size={12} style={{ color: '#f59e0b' }} /> {t('crypto.rpcNoWallet')}
             </div>
             <button
               className="crypto-btn-sm"
               style={{ marginTop: 4 }}
               onClick={() => navigate('/crypto/monero/wallet')}
             >
-              Open Wallet →
+              {t('crypto.openWallet')} →
             </button>
           </div>
         ) : (
@@ -97,7 +99,7 @@ export function MoneroWalletCard({ monerodRunning, walletStatus, walletBalance, 
               <div className="mwc-amount">
                 {totalXmr} <span className="mwc-unit">XMR</span>
               </div>
-              <div className="mwc-label">Unlocked: {unlockedXmr}</div>
+              <div className="mwc-label">{t('crypto.unlocked', { amount: unlockedXmr })}</div>
               {fiatStr && <div className="mwc-fiat">{fiatStr}</div>}
             </div>
           </>

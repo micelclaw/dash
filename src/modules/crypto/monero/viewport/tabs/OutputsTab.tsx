@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useI18n } from '@/i18n';
 import { Loader2, RefreshCw, Snowflake, Sun, Download, Upload, Filter } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
@@ -36,6 +37,7 @@ function truncStr(s: string, n = 8): string {
 }
 
 export function OutputsTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [outputs, setOutputs] = useState<OutputEntry[]>([]);
@@ -100,28 +102,28 @@ export function OutputsTab() {
   return (
     <div className="ot-root">
       <div className="ot-header">
-        <h3 className="ot-title">Outputs</h3>
+        <h3 className="ot-title">{t('crypto.wallet.outputs')}</h3>
         <div style={{ flex: 1 }} />
-        <button className="ot-icon-btn" onClick={exportOutputs} title="Export outputs">
-          <Download size={13} /> Outputs
+        <button className="ot-icon-btn" onClick={exportOutputs} title={t('crypto.wallet.exportOutputs')}>
+          <Download size={13} /> {t('crypto.wallet.outputs')}
         </button>
-        <button className="ot-icon-btn" onClick={exportKeyImages} title="Export key images">
-          <Download size={13} /> Keys
+        <button className="ot-icon-btn" onClick={exportKeyImages} title={t('crypto.wallet.exportKeyImages')}>
+          <Download size={13} /> {t('crypto.wallet.keyImage')}
         </button>
-        <button className="ot-icon-btn" onClick={() => fileRef.current?.click()} title="Import outputs">
+        <button className="ot-icon-btn" onClick={() => fileRef.current?.click()} title={t('crypto.wallet.importOutputs')}>
           <Upload size={13} />
         </button>
         <input ref={fileRef} type="file" accept=".hex,.txt,.json" hidden onChange={(e) => e.target.files?.[0] && importOutputs(e.target.files[0])} />
-        <button className="ot-icon-btn" onClick={fetchOutputs} title="Refresh">
+        <button className="ot-icon-btn" onClick={fetchOutputs} title={t('crypto.wallet.refresh')}>
           <RefreshCw size={13} />
         </button>
       </div>
 
       {/* Stats */}
       <div className="ot-stats">
-        <span>{outputs.length} outputs</span>
-        <span>Total: {picoToXmr(totalAmount)} XMR</span>
-        {frozenCount > 0 && <span>{frozenCount} frozen</span>}
+        <span>{t('crypto.wallet.outputsCount', { count: outputs.length })}</span>
+        <span>{t('crypto.wallet.total')}: {picoToXmr(totalAmount)} XMR</span>
+        {frozenCount > 0 && <span>{t('crypto.wallet.frozenCount', { count: frozenCount })}</span>}
       </div>
 
       {/* Filters */}
@@ -133,26 +135,26 @@ export function OutputsTab() {
             className={`ot-filter-btn ${filter === f ? 'ot-filter-active' : ''}`}
             onClick={() => setFilter(f)}
           >
-            {f === 'all' ? 'All' : f === 'available' ? 'Available' : 'Spent'}
+            {f === 'all' ? t('crypto.wallet.all') : f === 'available' ? t('crypto.wallet.availableStatus') : t('crypto.wallet.spent')}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="ot-loading"><Loader2 size={16} className="spin" /> Loading outputs...</div>
+        <div className="ot-loading"><Loader2 size={16} className="spin" /> {t('crypto.wallet.loadingOutputs')}</div>
       ) : outputs.length === 0 ? (
-        <div className="ot-empty">No outputs found</div>
+        <div className="ot-empty">{t('crypto.wallet.noOutputs')}</div>
       ) : (
         <>
           {/* Table (scrolls horizontally inside its own box on narrow screens) */}
           <div className="ot-scroll"><div className="ot-table">
           {/* Table header */}
           <div className="ot-thead">
-            <span className="ot-th ot-th-amount">Amount</span>
-            <span className="ot-th ot-th-ki">Key Image</span>
-            <span className="ot-th ot-th-tx">TX Hash</span>
-            <span className="ot-th ot-th-sub">Subaddr</span>
-            <span className="ot-th ot-th-status">Status</span>
+            <span className="ot-th ot-th-amount">{t('crypto.wallet.amount')}</span>
+            <span className="ot-th ot-th-ki">{t('crypto.wallet.keyImage')}</span>
+            <span className="ot-th ot-th-tx">{t('crypto.wallet.txHash')}</span>
+            <span className="ot-th ot-th-sub">{t('crypto.wallet.subaddressShort')}</span>
+            <span className="ot-th ot-th-status">{t('crypto.wallet.status')}</span>
             <span className="ot-th ot-th-action"></span>
           </div>
 
@@ -165,11 +167,11 @@ export function OutputsTab() {
                 <span className="ot-td ot-th-sub">{o.subaddr_index.major}/{o.subaddr_index.minor}</span>
                 <span className="ot-td ot-th-status">
                   {o.frozen ? (
-                    <span className="ot-badge ot-badge-frozen"><Snowflake size={9} /> Frozen</span>
+                    <span className="ot-badge ot-badge-frozen"><Snowflake size={9} /> {t('crypto.wallet.frozen')}</span>
                   ) : o.spent ? (
-                    <span className="ot-badge ot-badge-spent">Spent</span>
+                    <span className="ot-badge ot-badge-spent">{t('crypto.wallet.spent')}</span>
                   ) : (
-                    <span className="ot-badge ot-badge-avail">Available</span>
+                    <span className="ot-badge ot-badge-avail">{t('crypto.wallet.availableStatus')}</span>
                   )}
                 </span>
                 <span className="ot-td ot-th-action">
@@ -178,7 +180,7 @@ export function OutputsTab() {
                       className="ot-freeze-btn"
                       onClick={() => toggleFreeze(o.key_image, o.frozen)}
                       disabled={toggling === o.key_image}
-                      title={o.frozen ? 'Thaw output' : 'Freeze output'}
+                      title={o.frozen ? t('crypto.wallet.thawOutput') : t('crypto.wallet.freezeOutput')}
                     >
                       {toggling === o.key_image ? (
                         <Loader2 size={11} className="spin" />

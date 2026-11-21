@@ -16,6 +16,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Boxes } from 'lucide-react';
 import { StatusPill } from '@/modules/gateway/components/StatusPill';
 import { TagChip } from '@/components/shared/TagChip';
+import { useI18n } from '@/i18n';
 import {
   SYSTEM_STATUS_LABELS,
   STATUS_PILL_MAP,
@@ -67,15 +68,17 @@ export function ItemThumb({ item, size }: { item: InventoryItem; size: number | 
 }
 
 export function ItemStatusPill({ status, size = 'sm' }: { status: string; size?: 'sm' | 'md' }) {
+  const { t } = useI18n();
   const pillStatus = STATUS_PILL_MAP[status] ?? 'loading';
-  const label = SYSTEM_STATUS_LABELS[status] ?? status;
+  const label = SYSTEM_STATUS_LABELS[status] ? t(`inventory.status.${status}`) : status;
   return <StatusPill status={pillStatus} label={label} size={size} />;
 }
 
 export function WarrantyCell({ date }: { date: string | null }) {
+  const { t } = useI18n();
   const d = daysUntil(date);
   if (d === null) return <span style={{ color: 'var(--text-dim)' }}>—</span>;
-  if (d < 0) return <span style={{ color: 'var(--error)' }}>expired</span>;
+  if (d < 0) return <span style={{ color: 'var(--error)' }}>{t('inventory.catalog.expired')}</span>;
   return <span style={{ color: d < 90 ? 'var(--amber)' : 'var(--text)' }}>{d}d</span>;
 }
 

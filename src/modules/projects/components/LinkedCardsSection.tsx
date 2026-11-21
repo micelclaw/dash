@@ -14,6 +14,14 @@ import { useState, useEffect } from 'react';
 import { LayoutGrid, ChevronRight } from 'lucide-react';
 import { api } from '@/services/api';
 import { PRIORITY_COLORS } from '../utils/design-tokens';
+import { useI18n } from '@/i18n';
+
+const PRIORITY_LABEL_KEYS: Record<string, string> = {
+  urgent: 'projects.linkedCards.priority.urgent',
+  high: 'projects.linkedCards.priority.high',
+  medium: 'projects.linkedCards.priority.medium',
+  low: 'projects.linkedCards.priority.low',
+};
 
 interface LinkedCard {
   id: string;
@@ -33,6 +41,7 @@ export function LinkedCardsSection({ entityType, entityId }: {
   entityType: string;
   entityId: string;
 }) {
+  const { t } = useI18n();
   const [cards, setCards] = useState<LinkedCard[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +74,7 @@ export function LinkedCardsSection({ entityType, entityId }: {
         letterSpacing: '0.05em',
       }}>
         <LayoutGrid size={12} />
-        Linked Cards ({cards.length})
+        {t(cards.length === 1 ? 'projects.linkedCards.heading.one' : 'projects.linkedCards.heading.many', { count: cards.length })}
       </div>
       {cards.map((card) => (
         <div
@@ -82,7 +91,10 @@ export function LinkedCardsSection({ entityType, entityId }: {
           }}
         >
           {card.priority && (
-            <span style={{
+            <span
+              role={PRIORITY_LABEL_KEYS[card.priority] ? 'img' : undefined}
+              aria-label={PRIORITY_LABEL_KEYS[card.priority] ? t(PRIORITY_LABEL_KEYS[card.priority]!) : undefined}
+              style={{
               width: 6,
               height: 6,
               borderRadius: '50%',

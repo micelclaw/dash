@@ -15,6 +15,7 @@ import { Search, FolderPlus, Upload, Rows3, Rows4 } from 'lucide-react';
 import { FileBreadcrumb } from '@/components/shared/FileBreadcrumb';
 import { ViewToggle } from '@/components/shared/ViewToggle';
 import type { SourceRoot } from './types';
+import { hasMessage, useI18n } from '@/i18n';
 
 interface FileBrowserToolbarProps {
   currentPath: string;
@@ -45,6 +46,7 @@ export function FileBrowserToolbar({
   onCreateFolder,
   onUploadClick,
 }: FileBrowserToolbarProps) {
+  const { t } = useI18n();
   const [showSearch, setShowSearch] = useState(false);
   const [searchValue, setSearchValue] = useState(search);
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -119,7 +121,9 @@ export function FileBrowserToolbar({
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
         <FileBreadcrumb
           path={currentPath}
-          rootLabel={currentSource.label}
+          rootLabel={hasMessage(`explorer.source.root.${currentSource.id}`)
+            ? t(`explorer.source.root.${currentSource.id}`)
+            : currentSource.label}
           rootIcon={currentSource.icon}
           rootBasePath={currentSource.basePath}
           onNavigate={onNavigate}
@@ -136,7 +140,7 @@ export function FileBrowserToolbar({
               whiteSpace: 'nowrap',
             }}
           >
-            Read only
+            {t('explorer.mount.readOnly')}
           </span>
         )}
       </div>
@@ -148,7 +152,8 @@ export function FileBrowserToolbar({
           type="text"
           value={searchValue}
           onChange={e => handleSearchInput(e.target.value)}
-          placeholder="Search files..."
+          aria-label={t('explorer.toolbar.search')}
+          placeholder={t('explorer.toolbar.search')}
           style={{
             width: 180,
             height: 28,
@@ -164,7 +169,7 @@ export function FileBrowserToolbar({
           onKeyDown={e => { if (e.key === 'Escape') toggleSearch(); }}
         />
       )}
-      <ToolbarButton icon={Search} title="Search" onClick={toggleSearch} active={showSearch} />
+      <ToolbarButton icon={Search} title={t('explorer.toolbar.searchAction')} onClick={toggleSearch} active={showSearch} />
 
       {/* View toggle */}
       <ViewToggle view={view} onChange={onViewChange} />
@@ -172,7 +177,7 @@ export function FileBrowserToolbar({
       {/* Density toggle (espejo del de Drive): comfortable = miniaturas en grid */}
       <ToolbarButton
         icon={density === 'compact' ? Rows4 : Rows3}
-        title={density === 'compact' ? 'Density: Compact — switch to Comfortable' : 'Density: Comfortable — switch to Compact'}
+        title={t(density === 'compact' ? 'explorer.toolbar.compact' : 'explorer.toolbar.comfortable')}
         onClick={() => onDensityChange(density === 'compact' ? 'comfortable' : 'compact')}
         active={density === 'compact'}
       />
@@ -189,7 +194,8 @@ export function FileBrowserToolbar({
               onChange={e => setFolderName(e.target.value)}
               onKeyDown={handleFolderKeyDown}
               onBlur={() => { if (!folderName.trim()) setShowNewFolder(false); }}
-              placeholder="Folder name..."
+              aria-label={t('explorer.toolbar.folderName')}
+              placeholder={t('explorer.toolbar.folderName')}
               style={{
                 width: 140,
                 height: 28,
@@ -204,9 +210,9 @@ export function FileBrowserToolbar({
               }}
             />
           ) : (
-            <ToolbarButton icon={FolderPlus} title="New Folder" onClick={() => setShowNewFolder(true)} />
+            <ToolbarButton icon={FolderPlus} title={t('explorer.toolbar.newFolder')} onClick={() => setShowNewFolder(true)} />
           )}
-          <ToolbarButton icon={Upload} title="Upload" onClick={onUploadClick} />
+          <ToolbarButton icon={Upload} title={t('explorer.toolbar.upload')} onClick={onUploadClick} />
         </>
       )}
     </div>
@@ -224,6 +230,7 @@ function ToolbarButton({ icon: Icon, title, onClick, active }: {
     <button
       onClick={onClick}
       title={title}
+      aria-label={title}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

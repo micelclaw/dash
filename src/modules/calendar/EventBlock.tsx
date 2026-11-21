@@ -12,12 +12,14 @@
 
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useCallback, type CSSProperties } from 'react';
-import { formatTime } from '@/lib/date-helpers';
+import { formatGridTime } from '@/i18n/format';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { TagChip } from '@/components/shared/TagChip';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
+import { useI18n } from '@/i18n';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface EventBlockProps {
   event: CalendarEvent;
@@ -39,6 +41,8 @@ interface EventBlockProps {
 }
 
 export function EventBlock({ event, onClick, onDelete, style, heightPx, draggable, onDragStart, onTouchDragStart, resizable, onResizeStart, calendarColorMap }: EventBlockProps) {
+  const { locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const [hovered, setHovered] = useState(false);
   const color = getCalendarColor(event.calendar_name, calendarColorMap);
   const lines = heightPx ? Math.floor(heightPx / 18) : 1;
@@ -46,8 +50,8 @@ export function EventBlock({ event, onClick, onDelete, style, heightPx, draggabl
   const startDate = new Date(event.start_at);
   const endDate = event.end_at ? new Date(event.end_at) : null;
   const timeStr = endDate
-    ? `${formatTime(startDate)} – ${formatTime(endDate)}`
-    : formatTime(startDate);
+    ? `${formatGridTime(startDate, locale, general)} – ${formatGridTime(endDate, locale, general)}`
+    : formatGridTime(startDate, locale, general);
 
   const handleDragStart = useCallback((e: React.DragEvent) => {
     if (onDragStart) {

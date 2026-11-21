@@ -15,6 +15,7 @@
 // de importar. El signo del importe define el tipo (negativo=Gasto, positivo=Ingreso).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { toast } from 'sonner';
 import { X, FileUp } from 'lucide-react';
 import { useFinancePersonalStore, type MovementInput } from '@/stores/finance-personal.store';
@@ -93,6 +94,7 @@ function detectColumn(headers: string[], hints: string[]): number {
 }
 
 export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
   const { accounts, importTransactions } = useFinancePersonalStore();
   const [text, setText] = useState('');
   const [hasHeader, setHasHeader] = useState(true);
@@ -187,13 +189,15 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
     try {
       const { created, failed } = await importTransactions(rows);
       if (created === 0) {
-        toast.error('No movements were imported');
+        toast.error(t('finance.csv.noneImported'));
       } else {
-        toast.success(`Importados ${created} movimientos${failed.length ? `, ${failed.length} con error` : ''}`);
+        toast.success(failed.length
+          ? t('finance.csv.importedWithErrors', { count: created, failed: failed.length })
+          : t('finance.csv.imported', { count: created }));
         close();
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t import');
+      toast.error(e instanceof Error ? e.message : t('finance.csv.importFailed'));
     } finally {
       setBusy(false);
     }
@@ -216,7 +220,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
       <div onClick={(e) => e.stopPropagation()} style={{ width: 620, maxWidth: '94vw', maxHeight: '86vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <FileUp size={18} style={{ color: 'var(--mod-finance)' }} /> Importar movimientos desde CSV
+            <FileUp size={18} style={{ color: 'var(--mod-finance)' }} /> {t('finance.csv.title')}
           </h2>
           <button onClick={close} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
@@ -225,13 +229,13 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
           {/* Entrada: textarea + fichero */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Paste the CSV or upload a file</label>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>{t('finance.csv.pasteUpload')}</label>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 12 }}
               >
-                <FileUp size={13} /> Subir .csv
+                <FileUp size={13} /> {t('finance.csv.upload')}
               </button>
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onPickFile} style={{ display: 'none' }} />
             </div>
@@ -244,7 +248,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
             />
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: 'var(--text-dim)', cursor: 'pointer' }}>
               <input type="checkbox" checked={hasHeader} onChange={(e) => { touchedRef.current = false; setHasHeader(e.target.checked); }} />
-              La primera fila es cabecera
+              {t('finance.csv.header')}
             </label>
           </div>
 
@@ -253,23 +257,23 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
               {/* Mapeo de columnas */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={labelStyle}>Date column</label>
+                  <label style={labelStyle}>{t('finance.csv.dateColumn')}</label>
                   <select value={dateCol} onChange={setMapped(setDateCol)} style={fieldStyle}>
-                    <option value={-1}>— elige —</option>
+                    <option value={-1}>{t('finance.csv.choose')}</option>
                     {colOptions.map((i) => <option key={i} value={i}>{colLabel(i)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Amount column</label>
+                  <label style={labelStyle}>{t('finance.csv.amountColumn')}</label>
                   <select value={amountCol} onChange={setMapped(setAmountCol)} style={fieldStyle}>
-                    <option value={-1}>— elige —</option>
+                    <option value={-1}>{t('finance.csv.choose')}</option>
                     {colOptions.map((i) => <option key={i} value={i}>{colLabel(i)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Description column (optional)</label>
+                  <label style={labelStyle}>{t('finance.csv.descriptionColumn')}</label>
                   <select value={descCol} onChange={setMapped(setDescCol)} style={fieldStyle}>
-                    <option value={-1}>— ninguna —</option>
+                    <option value={-1}>{t('finance.csv.chooseNone')}</option>
                     {colOptions.map((i) => <option key={i} value={i}>{colLabel(i)}</option>)}
                   </select>
                 </div>
@@ -277,9 +281,9 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
 
               {/* Cuenta destino */}
               <div>
-                <label style={labelStyle}>Destination account</label>
+                <label style={labelStyle}>{t('finance.import.destinationAccount')}</label>
                 <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
-                  <option value="">— elige cuenta —</option>
+                  <option value="">{t('finance.import.chooseAccount')}</option>
                   {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
@@ -287,26 +291,26 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
               {/* Previsualización */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <label style={{ ...labelStyle, marginBottom: 0 }}>Preview</label>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>{t('finance.csv.preview')}</label>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    <span style={{ color: 'var(--mod-finance)' }}>{valid.length}</span> válida{valid.length === 1 ? '' : 's'}
-                    {invalid > 0 && <> · <span style={{ color: 'var(--amber)' }}>{invalid}</span> descartada{invalid === 1 ? '' : 's'}</>}
+                    <span style={{ color: 'var(--mod-finance)' }}>{t('finance.csv.validRows', { count: valid.length })}</span>
+                    {invalid > 0 && <> · <span style={{ color: 'var(--amber)' }}>{t('finance.csv.discardedRows', { count: invalid })}</span></>}
                   </span>
                 </div>
                 <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={th}>Date</th>
-                        <th style={th}>Type</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Amount</th>
-                        <th style={th}>Description</th>
+                        <th style={th}>{t('finance.csv.date')}</th>
+                        <th style={th}>{t('finance.csv.type')}</th>
+                        <th style={{ ...th, textAlign: 'right' }}>{t('finance.csv.amount')}</th>
+                        <th style={th}>{t('finance.csv.description')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {valid.length === 0 && (
                         <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={4}>
-                          {colCount > 0 ? 'No valid rows. Check the column mapping.' : 'Pega un CSV arriba.'}
+                          {colCount > 0 ? t('finance.csv.noValidRows') : t('finance.csv.pasteAbove')}
                         </td></tr>
                       )}
                       {valid.slice(0, 8).map((r, i) => {
@@ -314,7 +318,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
                         return (
                           <tr key={i}>
                             <td style={{ ...td, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{r.date}</td>
-                            <td style={{ ...td, color: isExpense ? '#ef4444' : 'var(--mod-finance)' }}>{isExpense ? 'Expense' : 'Income'}</td>
+                            <td style={{ ...td, color: isExpense ? '#ef4444' : 'var(--mod-finance)' }}>{t(isExpense ? 'finance.movement.kind.expense' : 'finance.movement.kind.income')}</td>
                             <td style={{ ...td, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: isExpense ? '#ef4444' : 'var(--mod-finance)' }}>
                               {isExpense ? '-' : '+'}{fmtMoney(Math.abs(r.amount))}
                             </td>
@@ -323,7 +327,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
                         );
                       })}
                       {valid.length > 8 && (
-                        <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={4}>… y {valid.length - 8} más</td></tr>
+                        <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={4}>{t('finance.csv.moreRows', { count: valid.length - 8 })}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -334,9 +338,9 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={close} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={close} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.csv.cancel')}</button>
           <button onClick={doImport} disabled={!canImport} style={{ padding: '8px 16px', background: canImport ? 'var(--amber)' : 'var(--bg)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: canImport ? '#0a0a0a' : 'var(--text-muted)', cursor: busy ? 'wait' : canImport ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600 }}>
-            {busy ? 'Importando…' : `Importar ${valid.length || ''}`.trim()}
+            {busy ? t('finance.saving') : t('finance.csv.import', { count: valid.length })}
           </button>
         </div>
       </div>

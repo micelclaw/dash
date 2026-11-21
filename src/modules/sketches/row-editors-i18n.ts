@@ -1,0 +1,26 @@
+export const sketchesRowEditorsMessages = {
+  en: {
+    'sketches.rowEditors.columns': 'Columns',
+    'sketches.rowEditors.properties': 'Properties',
+    'sketches.rowEditors.add': '+ Add',
+    'sketches.rowEditors.columnType': 'Column type',
+    'sketches.rowEditors.columnName': 'Column name',
+    'sketches.rowEditors.columnValueType': 'Column value type',
+    'sketches.rowEditors.removeColumn': 'Remove column',
+    'sketches.rowEditors.propertyKey': 'Property key',
+    'sketches.rowEditors.propertyValue': 'Property value',
+    'sketches.rowEditors.removeProperty': 'Remove property',
+  },
+  es: {
+    'sketches.rowEditors.columns': 'Columnas',
+    'sketches.rowEditors.properties': 'Propiedades',
+    'sketches.rowEditors.add': '+ Añadir',
+    'sketches.rowEditors.columnType': 'Tipo de columna',
+    'sketches.rowEditors.columnName': 'Nombre de columna',
+    'sketches.rowEditors.columnValueType': 'Tipo de valor de columna',
+    'sketches.rowEditors.removeColumn': 'Quitar columna',
+    'sketches.rowEditors.propertyKey': 'Clave de propiedad',
+    'sketches.rowEditors.propertyValue': 'Valor de propiedad',
+    'sketches.rowEditors.removeProperty': 'Quitar propiedad',
+  },
+} as const;

@@ -30,6 +30,7 @@ import { useCardLinks } from '../hooks/use-card-links';
 import { CARD_COLORS, getChecklistProgressColor } from '../utils/design-tokens';
 import { DataProviderIcon } from '@/config/data-provider-icons';
 import type { Card, ChecklistItem, Comment, Dependency, CustomFieldDef, Column } from '../types';
+import { useI18n } from '@/i18n';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
 
@@ -80,6 +81,22 @@ const DOMAIN_ROUTES: Record<string, string> = {
   finance_journal_entry: '/finance',
 };
 
+const DOMAIN_LABEL_KEYS: Record<string, string> = {
+  note: 'projects.cardDetailRelations.domain.note',
+  event: 'projects.cardDetailRelations.domain.event',
+  email: 'projects.cardDetailRelations.domain.email',
+  contact: 'projects.cardDetailRelations.domain.contact',
+  file: 'projects.cardDetailRelations.domain.file',
+  bookmark: 'projects.cardDetailRelations.domain.bookmark',
+  diary: 'projects.cardDetailRelations.domain.diary',
+  diary_entries: 'projects.cardDetailRelations.domain.diaryEntries',
+  inventory: 'projects.cardDetailRelations.domain.inventory',
+  inventory_item: 'projects.cardDetailRelations.domain.inventoryItem',
+  finance_document: 'projects.cardDetailRelations.domain.invoice',
+  finance_journal_entry: 'projects.cardDetailRelations.domain.journalEntry',
+  kanban_card: 'projects.cardDetailRelations.domain.task',
+};
+
 interface CardDetailPanelProps {
   boardId: string;
   cardId: string;
@@ -102,6 +119,7 @@ interface CardDetailPanelProps {
 interface ApiEnvelope<T> { data: T }
 
 export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', leadingAction }: CardDetailPanelProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const card = useProjectsStore((s) => s.cards[cardId]);
   const columns = useProjectsStore((s) => s.columns);
@@ -792,7 +810,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
         <div>
           <label style={{ ...labelStyle, cursor: 'pointer' }} onClick={() => setShowDeps(!showDeps)}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <GitBranch size={10} /> Dependencies
+              <GitBranch size={10} /> {t('projects.cardDetailRelations.dependencies.title')}
               {(dependencies.blocking.length + dependencies.blockedBy.length > 0) && (
                 <span style={{ fontWeight: 400 }}>({dependencies.blocking.length + dependencies.blockedBy.length})</span>
               )}
@@ -802,7 +820,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
             <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
               {dependencies.blocking.length > 0 && (
                 <div style={{ marginBottom: 6 }}>
-                  <span style={{ fontWeight: 600, fontSize: 10, textTransform: 'uppercase' }}>Blocks:</span>
+                  <span style={{ fontWeight: 600, fontSize: 10, textTransform: 'uppercase' }}>{t('projects.cardDetailRelations.dependencies.blocks')}:</span>
                   {dependencies.blocking.map(d => (
                     <div key={d.id} style={{ padding: '2px 0', marginLeft: 8 }}>{d._card?.title || `Card ${d.blocked_card_id.slice(0, 8)}...`}</div>
                   ))}
@@ -810,14 +828,14 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
               )}
               {dependencies.blockedBy.length > 0 && (
                 <div>
-                  <span style={{ fontWeight: 600, fontSize: 10, textTransform: 'uppercase' }}>Blocked by:</span>
+                  <span style={{ fontWeight: 600, fontSize: 10, textTransform: 'uppercase' }}>{t('projects.cardDetailRelations.dependencies.blockedBy')}:</span>
                   {dependencies.blockedBy.map(d => (
                     <div key={d.id} style={{ padding: '2px 0', marginLeft: 8 }}>{d._card?.title || `Card ${d.blocking_card_id.slice(0, 8)}...`}</div>
                   ))}
                 </div>
               )}
               {dependencies.blocking.length === 0 && dependencies.blockedBy.length === 0 && (
-                <div style={{ padding: '4px 0' }}>No dependencies</div>
+                <div style={{ padding: '4px 0' }}>{t('projects.cardDetailRelations.dependencies.empty')}</div>
               )}
             </div>
           )}
@@ -827,14 +845,14 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
         <div>
           <label style={{ ...labelStyle, cursor: 'pointer' }} onClick={() => setShowLinks(!showLinks)}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Link size={10} /> Linked Items
+              <Link size={10} /> {t('projects.cardDetailRelations.links.title')}
               {linkedItems.length > 0 && <span style={{ fontWeight: 400 }}>({linkedItems.length})</span>}
             </span>
           </label>
           {showLinks && (
             <div style={{ fontSize: 12 }}>
               {linksLoading && linkedItems.length === 0 && (
-                <div style={{ color: 'var(--text-muted)', padding: '4px 0' }}>Loading...</div>
+                <div style={{ color: 'var(--text-muted)', padding: '4px 0' }}>{t('projects.cardDetailRelations.links.loading')}</div>
               )}
               {linkedItems.map(link => {
                 const Icon = DOMAIN_ICONS[link.domain] ?? FileText;
@@ -857,10 +875,12 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                       {link.title}
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontSize: 10, flexShrink: 0 }}>
-                      {link.domain.replace('_', ' ')}
+                      {DOMAIN_LABEL_KEYS[link.domain] ? t(DOMAIN_LABEL_KEYS[link.domain]!) : link.domain.replace('_', ' ')}
                     </span>
                     <button
                       onClick={(e) => { e.stopPropagation(); removeLink(link.id); }}
+                      title={t('projects.cardDetailRelations.links.remove', { title: link.title })}
+                      aria-label={t('projects.cardDetailRelations.links.remove', { title: link.title })}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}
                     >
                       <X size={10} />
@@ -869,7 +889,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                 );
               })}
               {!linksLoading && linkedItems.length === 0 && (
-                <div style={{ color: 'var(--text-muted)', padding: '4px 0' }}>No linked items</div>
+                <div style={{ color: 'var(--text-muted)', padding: '4px 0' }}>{t('projects.cardDetailRelations.links.empty')}</div>
               )}
               <button
                 onClick={() => setLinkPickerOpen(true)}
@@ -880,7 +900,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                   color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)',
                 }}
               >
-                <Plus size={12} /> Link entity
+                <Plus size={12} /> {t('projects.cardDetailRelations.links.linkEntity')}
               </button>
             </div>
           )}

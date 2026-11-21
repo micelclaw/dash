@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { AI_MEDIA_ENABLED } from './flags';
+import { useI18n } from '@/i18n';
 
 interface AiItemMenuSectionProps {
   itemLabel?: string;
@@ -27,6 +28,7 @@ interface AiItemMenuSectionProps {
  * while AI_MEDIA_ENABLED is false.
  */
 export function AiItemMenuSection({ itemLabel }: AiItemMenuSectionProps) {
+  const { t } = useI18n();
   if (!AI_MEDIA_ENABLED) return null;
 
   return (
@@ -34,7 +36,7 @@ export function AiItemMenuSection({ itemLabel }: AiItemMenuSectionProps) {
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled>
         <Sparkles size={14} style={{ marginRight: 6 }} />
-        Ask AI{itemLabel ? ` about ${itemLabel}` : ''}
+        {t('media.ai.ask')}{itemLabel ? ` ${t('media.ai.about', { item: itemLabel })}` : ''}
       </DropdownMenuItem>
     </>
   );

@@ -48,7 +48,7 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, r
   };
 
   return (
-    <nav
+    <nav aria-label="File path"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -62,8 +62,8 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, r
       {displaySegments.map((seg, i) => {
         const last = isLast(i);
         return (
-          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
-            {i > 0 && <ChevronRight size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: i === 0 ? 0 : 1, overflow: 'hidden' }}>
+            {i > 0 && <ChevronRight aria-hidden="true" size={12} style={{ color: 'var(--text-muted)', flexShrink: 0, pointerEvents: 'none' }} />}
             {last ? (
               <span
                 style={{
@@ -79,6 +79,7 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, r
               </span>
             ) : (
               <button
+                className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--amber)]"
                 onClick={() => onNavigate(getPath(i))}
                 style={{
                   background: 'transparent',
@@ -87,7 +88,12 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, r
                   color: 'var(--text-dim)',
                   fontFamily: 'var(--font-sans)',
                   fontSize: '0.8125rem',
-                  padding: 0,
+                  padding: '4px 2px',
+                  minHeight: 32,
+                  flexShrink: i === 0 ? 0 : 1,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--amber)')}

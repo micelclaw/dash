@@ -11,16 +11,17 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Send, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 import { useWalletBalance } from '../hooks/useWalletBalance';
 import { useFiatPrice } from '../hooks/useFiatPrice';
 
 const PRIORITIES = [
-  { value: 0, label: 'Default', desc: 'Normal fee' },
-  { value: 1, label: 'Low', desc: 'Slower, cheaper' },
-  { value: 2, label: 'Medium', desc: 'Balanced' },
-  { value: 3, label: 'High', desc: 'Fast, expensive' },
+  { value: 0, label: 'crypto.wallet.default', desc: 'crypto.wallet.normalFee' },
+  { value: 1, label: 'crypto.wallet.low', desc: 'crypto.wallet.slowerCheaper' },
+  { value: 2, label: 'crypto.wallet.medium', desc: 'crypto.wallet.balanced' },
+  { value: 3, label: 'crypto.wallet.high', desc: 'crypto.wallet.fastExpensive' },
 ];
 
 type Stage = 'form' | 'preview' | 'confirming' | 'success' | 'error';
@@ -52,6 +53,7 @@ function isValidAddress(addr: string): boolean {
 }
 
 export function SendTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const { balance, refresh: refreshBalance } = useWalletBalance();
@@ -93,12 +95,12 @@ export function SendTab() {
         setStage('preview');
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Fee estimation failed');
+      setErrorMsg(err?.message || t('crypto.wallet.feeEstimateFailed'));
       setStage('error');
     } finally {
       setEstimating(false);
     }
-  }, [call, address, amountPico, accountIndex, priority]);
+  }, [call, address, amountPico, accountIndex, priority, t]);
 
   const sendTransaction = useCallback(async () => {
     setStage('confirming');
@@ -140,17 +142,17 @@ export function SendTab() {
       <div className="st-root">
         <div className="st-success-card">
           <CheckCircle size={32} style={{ color: '#22c55e' }} />
-          <div className="st-success-title">Transaction Sent</div>
+          <div className="st-success-title">{t('crypto.wallet.transactionSent')}</div>
           <div className="st-success-amount">{picoToXmr(txResult.amount)} XMR</div>
           <div className="st-success-detail">
-            <span className="st-label">TX Hash</span>
+            <span className="st-label">{t('crypto.wallet.txHash')}</span>
             <span className="st-value st-mono">{txResult.tx_hash}</span>
           </div>
           <div className="st-success-detail">
-            <span className="st-label">Fee</span>
+            <span className="st-label">{t('crypto.fee')}</span>
             <span className="st-value">{picoToXmr(txResult.fee)} XMR</span>
           </div>
-          <button className="st-btn st-btn-primary" onClick={reset}>Send Another</button>
+          <button className="st-btn st-btn-primary" onClick={reset}>{t('crypto.wallet.sendAnother')}</button>
         </div>
         <style>{STYLES}</style>
       </div>
@@ -159,26 +161,26 @@ export function SendTab() {
 
   return (
     <div className="st-root">
-      <h3 className="st-title">Send XMR</h3>
+      <h3 className="st-title">{t('crypto.wallet.sendXmr')}</h3>
 
       {/* Address */}
       <div className="st-field">
-        <label className="st-label">Destination Address</label>
+        <label className="st-label">{t('crypto.wallet.sendAddress')}</label>
         <input
           className={`st-input ${address && !addressValid ? 'st-input-error' : ''}`}
-          placeholder="4... or 8... Monero address"
+          placeholder={t('crypto.wallet.addressPlaceholder')}
           value={address}
           onChange={(e) => { setAddress(e.target.value); setStage('form'); }}
           spellCheck={false}
         />
         {address && !addressValid && (
-          <div className="st-field-error">Invalid Monero address</div>
+          <div className="st-field-error">{t('crypto.wallet.invalidAddress')}</div>
         )}
       </div>
 
       {/* Amount */}
       <div className="st-field">
-        <label className="st-label">Amount</label>
+        <label className="st-label">{t('crypto.wallet.amount')}</label>
         <div className="st-amount-row">
           <input
             className="st-input st-input-amount"
@@ -196,8 +198,8 @@ export function SendTab() {
         )}
         {balance && (
           <div className="st-field-hint">
-            Available: {balance.unlocked_xmr} XMR
-            <button className="st-link" onClick={() => setAmount(balance.unlocked_xmr)}>Max</button>
+            {t('crypto.wallet.available', { amount: balance.unlocked_xmr })}
+            <button className="st-link" onClick={() => setAmount(balance.unlocked_xmr)}>{t('crypto.wallet.max')}</button>
           </div>
         )}
       </div>
@@ -205,7 +207,7 @@ export function SendTab() {
       {/* Account selector */}
       {balance && balance.accounts.length > 1 && (
         <div className="st-field">
-          <label className="st-label">From Account</label>
+          <label className="st-label">{t('crypto.wallet.fromAccount')}</label>
           <select
             className="st-select"
             value={accountIndex}
@@ -222,16 +224,16 @@ export function SendTab() {
 
       {/* Priority */}
       <div className="st-field">
-        <label className="st-label">Priority</label>
+        <label className="st-label">{t('crypto.wallet.priority')}</label>
         <div className="st-priority-row">
           {PRIORITIES.map((p) => (
             <button
               key={p.value}
               className={`st-priority-btn ${priority === p.value ? 'st-priority-active' : ''}`}
               onClick={() => setPriority(p.value)}
-              title={p.desc}
+              title={t(p.desc)}
             >
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
@@ -241,15 +243,15 @@ export function SendTab() {
       {stage === 'preview' && feePreview && (
         <div className="st-preview">
           <div className="st-preview-row">
-            <span className="st-label">Amount</span>
+            <span className="st-label">{t('crypto.wallet.amount')}</span>
             <span>{picoToXmr(feePreview.amount)} XMR</span>
           </div>
           <div className="st-preview-row">
-            <span className="st-label">Fee</span>
+            <span className="st-label">{t('crypto.fee')}</span>
             <span>{picoToXmr(feePreview.fee)} XMR</span>
           </div>
           <div className="st-preview-row st-preview-total">
-            <span className="st-label">Total</span>
+            <span className="st-label">{t('crypto.wallet.total')}</span>
             <span>{picoToXmr(feePreview.amount + feePreview.fee)} XMR</span>
           </div>
         </div>
@@ -270,19 +272,19 @@ export function SendTab() {
             onClick={estimateFee}
             disabled={!amountPico || !isValidAddress(address) || estimating}
           >
-            {estimating ? <><Loader2 size={13} className="spin" /> Estimating...</> : 'Preview Fee'}
+            {estimating ? <><Loader2 size={13} className="spin" /> {t('crypto.wallet.estimating')}</> : t('crypto.wallet.previewFee')}
           </button>
         )}
         {stage === 'preview' && (
           <>
-            <button className="st-btn st-btn-ghost" onClick={() => setStage('form')}>Back</button>
+            <button className="st-btn st-btn-ghost" onClick={() => setStage('form')}>{t('crypto.wallet.back')}</button>
             <button className="st-btn st-btn-primary" onClick={sendTransaction} disabled={rpc.isLoading}>
-              {rpc.isLoading ? <><Loader2 size={13} className="spin" /> Sending...</> : <><Send size={13} /> Send</>}
+              {rpc.isLoading ? <><Loader2 size={13} className="spin" /> {t('crypto.wallet.sending')}</> : <><Send size={13} /> {t('crypto.wallet.send')}</>}
             </button>
           </>
         )}
         {stage === 'error' && (
-          <button className="st-btn st-btn-secondary" onClick={() => setStage('form')}>Try Again</button>
+          <button className="st-btn st-btn-secondary" onClick={() => setStage('form')}>{t('crypto.wallet.tryAgain')}</button>
         )}
       </div>
 

@@ -12,10 +12,12 @@
 
 import { useState } from 'react';
 import { FlaskConical } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 // Banner shown while the storage module runs the simulated "NAS preview"
 // (demo provider). Makes it unmistakable the disks/RAID/volumes/shares are fake.
 export function DemoModeBanner({ onExit }: { onExit: () => void | Promise<void> }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
 
   const handleExit = async () => {
@@ -36,10 +38,7 @@ export function DemoModeBanner({ onExit }: { onExit: () => void | Promise<void> 
     }}>
       <FlaskConical size={18} style={{ color: 'var(--mod-storage)', flexShrink: 0, marginTop: 1 }} />
       <div style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, fontFamily: 'var(--font-sans)' }}>
-        <strong style={{ color: 'var(--text)' }}>Modo vista previa (demo)</strong> — los discos, el NAS ZFS, los
-        pools RAID, los volúmenes y las carpetas compartidas de abajo están{' '}
-        <strong style={{ color: 'var(--text)' }}>simulados</strong>, no es hardware real.
-        Así se ve el módulo de Almacenamiento con la capa NAS ZFS sobre bare-metal.
+        <strong style={{ color: 'var(--text)' }}>{t('storage.demo.title')}</strong> — {t('storage.demo.body')}
       </div>
       <button
         onClick={handleExit}
@@ -52,7 +51,7 @@ export function DemoModeBanner({ onExit }: { onExit: () => void | Promise<void> 
           opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap',
         }}
       >
-        {busy ? 'Saliendo…' : 'Salir de la vista previa'}
+        {busy ? t('storage.demo.leaving') : t('storage.demo.exit')}
       </button>
     </div>
   );

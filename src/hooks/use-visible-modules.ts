@@ -38,6 +38,7 @@ export function useVisibleModules(): { ungrouped: ModuleConfig[]; groups: Module
     const dynConfigs: ModuleConfig[] = dynamicModules.map((d) => ({
       id: d.id, label: d.label, icon: lucideLookup(d.icon),
       color: d.color ?? 'var(--accent)', path: `/app/${d.app_name}`, group: d.group,
+      parentModule: d.parent_module,
     }));
     const merged = [...staticVisible];
     for (const d of dynamicModules) {
@@ -47,8 +48,8 @@ export function useVisibleModules(): { ungrouped: ModuleConfig[]; groups: Module
       if (idx >= 0) merged.splice(idx + 1, 0, cfg); else merged.push(cfg);
     }
 
-    const ungrouped = merged.filter((m) => !m.group);
-    const grouped = merged.filter((m) => m.group);
+    const ungrouped = merged.filter((m) => !m.group && !m.parentModule);
+    const grouped = merged.filter((m) => m.group && !m.parentModule);
     const groupNames = [...new Set(grouped.map((m) => m.group!))];
     const groups: ModuleGroup[] = groupNames.map((name) => ({ name, modules: grouped.filter((m) => m.group === name) }));
     return { ungrouped, groups, all: merged };

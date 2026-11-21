@@ -14,14 +14,15 @@ import { useState, useCallback } from 'react';
 import { X, Plus, Trash2, Edit2, Check, Type, Hash, Calendar, CheckSquare, List, ExternalLink } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import type { CustomFieldType } from '../types';
+import { useI18n } from '@/i18n';
 
-const FIELD_TYPES: { value: CustomFieldType; label: string; icon: typeof Type }[] = [
-  { value: 'text', label: 'Text', icon: Type },
-  { value: 'number', label: 'Number', icon: Hash },
-  { value: 'date', label: 'Date', icon: Calendar },
-  { value: 'checkbox', label: 'Checkbox', icon: CheckSquare },
-  { value: 'select', label: 'Select', icon: List },
-  { value: 'url', label: 'URL', icon: ExternalLink },
+const FIELD_TYPES: { value: CustomFieldType; labelKey: string; icon: typeof Type }[] = [
+  { value: 'text', labelKey: 'projects.customFields.type.text', icon: Type },
+  { value: 'number', labelKey: 'projects.customFields.type.number', icon: Hash },
+  { value: 'date', labelKey: 'projects.customFields.type.date', icon: Calendar },
+  { value: 'checkbox', labelKey: 'projects.customFields.type.checkbox', icon: CheckSquare },
+  { value: 'select', labelKey: 'projects.customFields.type.select', icon: List },
+  { value: 'url', labelKey: 'projects.customFields.type.url', icon: ExternalLink },
 ];
 
 interface Props {
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function CustomFieldManager({ boardId, open, onClose }: Props) {
+  const { t } = useI18n();
   const fieldDefs = useProjectsStore(s => s.customFieldDefs);
   const createFieldDef = useProjectsStore(s => s.createFieldDef);
   const updateFieldDef = useProjectsStore(s => s.updateFieldDef);
@@ -88,10 +90,10 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
     setAdding(true);
   }, [fieldDefs]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    if (!confirm('Delete this field? Values on existing cards will be lost.')) return;
+  const handleDelete = useCallback(async (id: string, fieldName: string) => {
+    if (!confirm(t('projects.customFields.deleteConfirm', { name: fieldName }))) return;
     await deleteFieldDef(boardId, id);
-  }, [boardId, deleteFieldDef]);
+  }, [boardId, deleteFieldDef, t]);
 
   if (!open) return null;
 
@@ -111,16 +113,16 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
           padding: '12px 16px', borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-            Custom Fields
+            {t('projects.customFields.title')}
           </span>
-          <button onClick={onClose} style={closeBtnStyle}><X size={16} /></button>
+          <button onClick={onClose} style={closeBtnStyle} aria-label={t('projects.customFields.close')}><X size={16} /></button>
         </div>
 
         {/* Field list */}
         <div style={{ flex: 1, overflow: 'auto', padding: '8px 16px' }}>
           {defs.length === 0 && !adding && (
             <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>
-              No custom fields yet. Add one to get started.
+              {t('projects.customFields.empty')}
             </div>
           )}
 
@@ -136,20 +138,20 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
                   {fd.name}
                 </span>
                 <span style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase' }}>
-                  {fd.type}
+                  {FIELD_TYPES.find(ft => ft.value === fd.type) ? t(FIELD_TYPES.find(ft => ft.value === fd.type)!.labelKey) : fd.type}
                 </span>
                 {fd.show_on_card && (
                   <span style={{
                     fontSize: 9, padding: '1px 4px', borderRadius: 3,
                     background: 'var(--success-dim)', color: 'var(--success)',
                   }}>
-                    card
+                    {t('projects.customFields.onCard')}
                   </span>
                 )}
-                <button onClick={() => handleEdit(fd.id)} style={iconBtnStyle}>
+                <button onClick={() => handleEdit(fd.id)} style={iconBtnStyle} aria-label={t('projects.customFields.edit', { name: fd.name })}>
                   <Edit2 size={12} />
                 </button>
-                <button onClick={() => handleDelete(fd.id)} style={{ ...iconBtnStyle, color: 'var(--error)' }}>
+                <button onClick={() => handleDelete(fd.id, fd.name)} style={{ ...iconBtnStyle, color: 'var(--error)' }} aria-label={t('projects.customFields.delete', { name: fd.name })}>
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -161,19 +163,21 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
             <div style={{ padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input
                 autoFocus
-                placeholder="Field name"
+                placeholder={t('projects.customFields.name.placeholder')}
+                aria-label={t('projects.customFields.name.label')}
                 value={name}
                 onChange={e => setName(e.target.value)}
                 style={inputStyle}
               />
-              <select value={type} onChange={e => setType(e.target.value as CustomFieldType)} style={inputStyle}>
+              <select value={type} onChange={e => setType(e.target.value as CustomFieldType)} style={inputStyle} aria-label={t('projects.customFields.type.label')}>
                 {FIELD_TYPES.map(ft => (
-                  <option key={ft.value} value={ft.value}>{ft.label}</option>
+                  <option key={ft.value} value={ft.value}>{t(ft.labelKey)}</option>
                 ))}
               </select>
               {type === 'select' && (
                 <input
-                  placeholder="Options (comma-separated)"
+                  placeholder={t('projects.customFields.options.placeholder')}
+                  aria-label={t('projects.customFields.options.label')}
                   value={options}
                   onChange={e => setOptions(e.target.value)}
                   style={inputStyle}
@@ -182,11 +186,11 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
               <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                   <input type="checkbox" checked={required} onChange={e => setRequired(e.target.checked)} />
-                  Required
+                  {t('projects.customFields.required')}
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                   <input type="checkbox" checked={showOnCard} onChange={e => setShowOnCard(e.target.checked)} />
-                  Show on card
+                  {t('projects.customFields.showOnCard')}
                 </label>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -195,9 +199,9 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
                   opacity: name.trim() ? 1 : 0.5,
                   pointerEvents: name.trim() ? 'auto' : 'none',
                 }}>
-                  <Check size={12} /> {editingId ? 'Update' : 'Add'}
+                  <Check size={12} /> {editingId ? t('projects.customFields.update') : t('projects.customFields.add')}
                 </button>
-                <button onClick={resetForm} style={cancelBtnStyle}>Cancel</button>
+                <button onClick={resetForm} style={cancelBtnStyle}>{t('projects.customFields.cancel')}</button>
               </div>
             </div>
           )}
@@ -212,7 +216,7 @@ export function CustomFieldManager({ boardId, open, onClose }: Props) {
               color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)',
               padding: '4px 0',
             }}>
-              <Plus size={14} /> Add field
+              <Plus size={14} /> {t('projects.customFields.addField')}
             </button>
           </div>
         )}

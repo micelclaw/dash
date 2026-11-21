@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import type { ApiResponse } from '@/types/api';
 import { SnapshotSettingsForm } from '../../settings/SnapshotSettingsForm';
+import { useI18n } from '@/i18n';
 
 interface ReconcileResult { created: number; updated: number; removed: number; fixed: number; total: number }
 
@@ -26,16 +27,21 @@ interface ReconcileResult { created: number; updated: number; removed: number; f
  * red de seguridad manual.
  */
 function ReconcileBlock({ onDone }: { onDone?: () => void }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
     try {
       const res = await api.post<ApiResponse<ReconcileResult>>('/files/reconcile', {});
       const r = res.data;
-      toast.success(`Drive resincronizado: ${r.created} indexados, ${r.removed} fantasmas fuera, ${r.fixed} rutas corregidas`);
+      toast.success(t('drive.settingsModal.reconcile.toastSuccess', {
+        created: r.created,
+        removed: r.removed,
+        fixed: r.fixed,
+      }));
       onDone?.();
     } catch (e) {
-      toast.error(`No se pudo resincronizar: ${e instanceof Error ? e.message : e}`);
+      toast.error(`${t('drive.settingsModal.reconcile.toastFailure')}: ${e instanceof Error ? e.message : e}`);
     }
     setBusy(false);
   };
@@ -45,13 +51,14 @@ function ReconcileBlock({ onDone }: { onDone?: () => void }) {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
     }}>
       <div>
-        <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>Resincronizar con el disco</div>
+        <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>{t('drive.settingsModal.reconcile.title')}</div>
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          Reindexa archivos añadidos por fuera (WebDAV, red) y quita entradas sin archivo
+          {t('drive.settingsModal.reconcile.description')}
         </div>
       </div>
       <button
         onClick={() => void run()}
+        aria-label={t('drive.settingsModal.reconcile.action')}
         disabled={busy}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
@@ -62,7 +69,7 @@ function ReconcileBlock({ onDone }: { onDone?: () => void }) {
         }}
       >
         <RefreshCw size={13} className={busy ? 'animate-spin' : undefined} />
-        {busy ? 'Resincronizando…' : 'Resincronizar'}
+        {busy ? t('drive.settingsModal.reconcile.busy') : t('drive.settingsModal.reconcile.action')}
       </button>
     </div>
   );
@@ -82,6 +89,7 @@ interface DriveSettingsModalProps {
  * just the modal chrome around it.
  */
 export function DriveSettingsModal({ open, onClose, onSaved }: DriveSettingsModalProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return (
@@ -116,9 +124,9 @@ export function DriveSettingsModal({ open, onClose, onSaved }: DriveSettingsModa
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
             <History size={15} style={{ color: 'var(--mod-drive)' }} />
-            Drive snapshot settings
+            {t('drive.settingsModal.title')}
           </h3>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label={t('drive.settingsModal.close')} style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--text-dim)', padding: 2, display: 'flex',
           }}>
@@ -139,7 +147,7 @@ export function DriveSettingsModal({ open, onClose, onSaved }: DriveSettingsModa
                   fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                 }}
               >
-                Cancel
+                {t('drive.settingsModal.cancel')}
               </button>
             )}
           />

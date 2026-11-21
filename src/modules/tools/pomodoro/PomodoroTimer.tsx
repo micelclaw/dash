@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 type Mode = 'pomodoro' | 'timer' | 'stopwatch';
 type Status = 'idle' | 'running' | 'paused';
@@ -51,20 +52,23 @@ function playTone() {
   } catch { /* ignore audio errors */ }
 }
 
-function notifyComplete(phase: string) {
+function notifyComplete(phase: string, translate: (key: string) => string) {
   playTone();
   // El WebView de Android no expone el API Notification → `Notification` es un símbolo
   // global inexistente y tocarlo lanza ReferenceError (tumbaba todo el Shell vía la
   // error boundary de ruta). Guardamos con typeof (mismo patrón que NotificationsSection).
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    new Notification(`${phase === 'focus' ? 'Focus' : 'Break'} complete!`, {
-      body: phase === 'focus' ? 'Time for a break.' : 'Ready to focus again?',
+    new Notification(translate(phase === 'focus' ? 'pomodoro.notification.focusTitle' : 'pomodoro.notification.breakTitle'), {
+      body: translate(phase === 'focus' ? 'pomodoro.notification.focusBody' : 'pomodoro.notification.breakBody'),
       tag: 'micelclaw-timer',
     });
   }
 }
 
 export function PomodoroTimer() {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const [mode, setMode] = useState<Mode>('pomodoro');
   const [timer, setTimer] = useState<TimerState>({ status: 'idle', startedAt: null, pausedElapsed: 0, duration: DEFAULT_FOCUS });
   const [displayMs, setDisplayMs] = useState(DEFAULT_FOCUS);
@@ -109,7 +113,7 @@ export function PomodoroTimer() {
           // Timer complete
           setTimer({ status: 'idle', startedAt: null, pausedElapsed: 0, duration: timer.duration });
           if (mode === 'pomodoro') handlePomodoroComplete();
-          else notifyComplete('timer');
+          else notifyComplete('timer', tRef.current);
           return;
         }
         setDisplayMs(remaining);
@@ -122,7 +126,7 @@ export function PomodoroTimer() {
   }, [timer.status, timer.startedAt, timer.duration, timer.pausedElapsed, mode, getElapsed]);
 
   const handlePomodoroComplete = useCallback(() => {
-    notifyComplete(phase);
+    notifyComplete(phase, tRef.current);
     if (phase === 'focus') {
       const isLong = session % SESSIONS_BEFORE_LONG === 0;
       const nextPhase: Phase = isLong ? 'long-break' : 'short-break';
@@ -207,7 +211,7 @@ export function PomodoroTimer() {
     ? 1 - displayMs / timer.duration
     : 0;
 
-  const phaseLabel = phase === 'focus' ? 'Focus' : phase === 'short-break' ? 'Short Break' : 'Long Break';
+  const phaseLabel = phase === 'focus' ? t('pomodoro.phase.focus') : phase === 'short-break' ? t('pomodoro.phase.shortBreak') : t('pomodoro.phase.longBreak');
   const phaseColor = phase === 'focus' ? 'var(--mod-tools)' : phase === 'short-break' ? 'var(--success)' : 'var(--info)';
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
@@ -232,9 +236,9 @@ export function PomodoroTimer() {
     }}>
       {/* Mode tabs */}
       <div style={{ display: 'flex', gap: 4 }}>
-        <button style={tabStyle(mode === 'pomodoro')} onClick={() => switchMode('pomodoro')}>Pomodoro</button>
-        <button style={tabStyle(mode === 'timer')} onClick={() => switchMode('timer')}>Timer</button>
-        <button style={tabStyle(mode === 'stopwatch')} onClick={() => switchMode('stopwatch')}>Stopwatch</button>
+        <button aria-pressed={mode === 'pomodoro'} style={tabStyle(mode === 'pomodoro')} onClick={() => switchMode('pomodoro')}>{t('pomodoro.mode.pomodoro')}</button>
+        <button aria-pressed={mode === 'timer'} style={tabStyle(mode === 'timer')} onClick={() => switchMode('timer')}>{t('pomodoro.mode.timer')}</button>
+        <button aria-pressed={mode === 'stopwatch'} style={tabStyle(mode === 'stopwatch')} onClick={() => switchMode('stopwatch')}>{t('pomodoro.mode.stopwatch')}</button>
       </div>
 
       {/* Circular display */}
@@ -287,7 +291,7 @@ export function PomodoroTimer() {
               />
             ))}
             <span style={{ fontSize: '0.625rem', color: 'var(--text-dim)', marginLeft: 4 }}>
-              Session {session} of {SESSIONS_BEFORE_LONG}
+              {t('pomodoro.sessionCount', { session, total: SESSIONS_BEFORE_LONG })}
             </span>
           </div>
         )}
@@ -296,6 +300,7 @@ export function PomodoroTimer() {
         {mode === 'timer' && timer.status === 'idle' && (
           <input
             type="text"
+            aria-label={t('pomodoro.setting.timerDuration')}
             value={timerInput}
             onChange={(e) => {
               setTimerInput(e.target.value);
@@ -319,23 +324,23 @@ export function PomodoroTimer() {
       <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
         {timer.status === 'running' ? (
           <button onClick={pause} style={{ ...btnBase, background: 'var(--surface)', color: 'var(--text)' }}>
-            <Pause size={16} /> Pause
+            <Pause size={16} /> {t('pomodoro.action.pause')}
           </button>
         ) : (
           <button onClick={start} style={{ ...btnBase, background: 'var(--mod-tools)', color: '#fff' }}>
-            <Play size={16} /> {timer.status === 'paused' ? 'Resume' : 'Start'}
+            <Play size={16} /> {timer.status === 'paused' ? t('pomodoro.action.resume') : t('pomodoro.action.start')}
           </button>
         )}
-        <button onClick={reset} style={{ ...btnBase, background: 'var(--surface)', color: 'var(--text-dim)' }}>
+        <button aria-label={t('pomodoro.action.reset')} onClick={reset} style={{ ...btnBase, background: 'var(--surface)', color: 'var(--text-dim)' }}>
           <RotateCcw size={14} />
         </button>
         {mode === 'stopwatch' && timer.status === 'running' && (
           <button onClick={lap} style={{ ...btnBase, background: 'var(--surface)', color: 'var(--text)' }}>
-            Lap
+            {t('pomodoro.action.lap')}
           </button>
         )}
         {mode === 'pomodoro' && timer.status === 'running' && (
-          <button onClick={handlePomodoroComplete} style={{ ...btnBase, background: 'var(--surface)', color: 'var(--text-dim)' }}>
+          <button aria-label={t('pomodoro.action.skipPhase')} onClick={handlePomodoroComplete} style={{ ...btnBase, background: 'var(--surface)', color: 'var(--text-dim)' }}>
             <SkipForward size={14} />
           </button>
         )}
@@ -348,21 +353,22 @@ export function PomodoroTimer() {
           fontSize: '0.6875rem', color: 'var(--text-dim)',
         }}>
           {[
-            { label: 'Focus', value: focusMin, set: setFocusMin },
-            { label: 'Short', value: shortMin, set: setShortMin },
-            { label: 'Long', value: longMin, set: setLongMin },
-          ].map(({ label, value, set }) => (
-            <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {label}
+            { id: 'focus', labelKey: 'pomodoro.setting.focus', value: focusMin, set: setFocusMin },
+            { id: 'short', labelKey: 'pomodoro.setting.short', value: shortMin, set: setShortMin },
+            { id: 'long', labelKey: 'pomodoro.setting.long', value: longMin, set: setLongMin },
+          ].map(({ id, labelKey, value, set }) => (
+            <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {t(labelKey)}
               <input
                 type="number"
+                aria-label={t(labelKey)}
                 min={1}
                 max={120}
                 value={value}
                 onChange={(e) => {
                   const v = parseInt(e.target.value) || 1;
                   set(v);
-                  if (label === 'Focus') {
+                  if (id === 'focus') {
                     setTimer((t) => ({ ...t, duration: v * 60000 }));
                     setDisplayMs(v * 60000);
                   }
@@ -388,7 +394,7 @@ export function PomodoroTimer() {
         }}>
           {laps.map((ms, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 4px', color: 'var(--text-dim)' }}>
-              <span>Lap {laps.length - i}</span>
+              <span>{t('pomodoro.lapNumber', { number: laps.length - i })}</span>
               <span style={{ color: 'var(--text)' }}>{formatMs(ms)}</span>
             </div>
           ))}

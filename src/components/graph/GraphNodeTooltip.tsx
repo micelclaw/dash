@@ -14,6 +14,7 @@ import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { GraphNode } from '@/types/intelligence';
 import { entityTypeColor, entityTypeShape } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
+import { useI18n, hasMessage } from '@/i18n';
 
 interface GraphNodeTooltipProps {
   node: GraphNode | null;
@@ -37,7 +38,9 @@ function TypeShapeIcon({ entityType }: { entityType: string }) {
 }
 
 export function GraphNodeTooltip({ node, position }: GraphNodeTooltipProps) {
+  const { t } = useI18n();
   if (!node || !position) return null;
+  const typeKey = `graph.type.${node.entity_type}`;
 
   return (
     <div style={{
@@ -68,13 +71,13 @@ export function GraphNodeTooltip({ node, position }: GraphNodeTooltipProps) {
         display: 'flex', alignItems: 'center', gap: 8,
         fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2,
       }}>
-        <span style={{ color: entityTypeColor(node.entity_type), textTransform: 'capitalize' }}>
-          {node.entity_type}
+        <span style={{ color: entityTypeColor(node.entity_type) }}>
+          {hasMessage(typeKey) ? t(typeKey) : node.entity_type}
         </span>
-        <span>{node.mention_count} mention{node.mention_count !== 1 ? 's' : ''}</span>
+        <span>{t(node.mention_count === 1 ? 'graph.tooltip.mentionOne' : 'graph.tooltip.mentionMany', { count: node.mention_count })}</span>
         {node.heat_score > 0 && (
           <span style={{ fontFamily: 'var(--font-mono)' }}>
-            heat: {(node.heat_score * 100).toFixed(0)}%
+            {t('graph.tooltip.heat', { percent: `${(node.heat_score * 100).toFixed(0)}%` })}
           </span>
         )}
       </div>

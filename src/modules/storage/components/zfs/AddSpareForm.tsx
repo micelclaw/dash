@@ -17,10 +17,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { ShieldCheck } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, ZFS_COPY } from '../ZfsHelp';
+import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, Field, DiskPickList, useAvailableDisks } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function AddSpareForm({ pool, onClose }: { pool: string; onClose: () => void }) {
+  const { t } = useI18n();
   const demo = useStorageStore((s) => s.zfs_demo);
   const addSpare = useStorageStore((s) => s.zfsAddSpare);
   const [picked, setPicked] = useState<string[]>([]);
@@ -34,21 +36,19 @@ export function AddSpareForm({ pool, onClose }: { pool: string; onClose: () => v
     setBusy(true);
     try {
       await addSpare(pool, picked);
-      toast.success(`Repuesto añadido a "${pool}"${demo ? ' (demo)' : ''}`);
+      toast.success(t('storage.spare.added', { pool, demo: demo ? t('storage.common.demoSuffix') : '' }));
       onClose();
     } catch (e) {
-      toast.error(`No se pudo añadir el repuesto: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('storage.spare.addError', { error: e instanceof Error ? e.message : String(e) }));
     } finally { setBusy(false); }
   };
 
   return (
-    <ZfsModal title={`Añadir disco de repuesto a "${pool}"`} icon={<ShieldCheck size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton primary disabled={busy || picked.length === 0} onClick={submit}>{busy ? 'Añadiendo…' : 'Añadir repuesto'}</ZfsButton></>}>
-      <SectionIntro>{ZFS_COPY.spare}</SectionIntro>
+    <ZfsModal title={t('storage.spare.title', { pool })} icon={<ShieldCheck size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton primary disabled={busy || picked.length === 0} onClick={submit}>{busy ? t('storage.spare.adding') : t('storage.spare.add')}</ZfsButton></>}>
+      <SectionIntro>{t('storage.help.spare')}</SectionIntro>
       <div>
-        <Field hint="Elige los discos que quedarán en reserva. No se borran datos del pool: el repuesto solo entra en juego si un disco del pool falla.">
-          Discos libres para repuesto
-        </Field>
+        <Field hint={t('storage.spare.hint')}>{t('storage.spare.disks')}</Field>
         <DiskPickList disks={available} picked={picked} onToggle={toggle} />
       </div>
     </ZfsModal>

@@ -26,10 +26,11 @@ import { ClienteDialog } from './ClienteDialog';
 import { ClienteDetalle } from './ClienteDetalle';
 import { useFacturacionNav } from './navigation';
 import { tintedPillStyle } from './statusMeta';
+import { useI18n } from '@/i18n';
 
 const ROLE_LABEL: Record<FinanceRole, string> = {
-  customer: 'Customer',
-  supplier: 'Supplier',
+  customer: 'finance.billing.customer',
+  supplier: 'finance.billing.supplier',
 };
 
 // Color de acento por rol: cliente = azul (--info), proveedor = ámbar (--amber).
@@ -41,12 +42,13 @@ const ROLE_COLOR: Record<FinanceRole, string> = {
 type RoleFilter = 'all' | 'customer' | 'supplier';
 
 const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'customer', label: 'Customers' },
-  { value: 'supplier', label: 'Suppliers' },
+  { value: 'all', label: 'finance.billing.contacts.all' },
+  { value: 'customer', label: 'finance.billing.contacts.customers' },
+  { value: 'supplier', label: 'finance.billing.contacts.suppliers' },
 ];
 
 export function FacturacionClientesTab() {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const { contacts, selectedContactId, setSelectedContact } = useFinanceBillingStore();
   const { openInvoice } = useFacturacionNav();
@@ -74,14 +76,14 @@ export function FacturacionClientesTab() {
                 background: active ? 'var(--mod-finance)' : 'transparent', color: active ? '#fff' : 'var(--text-dim)',
                 border: 'none', borderRadius: 'calc(var(--radius-md, 6px) - 2px)', whiteSpace: 'nowrap',
               }}>
-                {f.label}
+                {t(f.label)}
               </button>
             );
           })}
         </div>
         {listed.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 4px' }}>
-            {roleFilter === 'supplier' ? 'No suppliers yet.' : roleFilter === 'customer' ? 'No customers yet.' : 'No customers or suppliers yet.'}
+            {t(roleFilter === 'supplier' ? 'finance.billing.contacts.noSuppliers' : roleFilter === 'customer' ? 'finance.billing.contacts.noCustomers' : 'finance.billing.contacts.noContacts')}
           </div>
         )}
         {listed.map((c) => {
@@ -96,7 +98,7 @@ export function FacturacionClientesTab() {
                 <span style={{ fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
                 <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   {c.roles.map((r) => (
-                    <span key={r} style={tintedPillStyle(ROLE_COLOR[r])}>{ROLE_LABEL[r]}</span>
+                    <span key={r} style={tintedPillStyle(ROLE_COLOR[r])}>{t(ROLE_LABEL[r])}</span>
                   ))}
                 </span>
               </div>
@@ -105,13 +107,13 @@ export function FacturacionClientesTab() {
           );
         })}
         <button onClick={() => setDialogOpen(true)} style={{ width: '100%', padding: '8px 12px', marginTop: 4, cursor: 'pointer', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-          <Plus size={14} /> Contact
+          <Plus size={14} /> {t('finance.billing.contacts.create')}
         </button>
       </div>
 
       {/* Ficha rica del contacto — editable in situ */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 16 }}>Create a customer or supplier to get started.</div>}
+        {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 16 }}>{t('finance.billing.contacts.getStarted')}</div>}
         {selected && (
           <ClienteDetalle key={selected.id} contactId={selected.id} onOpenInvoice={openInvoice} />
         )}

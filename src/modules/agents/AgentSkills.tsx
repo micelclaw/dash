@@ -10,12 +10,13 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { AssignAppsModal } from '@/components/shared/AssignAppsModal';
 import { AppIcon } from '@/components/shared/AppIcon';
+import { useI18n } from '@/i18n';
 import { AppDetailModal } from './AppDetailModal';
 import type { AgentSkill } from './types';
 
@@ -38,6 +39,9 @@ function fmtTok(n: number): string {
 }
 
 export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillModes, appTokens, onSkillsChanged }: AgentSkillsProps) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -50,10 +54,10 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
         .filter(s => s.id !== skill.id)
         .map(s => s.skill_id ?? `claw-${s.domain}`);
       await api.patch(`/managed-agents/${agentId}/skills`, { skills: remaining });
-      toast.success(`${skill.name} removed`);
+      toast.success(tRef.current('agents.skills.removed', { name: skill.name }));
       onSkillsChanged?.();
     } catch {
-      toast.error(`Failed to remove ${skill.name}`);
+      toast.error(tRef.current('agents.skills.removeFailed', { name: skill.name }));
     } finally {
       setRemoving(null);
     }
@@ -65,7 +69,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-          Apps ({skills.length})
+          {t('agents.skills.heading', { count: skills.length })}
         </h4>
         <button
           onClick={() => setShowModal(true)}
@@ -75,7 +79,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
             fontFamily: 'var(--font-sans)',
           }}
         >
-          + Assign
+          {t('agents.skills.assign')}
         </button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
@@ -85,7 +89,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
             onMouseEnter={() => setHoveredId(skill.id)}
             onMouseLeave={() => setHoveredId(null)}
             onClick={() => setDetailSkill(skill)}
-            title={`Ver detalle / modo de ${skill.name}`}
+            title={t('agents.skills.detailTitle', { name: skill.name })}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               justifyContent: 'center', gap: 4, height: 64, position: 'relative',
@@ -99,6 +103,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
               <button
                 onClick={(e) => { e.stopPropagation(); handleRemove(skill); }}
                 disabled={removing === skill.id}
+                aria-label={t('agents.skills.removeTitle', { name: skill.name })}
                 style={{
                   position: 'absolute', top: 3, right: 3, width: 16, height: 16,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -109,7 +114,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--error)'; e.currentTarget.style.borderColor = 'var(--error)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
-                title={`Remove ${skill.name}`}
+                title={t('agents.skills.removeTitle', { name: skill.name })}
               >
                 <X size={10} />
               </button>
@@ -123,16 +128,16 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
               {skill.name}
             </span>
             {(() => {
-              const t = appTokens?.[skill.skill_id ?? `claw-${skill.domain}`];
-              return typeof t === 'number' ? (
+              const tokens = appTokens?.[skill.skill_id ?? `claw-${skill.domain}`];
+              return typeof tokens === 'number' ? (
                 <span
-                  title="Tokens de contexto estimados de esta app"
+                  title={t('agents.skills.contextTokens')}
                   style={{
                     fontSize: '0.5625rem', color: 'var(--text-muted)',
                     fontVariantNumeric: 'tabular-nums', lineHeight: 1,
                   }}
                 >
-                  ≈{fmtTok(t)}
+                  ≈{fmtTok(tokens)}
                 </span>
               ) : null;
             })()}
@@ -142,7 +147,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
 
       <AssignAppsModal
         agentId={agentId}
-        agentName={agentName ?? 'Agent'}
+        agentName={agentName ?? t('agents.skills.agentFallback')}
         agentAvatar={agentAvatar}
         currentSkillIds={currentSkillIds}
         open={showModal}

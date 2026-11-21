@@ -13,14 +13,15 @@
 import { FileText, Download, Check, CheckCheck } from 'lucide-react';
 import { platformMeta } from '@/config/messaging-platforms';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 import type { Message, MessageAttachment } from '@/services/messages.service';
 
 interface MessageBubbleProps {
   message: Message;
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatTime(date: Date, locale: string): string {
+  return date.toLocaleTimeString(locale === 'es' ? 'es-ES' : 'en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatSize(bytes: number | null): string {
@@ -70,6 +71,7 @@ function LinkifiedText({ text }: { text: string }) {
 }
 
 function Attachment({ att, color }: { att: MessageAttachment; color: string }) {
+  const { t } = useI18n();
   // Los bytes se sirven por el proxy de Core (?token= para <img>/<a>, que no
   // mandan el header Bearer). Nunca se expone el mxc interno del homeserver.
   const src = api.mediaUrl(att.url);
@@ -80,7 +82,7 @@ function Attachment({ att, color }: { att: MessageAttachment; color: string }) {
       <a href={src} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginTop: 4 }}>
         <img
           src={thumb}
-          alt={att.name ?? 'imagen'}
+          alt={att.name ?? t('messages.image')}
           loading="lazy"
           style={{ maxWidth: '100%', maxHeight: 240, borderRadius: 8, display: 'block' }}
         />
@@ -89,7 +91,7 @@ function Attachment({ att, color }: { att: MessageAttachment; color: string }) {
   }
   if (att.kind === 'video') {
     return (
-      <video
+        <video
         src={src}
         controls
         preload="metadata"
@@ -123,6 +125,7 @@ function Attachment({ att, color }: { att: MessageAttachment; color: string }) {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
+  const { t, locale } = useI18n();
   const isSent = message.direction === 'sent';
   const color = platformMeta(message.platform).color;
   const attachments = message.attachments ?? [];
@@ -156,20 +159,20 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <Attachment key={att.id} att={att} color={color} />
         ))}
         {!message.content && attachments.length === 0 && (
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>(no content)</div>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('messages.noContent')}</div>
         )}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 4,
           justifyContent: isSent ? 'flex-end' : 'flex-start',
           fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 4,
         }}>
-          <span>{message.pending ? 'sending…' : formatTime(new Date(message.sent_at))}</span>
+          <span>{message.pending ? t('messages.sending') : formatTime(new Date(message.sent_at), locale)}</span>
           {/* Doble check: gris = enviado, azul = leído (solo salientes). En grupos
               el backend no marca read_at → se queda en gris, que es lo honesto. */}
           {isSent && !message.pending && (
             message.read_at
-              ? <CheckCheck size={13} style={{ color: '#3b82f6', flexShrink: 0 }} aria-label="Leído" />
-              : <Check size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-label="Enviado" />
+              ? <CheckCheck size={13} style={{ color: '#3b82f6', flexShrink: 0 }} aria-label={t('messages.read')} />
+              : <Check size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} aria-label={t('messages.sent')} />
           )}
         </div>
       </div>

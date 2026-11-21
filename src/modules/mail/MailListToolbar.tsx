@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import {
   Search,
   X,
@@ -121,6 +122,7 @@ export function MailListToolbar({
   total,
   onPageChange,
 }: MailListToolbarProps) {
+  const { t } = useI18n();
   const [localSearch, setLocalSearch] = useState(search);
   const [refreshHovered, setRefreshHovered] = useState(false);
   const [sortHovered, setSortHovered] = useState(false);
@@ -174,7 +176,7 @@ export function MailListToolbar({
     folder: activeFolder ?? 'INBOX',
     moveTargets,
     canRelate: false,
-  });
+  }, t);
   const { directas, enMenu } = repartirAcciones(accionesDeSeleccion);
 
   const despachar = (a: MailAction, el?: HTMLElement) => onAction?.(a.key, selectedIdList ?? [], { el });
@@ -336,7 +338,8 @@ export function MailListToolbar({
                   trigger={
                     <button
                       data-testid="mail-toolbar-more"
-                      title="More actions"
+                      title={t('mail.moreActions')}
+                      aria-label={t('mail.moreActions')}
                       style={batchBtnStyle(hoveredBatch === 'more')}
                       onMouseEnter={() => setHoveredBatch('more')}
                       onMouseLeave={() => setHoveredBatch(null)}
@@ -369,7 +372,8 @@ export function MailListToolbar({
                 type="text"
                 value={localSearch}
                 onChange={(e) => setLocalSearch(e.target.value)}
-                placeholder="Search mail..."
+                placeholder={t('mail.searchMail')}
+                aria-label={t('mail.searchMail')}
                 style={{
                   flex: 1,
                   minWidth: 0,
@@ -388,6 +392,8 @@ export function MailListToolbar({
                     setLocalSearch('');
                     onSearchChange('');
                   }}
+                  aria-label={t('mail.clearSearch')}
+                  title={t('mail.clearSearch')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -411,7 +417,8 @@ export function MailListToolbar({
               onClick={onToggleStarredOnly}
               onMouseEnter={() => setStarHovered(true)}
               onMouseLeave={() => setStarHovered(false)}
-              title={starredOnly ? 'Showing starred only' : 'Show starred only'}
+              title={starredOnly ? t('mail.showingStarred') : t('mail.showStarred')}
+              aria-label={starredOnly ? t('mail.showingStarred') : t('mail.showStarred')}
               aria-pressed={starredOnly}
               style={{
                 ...iconButtonStyle,
@@ -433,7 +440,8 @@ export function MailListToolbar({
                 <button
                   onMouseEnter={() => setSortHovered(true)}
                   onMouseLeave={() => setSortHovered(false)}
-                  title="Sort"
+                  title={t('mail.sort')}
+                  aria-label={t('mail.sort')}
                   style={{
                     ...iconButtonStyle,
                     background: sortHovered ? 'var(--surface-hover)' : 'transparent',
@@ -455,25 +463,25 @@ export function MailListToolbar({
                     letterSpacing: '0.04em',
                   }}
                 >
-                  Sort by
+                  {t('mail.sortBy')}
                 </div>
-                {MAIL_SORT_OPTIONS.map(({ field, label }) => (
+                {MAIL_SORT_OPTIONS.map(({ field }) => (
                   <DropdownMenuItem key={field} onClick={() => onSortChange(field, sortOrder)}>
                     <Check
                       size={13}
                       style={{ marginRight: 6, opacity: sortField === field ? 1 : 0 }}
                     />
-                    {label}
+                    {t(field === 'received_at' ? 'mail.sortDate' : field === 'from' ? 'mail.sortFrom' : field === 'subject' ? 'mail.sortSubject' : 'mail.sortCategory')}
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => onSortChange(sortField, 'desc')}>
                   <ArrowDown size={13} style={{ marginRight: 6, opacity: sortOrder === 'desc' ? 1 : 0.35 }} />
-                  {sortField === 'received_at' ? 'Newest first' : 'Descending'}
+                  {sortField === 'received_at' ? t('mail.newestFirst') : t('mail.descending')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSortChange(sortField, 'asc')}>
                   <ArrowUp size={13} style={{ marginRight: 6, opacity: sortOrder === 'asc' ? 1 : 0.35 }} />
-                  {sortField === 'received_at' ? 'Oldest first' : 'Ascending'}
+                  {sortField === 'received_at' ? t('mail.oldestFirst') : t('mail.ascending')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -483,7 +491,8 @@ export function MailListToolbar({
               onClick={onRefresh}
               onMouseEnter={() => setRefreshHovered(true)}
               onMouseLeave={() => setRefreshHovered(false)}
-              title="Refresh"
+              title={t('mail.refresh')}
+              aria-label={t('mail.refresh')}
               style={{
                 ...iconButtonStyle,
                 background: refreshHovered ? 'var(--surface-hover)' : 'transparent',
@@ -508,13 +517,14 @@ export function MailListToolbar({
           }}
         >
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-            {from}–{to} of {total}
+            {t('mail.pageRange', { from, to, total })}
           </span>
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={!hasPrev}
             style={{ ...pagerBtnStyle, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default' }}
-            title="Previous page"
+            title={t('mail.previousPage')}
+            aria-label={t('mail.previousPage')}
           >
             <ChevronLeft size={16} />
           </button>
@@ -522,7 +532,8 @@ export function MailListToolbar({
             onClick={() => onPageChange(page + 1)}
             disabled={!hasNext}
             style={{ ...pagerBtnStyle, opacity: hasNext ? 1 : 0.3, cursor: hasNext ? 'pointer' : 'default' }}
-            title="Next page"
+            title={t('mail.nextPage')}
+            aria-label={t('mail.nextPage')}
           >
             <ChevronRight size={16} />
           </button>

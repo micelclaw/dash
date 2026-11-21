@@ -1,3 +1,7 @@
+import { useOfficeProviders } from './office-providers.store';
+import {OfficeRecoveryPanel} from './OfficeRecoveryPanel';
+import { officeFilenameSupported, preferredProvider, selectOfficeProvider } from './office-providers.service';
+import { toast } from 'sonner';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -14,15 +18,19 @@
 // Main Office module page with app switcher and recent documents.
 
 import { useEffect, useState, useRef, useCallback, type MouseEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
-  FileText, Table2, Presentation, FileImage, Wrench, Database,
-  Plus, Loader2, Pencil, Copy, Trash2, Files, Eye,
+  FileText, Table2, Presentation, FileImage, Database,
+  Plus, Loader2, Pencil, Copy, Trash2, Files,
 } from 'lucide-react';
 import { useOfficeStore, type OfficeApp, type RecentDoc } from '@/stores/office.store';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { api } from '@/services/api';
 import { DatabasesLauncherView } from './DatabasesLauncherView';
+import { useI18n } from '@/i18n';
+import { formatDate } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
+import { OFFICE_COLORS } from '@/config/office-colors';
 
 // ─── MIME groups per app tab ─────────────────────────────────────────
 
@@ -43,18 +51,18 @@ const APP_NEW_TYPE: Record<string, 'docx' | 'xlsx' | 'pptx' | null> = {
 // ─── Per-tab icon + color config ─────────────────────────────────────
 
 const APP_CARD_STYLE: Record<OfficeApp, { icon: typeof FileText; color: string }> = {
-  documents:     { icon: FileText,     color: '#3b82f6' },   // blue
-  spreadsheets:  { icon: Table2,       color: '#22c55e' },   // green
-  presentations: { icon: Presentation, color: '#eab308' },   // yellow
-  pdf:           { icon: FileImage,    color: '#ef4444' },   // red
+  documents:     { icon: FileText,     color: OFFICE_COLORS.documents },
+  spreadsheets:  { icon: Table2,       color: OFFICE_COLORS.spreadsheets },
+  presentations: { icon: Presentation, color: OFFICE_COLORS.presentations },
+  pdf:           { icon: FileImage,    color: OFFICE_COLORS.pdf },
   databases:     { icon: Database,     color: '#a855f7' },   // purple
 };
 
 const TABS: { id: OfficeApp; label: string; icon: typeof FileText; color: string }[] = [
-  { id: 'documents',     label: 'Documents',     icon: FileText,     color: '#3b82f6' },
-  { id: 'spreadsheets',  label: 'Spreadsheets',  icon: Table2,       color: '#22c55e' },
-  { id: 'presentations', label: 'Presentations',  icon: Presentation, color: '#eab308' },
-  { id: 'pdf',           label: 'PDF',            icon: FileImage,    color: '#ef4444' },
+  { id: 'documents',     label: 'Documents',     icon: FileText,     color: OFFICE_COLORS.documents },
+  { id: 'spreadsheets',  label: 'Spreadsheets',  icon: Table2,       color: OFFICE_COLORS.spreadsheets },
+  { id: 'presentations', label: 'Presentations',  icon: Presentation, color: OFFICE_COLORS.presentations },
+  { id: 'pdf',           label: 'PDF',            icon: FileImage,    color: OFFICE_COLORS.pdf },
   { id: 'databases',     label: 'Databases',      icon: Database,     color: '#a855f7' },
 ];
 
@@ -71,6 +79,7 @@ function FileContextMenu({ state, onClose, onAction }: {
   onClose: () => void;
   onAction: (action: string, doc: RecentDoc) => void;
 }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -87,10 +96,10 @@ function FileContextMenu({ state, onClose, onAction }: {
   }, [onClose]);
 
   const items = [
-    { id: 'rename',    label: 'Rename',       icon: Pencil },
-    { id: 'copy',      label: 'Create copy',  icon: Files },
-    { id: 'duplicate', label: 'Copy',         icon: Copy },
-    { id: 'delete',    label: 'Delete',       icon: Trash2 },
+    { id: 'rename',    label: t('office.launcher.rename'),     icon: Pencil },
+    { id: 'copy',      label: t('office.launcher.createCopy'), icon: Files },
+    { id: 'duplicate', label: t('office.launcher.copy'),       icon: Copy },
+    { id: 'delete',    label: t('office.launcher.delete'),     icon: Trash2 },
   ];
 
   return (
@@ -126,63 +135,6 @@ function FileContextMenu({ state, onClose, onAction }: {
   );
 }
 
-// ─── PDF Action Menu (Preview / Edit) ────────────────────────────────
-// Desplegable que sale al clicar (izquierdo o derecho) un PDF reciente en la tab PDF.
-
-function PdfActionMenu({ state, onClose, onPreview, onEdit }: {
-  state: ContextMenuState;
-  onClose: () => void;
-  onPreview: (doc: RecentDoc) => void;
-  onEdit: (doc: RecentDoc) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('mousedown', handler);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
-
-  const items = [
-    { id: 'preview', label: 'Preview PDF', icon: Eye, run: () => onPreview(state.doc) },
-    { id: 'edit', label: 'Edit PDF', icon: Wrench, run: () => onEdit(state.doc) },
-  ];
-
-  return (
-    <div ref={ref} style={{
-      position: 'fixed', left: state.x, top: state.y, zIndex: 9999,
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-md)', padding: '4px 0',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.2)', minWidth: 160,
-    }}>
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.id}
-            onClick={() => { item.run(); onClose(); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-              padding: '7px 14px', fontSize: 13, color: 'var(--text)',
-              background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--border)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon size={14} />
-            {item.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Rename Dialog ───────────────────────────────────────────────────
 
 function splitFilename(filename: string): [string, string] {
@@ -203,6 +155,7 @@ function RenameDialog({ doc, onClose, onConfirm }: {
   onClose: () => void;
   onConfirm: (newName: string) => void;
 }) {
+  const { t } = useI18n();
   const [base, ext] = splitFilename(doc.filename);
   const [name, setName] = useState(base);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -238,10 +191,11 @@ function RenameDialog({ doc, onClose, onConfirm }: {
           borderRadius: 'var(--radius-md)', padding: 20, width: 340,
         }}
       >
-        <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text)' }}>Rename</h4>
+        <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text)' }}>{t('office.launcher.rename')}</h4>
         <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
           <input
             ref={inputRef}
+            aria-label={t('office.launcher.renameFile')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             style={{
@@ -263,8 +217,8 @@ function RenameDialog({ doc, onClose, onConfirm }: {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-          <button type="button" onClick={onClose} style={dialogBtnStyle}>Cancel</button>
-          <button type="submit" style={{ ...dialogBtnStyle, background: 'var(--mod-office)', color: '#fff' }}>Rename</button>
+          <button type="button" onClick={onClose} style={dialogBtnStyle}>{t('office.launcher.cancel')}</button>
+          <button type="submit" style={{ ...dialogBtnStyle, background: 'var(--mod-office)', color: '#fff' }}>{t('office.launcher.rename')}</button>
         </div>
       </form>
     </div>
@@ -280,28 +234,37 @@ const dialogBtnStyle: React.CSSProperties = {
 // ─── Component ───────────────────────────────────────────────────────
 
 export function Component() {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const navigate = useNavigate();
-  const { activeApp, setActiveApp, recentDocs, fetchRecentDocs, fetchStatus, status, loading, docsLoading } = useOfficeStore();
-  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
-  const [pdfMenu, setPdfMenu] = useState<ContextMenuState | null>(null);
-  const [renaming, setRenaming] = useState<RecentDoc | null>(null);
+  const [query,setQuery] = useSearchParams();
+  const office = useOfficeProviders();
+  useEffect(() => { void office.refresh(); }, [office.refresh]);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  const { activeApp, setActiveApp, recentDocs: storedRecentDocs, fetchRecentDocs, loading, docsLoading, creatingProvider, creationError, createProviderDocument } = useOfficeStore();
+  const provider = activeApp === 'databases' ? undefined : preferredProvider(office.providers, activeApp);
+  // Filter at render as well: a provider/grant change must not expose stale cards.
+  const recentDocs = storedRecentDocs.filter(file => officeFilenameSupported(file.filename, provider?.formats ?? []));
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [renaming, setRenaming] = useState<RecentDoc | null>(null);
+  const [selecting, setSelecting] = useState(false);
+
+  useEffect(() => { const app=query.get('app');if(TABS.some(tab=>tab.id===app))setActiveApp(app as OfficeApp); },[query,setActiveApp]);
 
   useEffect(() => {
     const mime = APP_MIME_FILTER[activeApp];
-    if (mime) fetchRecentDocs(mime);
-  }, [activeApp, fetchRecentDocs]);
+    if (mime) fetchRecentDocs(mime, provider?.formats ?? []);
+  }, [activeApp, fetchRecentDocs, provider]);
 
   const newType = APP_NEW_TYPE[activeApp] ?? null;
   const cardStyle = APP_CARD_STYLE[activeApp];
 
   const handleNew = async () => {
-    if (!newType) return;
+    if ((!newType && activeApp !== 'pdf') || !office.loaded || office.error) return;
     try {
-      const session = await useOfficeStore.getState().createNewDocument(newType);
-      navigate(`/office/edit/${session.fileId}`);
-    } catch { /* toast error */ }
+      if (provider) { const session = await createProviderDocument(provider.app_name); if (session) navigate(session.editor_url); return; }
+      toast.error(t('office.launcher.chooseAuthorized'));
+    } catch (error) { toast.error(error instanceof Error ? error.message : t('office.launcher.createError')); }
   };
 
   const handleOpenFile = (id: string, mime: string) => {
@@ -318,17 +281,10 @@ export function Component() {
     setCtxMenu({ doc, x: e.clientX, y: e.clientY });
   }, []);
 
-  // Tab PDF: clic (izq o der) en un PDF reciente → desplegable Preview/Edit.
-  const openPdfMenu = useCallback((e: MouseEvent, doc: RecentDoc) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setPdfMenu({ doc, x: e.clientX, y: e.clientY });
-  }, []);
-
   const refreshDocs = useCallback(() => {
     const mime = APP_MIME_FILTER[activeApp];
-    if (mime) fetchRecentDocs(mime);
-  }, [activeApp, fetchRecentDocs]);
+    if (mime) fetchRecentDocs(mime, provider?.formats ?? []);
+  }, [activeApp, fetchRecentDocs, provider]);
 
   const handleCtxAction = useCallback(async (action: string, doc: RecentDoc) => {
     switch (action) {
@@ -383,7 +339,7 @@ export function Component() {
               key={tab.id}
               role="tab"
               aria-selected={active}
-              onClick={() => setActiveApp(tab.id)}
+              onClick={() => {setActiveApp(tab.id);setQuery(previous=>{const next=new URLSearchParams(previous);next.set('app',tab.id);return next;},{replace:true});}}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '10px 16px', fontSize: 13, fontWeight: active ? 600 : 400,
@@ -394,7 +350,7 @@ export function Component() {
               }}
             >
               <Icon size={15} />
-              {tab.label}
+              {t(`office.tabs.${tab.id}`)}
             </button>
           );
         })}
@@ -406,41 +362,55 @@ export function Component() {
           <DatabasesLauncherView />
         ) : (
         <>
+        {office.providers.some(p => p.slot === activeApp) && (
+          <label className="mb-4 flex items-center gap-2 text-sm">
+            {t('office.launcher.application')}
+            <select value={provider?.app_name ?? ''} disabled={selecting} onChange={async event => {
+              const name = event.target.value;
+              if (!name) return;
+              setSelecting(true);
+              try { await selectOfficeProvider(activeApp, name); await office.refresh(); }
+              catch (error) { toast.error(error instanceof Error ? error.message : t('office.launcher.selectError')); }
+              finally { setSelecting(false); }
+            }}>
+              <option value="" disabled>{t('office.launcher.chooseApp')}</option>
+              {office.providers.filter(p => p.slot === activeApp).map(p => <option key={p.app_name} value={p.app_name}>{p.app_name}</option>)}
+            </select>
+          </label>
+        )}
         {/* New button */}
-        {newType && (
+        {(newType || activeApp === 'pdf') && (
           <button
             onClick={handleNew}
-            disabled={loading}
+            disabled={loading || !!creatingProvider || !office.loaded || !!office.error || !provider}
+            aria-busy={!!creatingProvider}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '8px 20px', marginBottom: 20,
-              background: cardColor, color: '#fff',
+              background: cardColor, color: activeApp === 'documents' ? '#111827' : '#fff',
               border: 'none', borderRadius: 'var(--radius-md)',
               cursor: 'pointer', fontSize: 13, fontWeight: 500,
             }}
           >
-            {loading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
-            New {activeApp === 'documents' ? 'Document' : activeApp === 'spreadsheets' ? 'Spreadsheet' : 'Presentation'}
+            {loading || creatingProvider ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
+            {creatingProvider === provider?.app_name ? t('office.new.creating', { type: newType ?? 'PDF' }) : t(activeApp === 'documents' ? 'office.launcher.newDocument' : activeApp === 'spreadsheets' ? 'office.launcher.newSpreadsheet' : activeApp === 'pdf' ? 'office.launcher.newPdf' : 'office.launcher.newPresentation')}
           </button>
         )}
+        <button onClick={() => navigate('/drive')} style={{ ...dialogBtnStyle, marginLeft: 10, marginBottom: 20 }}>
+          {t('office.launcher.openDrive')}
+        </button>
 
-        {/* Acceso general a las herramientas PDF (Stirling), sin un archivo concreto. */}
-        {activeApp === 'pdf' && (
-          <button
-            onClick={() => navigate('/office/pdf/tools')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '8px 20px', marginBottom: 20,
-              background: 'var(--surface)', color: 'var(--text)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-              cursor: 'pointer', fontSize: 13, fontWeight: 500,
-            }}
-          >
-            <Wrench size={14} /> Herramientas PDF
-          </button>
-        )}
+        {creationError && creationError.provider === provider?.app_name && <p role="alert" className="mb-4 text-sm text-red-400">
+          {creationError.message || t('office.launcher.createError')}
+        </p>}
+
+        {office.loaded && !provider && <div role="status" className="mb-4 flex items-center gap-3 text-sm">
+          <span>{t('office.launcher.chooseAuthorized')}</span>
+          <button onClick={() => navigate('/micelhub')}>{t('office.launcher.manage')}</button>
+        </div>}
 
         {/* Recent documents grid */}
+        <OfficeRecoveryPanel slot={activeApp} enabled={office.platform_ready}/>
         {docsLoading && recentDocs.length === 0 ? (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -448,11 +418,11 @@ export function Component() {
             color: 'var(--text-dim)',
           }}>
             <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: cardColor }} />
-            <span style={{ fontSize: 13 }}>Loading…</span>
+            <span style={{ fontSize: 13 }}>{t('office.launcher.loading')}</span>
           </div>
         ) : recentDocs.length > 0 ? (
           <>
-            <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', marginBottom: 12 }}>Recent</h3>
+            <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', marginBottom: 12 }}>{t('office.launcher.recent')}</h3>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -461,8 +431,8 @@ export function Component() {
               {recentDocs.map((doc) => (
                 <button
                   key={doc.id}
-                  onClick={(e) => (activeApp === 'pdf' ? openPdfMenu(e, doc) : handleOpenFile(doc.id, doc.mime_type))}
-                  onContextMenu={(e) => (activeApp === 'pdf' ? openPdfMenu(e, doc) : handleContextMenu(e, doc))}
+                  onClick={() => handleOpenFile(doc.id, doc.mime_type)}
+                  onContextMenu={(e) => handleContextMenu(e, doc)}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 4,
                     padding: 16, background: 'var(--surface)',
@@ -475,7 +445,7 @@ export function Component() {
                     {doc.filename}
                   </span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {new Date(doc.updated_at).toLocaleDateString()}
+                    {formatDate(new Date(doc.updated_at), locale, general, general?.timezone)}
                     {doc.size_bytes > 0 && ` · ${Math.round(doc.size_bytes / 1024)} KB`}
                   </span>
                   {doc.filepath && (
@@ -495,7 +465,7 @@ export function Component() {
           }}>
             <CardIcon size={40} strokeWidth={1} style={{ color: cardColor }} />
             <span style={{ fontSize: 14 }}>
-              {newType ? 'Create your first document' : 'No recent files'}
+              {t(newType ? 'office.launcher.first' : 'office.launcher.empty')}
             </span>
           </div>
         )}
@@ -503,34 +473,12 @@ export function Component() {
         )}
       </div>
 
-      {/* ─── Status bar ──────────────────────────────────── */}
-      {status && (
-        <div style={{
-          display: 'flex', gap: 16, padding: '6px 16px', fontSize: 11,
-          color: 'var(--text-muted)', borderTop: '1px solid var(--border)',
-          background: 'var(--surface)', flexShrink: 0,
-        }}>
-          <StatusDot label="ONLYOFFICE" ok={status.onlyoffice.running} />
-          <StatusDot label="Stirling PDF" ok={status.stirling_pdf.running} />
-        </div>
-      )}
-
       {/* ─── Context Menu ─────────────────────────────────── */}
       {ctxMenu && (
         <FileContextMenu
           state={ctxMenu}
           onClose={() => setCtxMenu(null)}
           onAction={handleCtxAction}
-        />
-      )}
-
-      {/* ─── PDF Action Menu (Preview / Edit) ─────────────── */}
-      {pdfMenu && (
-        <PdfActionMenu
-          state={pdfMenu}
-          onClose={() => setPdfMenu(null)}
-          onPreview={(doc) => navigate(`/office/pdf/${doc.id}`)}
-          onEdit={() => navigate('/office/pdf/tools')}
         />
       )}
 
@@ -545,17 +493,5 @@ export function Component() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
-  );
-}
-
-function StatusDot({ label, ok }: { label: string; ok: boolean }) {
-  return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: ok ? '#22c55e' : 'var(--text-muted)',
-      }} />
-      {label}
-    </span>
   );
 }

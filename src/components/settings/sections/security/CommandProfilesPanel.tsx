@@ -41,7 +41,9 @@ function statusColor(status: string): string {
   return 'var(--text-muted)';
 }
 
-export function CommandProfilesPanel() {
+interface CommandProfilesPanelProps { embedded?: boolean; onProfilesChanged?: () => void }
+
+export function CommandProfilesPanel({ embedded = false, onProfilesChanged }: CommandProfilesPanelProps = {}) {
   const role = useAuthStore((state) => state.user?.role ?? 'user');
   const canEdit = role === 'owner' || role === 'admin';
   const [profiles, setProfiles] = useState<CommandProfileSummary[]>([]);
@@ -76,7 +78,7 @@ export function CommandProfilesPanel() {
     try {
       const next = await listCommandProfiles();
       setProfiles(next);
-      const id = preferredId ?? selectedId ?? next[0]?.id ?? null;
+      const id = preferredId ?? selectedId ?? (embedded ? null : next[0]?.id) ?? null;
       setSelectedId(id);
       if (id) hydrate(await getCommandProfile(id));
       else setDetail(null);
@@ -85,12 +87,13 @@ export function CommandProfilesPanel() {
     } finally {
       setLoading(false);
     }
-  }, [selectedId]);
+  }, [selectedId, embedded]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { void loadProfiles(); }, []);
 
   const selectProfile = async (id: string) => {
+    if (selectedId === id && detail) return;
     setSelectedId(id);
     setLoading(true);
     try {
@@ -112,6 +115,7 @@ export function CommandProfilesPanel() {
         max_exec_mode: 'ask',
         extension_policy: 'block_only',
       });
+      onProfilesChanged?.();
       toast.success('Command profile created');
       await loadProfiles(created.id);
     } catch (createError) {
@@ -136,6 +140,7 @@ export function CommandProfilesPanel() {
       });
       hydrate(updated);
       setProfiles((current) => current.map((profile) => profile.id === updated.id ? updated : profile));
+      onProfilesChanged?.();
       toast.success('Draft saved');
     } catch (saveError) {
       toast.error(saveError instanceof Error ? saveError.message : 'Could not save profile');
@@ -155,6 +160,7 @@ export function CommandProfilesPanel() {
         : '';
       if (!window.confirm(`Publish v${detail.latest_version}?${affected} Runtime application is reported separately.`)) return;
       const published = await publishCommandProfile(detail.id, detail.latest_version);
+      onProfilesChanged?.();
       hydrate(published);
       await loadProfiles(published.id);
       toast.success('Command profile published');
@@ -171,6 +177,7 @@ export function CommandProfilesPanel() {
     setSaving(true);
     try {
       const restored = await rollbackCommandProfile(detail.id, detail.latest_version, targetVersion);
+      onProfilesChanged?.();
       hydrate(restored);
       await loadProfiles(restored.id);
       toast.success(`Restored version ${targetVersion}`);
@@ -200,12 +207,12 @@ export function CommandProfilesPanel() {
   const selectedSummary = useMemo(() => profiles.find((profile) => profile.id === selectedId) ?? null, [profiles, selectedId]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-busy={loading && !detail}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><Layers3 size={19} className="text-[var(--amber)]" />Command profiles</h2>
-          <p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Versioned command rules. Publishing updates desired state; runtime application is verified independently.</p>
-        </div>
+        {!embedded && <div>
+          <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><Layers3 size={19} className="text-[var(--amber)]" />Shared command profiles</h2>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--text-muted)]"><span className="font-medium text-[var(--text-dim)]">Shared across agents.</span> Editing or publishing a profile does not assign it to the selected agent.</p>
+        </div>}
         <div className="flex gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => void loadProfiles(selectedId ?? undefined)} disabled={loading}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} />Refresh</Button>
           {canEdit && <Button type="button" size="sm" onClick={() => void createProfile()} disabled={saving}><Plus size={13} />New profile</Button>}
@@ -214,8 +221,15 @@ export function CommandProfilesPanel() {
 
       {error && <RetryBanner severity="error" title="Profiles unavailable" message={error} onRetry={() => void loadProfiles()} loading={loading} />}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
-        <aside className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2" aria-label="Command profiles">
+      <div className={embedded ? 'space-y-4' : 'grid gap-4 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]'}>
+        {embedded ? <div className="divide-y divide-[var(--border)] rounded-[var(--radius-md)] border border-[var(--border)]" role="list" aria-label="Shared command profiles">
+          {loading && profiles.length === 0 ? <p className="p-3 text-xs text-[var(--text-muted)]">Loading profiles…</p> : profiles.length === 0 ? <p className="p-3 text-xs text-[var(--text-muted)]">No command profiles. Create one to define shared command rules.</p> : profiles.map(profile => <div key={profile.id} role="listitem" className={`flex min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 ${selectedId === profile.id ? 'bg-[var(--surface-hover)]' : ''}`}>
+            <span className="min-w-0 flex-1 break-words text-sm font-medium text-[var(--text)]">{profile.name}</span>
+            <span className="text-[10px] font-semibold uppercase" style={{ color: statusColor(profile.status) }}>{profile.status} v{profile.status === 'published' ? profile.published_version : profile.latest_version}</span>
+            {profile.status === 'published' && profile.latest_version > profile.published_version && <span className="text-xs text-[var(--text-muted)]">Draft v{profile.latest_version}</span>}
+            <Button type="button" size="sm" variant="outline" aria-label={`${canEdit ? 'Edit' : 'View'} ${profile.name}`} aria-expanded={selectedId === profile.id && !!detail} disabled={saving || loading} onClick={() => void selectProfile(profile.id)}>{canEdit ? 'Edit' : 'View'}</Button>
+          </div>)}
+        </div> : <aside className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-2" aria-label="Command profiles">
           {profiles.length === 0 && !loading ? (
             <div className="p-4 text-sm text-[var(--text-muted)]">No command profiles</div>
           ) : profiles.map((profile) => (
@@ -230,16 +244,16 @@ export function CommandProfilesPanel() {
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--text)]">{profile.name}</span>
                 <span className="text-[10px] font-semibold uppercase" style={{ color: statusColor(profile.status) }}>{profile.status}</span>
               </div>
-              <div className="mt-1 text-xs text-[var(--text-muted)]">v{profile.latest_version} · max {profile.max_exec_mode}</div>
+              <div className="mt-1 text-xs text-[var(--text-muted)]">v{profile.latest_version} · max {profile.max_exec_mode === 'allowlist' ? 'allow' : profile.max_exec_mode}</div>
             </button>
           ))}
-        </aside>
+        </aside>}
 
-        <main className="min-w-0">
+        <div className="min-w-0">
           {loading && !detail ? (
             <div className="flex items-center gap-2 py-12 text-sm text-[var(--text-muted)]"><Loader2 size={15} className="animate-spin" />Loading profile…</div>
           ) : !detail ? (
-            <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--text-muted)]">Select or create a profile.</div>
+            <p className="text-xs text-[var(--text-muted)]">Select a profile to view its rules, or create a new one.</p>
           ) : (
             <div className="space-y-4">
               <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -257,7 +271,7 @@ export function CommandProfilesPanel() {
                 </div>
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <label className="text-xs font-medium text-[var(--text-dim)]">Name<input value={name} onChange={(event) => setName(event.target.value)} disabled={!canEdit} className="mt-2 h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]" /></label>
-                  <label className="text-xs font-medium text-[var(--text-dim)]">Maximum execution mode<select value={maxMode} onChange={(event) => setMaxMode(event.target.value as SecurityExecMode)} disabled={!canEdit} className="mt-2 h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]">{(['deny', 'allowlist', 'ask', 'auto'] as const).map((mode) => <option key={mode} value={mode}>{mode}</option>)}</select></label>
+                  <label className="text-xs font-medium text-[var(--text-dim)]">Maximum execution mode<select value={maxMode} onChange={(event) => setMaxMode(event.target.value as SecurityExecMode)} disabled={!canEdit} className="mt-2 h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]">{(['deny', 'allowlist', 'ask', 'auto'] as const).map((mode) => <option key={mode} value={mode}>{mode === 'allowlist' ? 'allow' : mode}</option>)}</select></label>
                   <label className="text-xs font-medium text-[var(--text-dim)] md:col-span-2">Description<textarea value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canEdit} rows={2} className="mt-2 w-full resize-y rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--text)]" /></label>
                   <label className="text-xs font-medium text-[var(--text-dim)]">Local extension policy<select value={extensionPolicy} onChange={(event) => setExtensionPolicy(event.target.value as SecurityExtensionPolicy)} disabled={!canEdit} className="mt-2 h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]"><option value="none">No local rules</option><option value="block_only">Block/prompt only</option><option value="allow_unprotected">Allow unprotected extensions</option></select></label>
                   <label className="text-xs font-medium text-[var(--text-dim)]">Draft changelog<input value={changelog} onChange={(event) => setChangelog(event.target.value)} disabled={!canEdit} className="mt-2 h-9 w-full rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]" /></label>
@@ -294,7 +308,7 @@ export function CommandProfilesPanel() {
               )}
             </div>
           )}
-        </main>
+        </div>
       </div>
     </div>
   );

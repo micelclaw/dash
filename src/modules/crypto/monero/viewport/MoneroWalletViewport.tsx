@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, LayoutDashboard, Send, Download, List, BookOpen, Users, Box, Shield, Lock, Pickaxe, Settings, Coins, Loader2, AlertCircle, Wallet, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { useI18n } from '@/i18n';
 import { api } from '@/services/api';
 import { useIsMobile } from '@/hooks/use-media-query';
 
@@ -37,18 +38,18 @@ import { useFiatPrice } from './hooks/useFiatPrice';
 type TabId = 'overview' | 'send' | 'receive' | 'transactions' | 'addressbook' | 'accounts' | 'outputs' | 'proofs' | 'multisig' | 'coldsigning' | 'mining' | 'settings';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
-  { id: 'send', label: 'Send', icon: <Send size={14} /> },
-  { id: 'receive', label: 'Receive', icon: <Download size={14} /> },
-  { id: 'transactions', label: 'Transactions', icon: <List size={14} /> },
-  { id: 'addressbook', label: 'Address Book', icon: <BookOpen size={14} /> },
-  { id: 'accounts', label: 'Accounts', icon: <Users size={14} /> },
-  { id: 'outputs', label: 'Outputs', icon: <Coins size={14} /> },
-  { id: 'proofs', label: 'Proofs', icon: <Shield size={14} /> },
-  { id: 'multisig', label: 'Multisig', icon: <Lock size={14} /> },
-  { id: 'coldsigning', label: 'Cold Signing', icon: <Box size={14} /> },
-  { id: 'mining', label: 'Mining', icon: <Pickaxe size={14} /> },
-  { id: 'settings', label: 'Settings', icon: <Settings size={14} /> },
+  { id: 'overview', label: 'crypto.wallet.tab.overview', icon: <LayoutDashboard size={14} /> },
+  { id: 'send', label: 'crypto.wallet.tab.send', icon: <Send size={14} /> },
+  { id: 'receive', label: 'crypto.wallet.tab.receive', icon: <Download size={14} /> },
+  { id: 'transactions', label: 'crypto.wallet.tab.transactions', icon: <List size={14} /> },
+  { id: 'addressbook', label: 'crypto.wallet.tab.addressbook', icon: <BookOpen size={14} /> },
+  { id: 'accounts', label: 'crypto.wallet.tab.accounts', icon: <Users size={14} /> },
+  { id: 'outputs', label: 'crypto.wallet.tab.outputs', icon: <Coins size={14} /> },
+  { id: 'proofs', label: 'crypto.wallet.tab.proofs', icon: <Shield size={14} /> },
+  { id: 'multisig', label: 'crypto.wallet.tab.multisig', icon: <Lock size={14} /> },
+  { id: 'coldsigning', label: 'crypto.wallet.tab.coldsigning', icon: <Box size={14} /> },
+  { id: 'mining', label: 'crypto.wallet.tab.mining', icon: <Pickaxe size={14} /> },
+  { id: 'settings', label: 'crypto.wallet.tab.settings', icon: <Settings size={14} /> },
 ];
 
 const TAB_COMPONENTS: Record<TabId, React.FC> = {
@@ -75,6 +76,7 @@ interface WalletStatus {
 
 export function Component() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
@@ -189,7 +191,7 @@ export function Component() {
 
   const handleDialogSubmit = useCallback(async () => {
     const name = dialogName.trim();
-    if (!name) { setDialogError('Wallet name is required'); return; }
+    if (!name) { setDialogError(t('crypto.wallet.nameRequired')); return; }
 
     setDialogSubmitting(true);
     setDialogError(null);
@@ -200,7 +202,7 @@ export function Component() {
         password: dialogPassword,
       });
       if (result === null && !rpc.pendingConfirmation) {
-        setDialogError(rpc.error || 'Failed to open wallet');
+        setDialogError(rpc.error || t('crypto.wallet.openFailed'));
         setDialogSubmitting(false);
       }
     } else if (walletDialog === 'create') {
@@ -210,13 +212,13 @@ export function Component() {
         language: 'English',
       });
       if (result === null && !rpc.pendingConfirmation) {
-        setDialogError(rpc.error || 'Failed to create wallet');
+        setDialogError(rpc.error || t('crypto.wallet.createFailed'));
         setDialogSubmitting(false);
       }
       // If pendingConfirmation is set, SendConfirmDialog will handle it
     } else {
       const seed = dialogSeed.trim();
-      if (!seed) { setDialogError('Mnemonic seed is required'); setDialogSubmitting(false); return; }
+      if (!seed) { setDialogError(t('crypto.wallet.seedRequired')); setDialogSubmitting(false); return; }
 
       const params: Record<string, unknown> = {
         filename: name,
@@ -231,11 +233,11 @@ export function Component() {
 
       const result = await rpc.call('restore_deterministic_wallet', params);
       if (result === null && !rpc.pendingConfirmation) {
-        setDialogError(rpc.error || 'Failed to restore wallet');
+        setDialogError(rpc.error || t('crypto.wallet.restoreFailed'));
         setDialogSubmitting(false);
       }
     }
-  }, [walletDialog, dialogName, dialogPassword, dialogSeed, dialogRestoreHeight, rpc]);
+  }, [walletDialog, dialogName, dialogPassword, dialogSeed, dialogRestoreHeight, rpc, t]);
 
   // Wrap rpc.confirm to also refresh status and close dialog after success.
   // rpc.confirm() throws on failure — SendConfirmDialog catches it and shows the error.
@@ -258,7 +260,7 @@ export function Component() {
     content = (
       <div className="mwv-status-msg">
         <Loader2 size={20} className="spin" />
-        <span>{statusLoading ? 'Checking wallet RPC...' : 'Starting Wallet RPC...'}</span>
+        <span>{statusLoading ? t('crypto.wallet.checkingRpc') : t('crypto.wallet.startingRpc')}</span>
       </div>
     );
   } else if (!rpcReachable) {
@@ -267,14 +269,14 @@ export function Component() {
         <AlertCircle size={20} style={{ color: 'var(--error, #ef4444)' }} />
         <div>
           <div style={{ fontWeight: 500, marginBottom: 4 }}>
-            {startFailed ? 'Wallet RPC failed to start' : 'Wallet RPC not reachable'}
+            {startFailed ? t('crypto.wallet.rpcStartFailed') : t('crypto.wallet.rpcUnreachable')}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {startFailed
-              ? 'The service did not become reachable within 60 seconds. Check logs or try again.'
-              : 'Start the Monero Wallet RPC service or check the connection.'}
+              ? t('crypto.wallet.rpcStartHelp')
+              : t('crypto.wallet.rpcStartHelpShort')}
           </div>
-          <button className="mwv-retry-btn" onClick={startAndPoll}>Retry</button>
+          <button className="mwv-retry-btn" onClick={startAndPoll}>{t('crypto.retry')}</button>
         </div>
       </div>
     );
@@ -283,9 +285,9 @@ export function Component() {
       <div className="mwv-status-msg">
         <Wallet size={20} style={{ color: '#f59e0b' }} />
         <div>
-          <div style={{ fontWeight: 500, marginBottom: 4 }}>No wallet open</div>
+          <div style={{ fontWeight: 500, marginBottom: 4 }}>{t('crypto.wallet.noWalletOpen')}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Select a wallet from the sidebar, or create a new one.
+            {t('crypto.wallet.selectOrCreate')}
           </div>
         </div>
       </div>
@@ -301,10 +303,10 @@ export function Component() {
         <div className="mwv-topbar">
           <div className="mwv-topbar-head">
             <button className="mwv-back" onClick={() => navigate('/crypto')}>
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} /> {t('crypto.wallet.back')}
             </button>
             <div className="mwv-sidebar-title mwv-topbar-title">
-              <span style={{ color: '#ff6600' }}>&#9399;</span> Monero Wallet
+              <span style={{ color: '#ff6600' }}>&#9399;</span> {t('crypto.moneroWallet')}
             </div>
           </div>
 
@@ -332,7 +334,7 @@ export function Component() {
                   onClick={() => setActiveTab(tab.id)}
                 >
                   {tab.icon}
-                  {tab.label}
+                  {t(tab.label)}
                 </button>
               ))}
             </div>
@@ -341,11 +343,11 @@ export function Component() {
       ) : (
         <div className="mwv-sidebar">
           <button className="mwv-back" onClick={() => navigate('/crypto')}>
-            <ArrowLeft size={14} /> Back to Stack
+            <ArrowLeft size={14} /> {t('crypto.wallet.backStack')}
           </button>
 
           <div className="mwv-sidebar-title">
-            <span style={{ color: '#ff6600' }}>&#9399;</span> Monero Wallet
+            <span style={{ color: '#ff6600' }}>&#9399;</span> {t('crypto.moneroWallet')}
           </div>
 
           {/* Wallet selector — only render when RPC reachable */}
@@ -379,7 +381,7 @@ export function Component() {
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.icon}
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </div>
@@ -395,13 +397,13 @@ export function Component() {
         <div className="mwv-dialog-overlay" onClick={resetDialog}>
           <div className="mwv-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="mwv-dialog-header">
-              <span>{walletDialog === 'open' ? `Open "${dialogName}"` : walletDialog === 'create' ? 'Create New Wallet' : 'Restore from Seed'}</span>
+              <span>{walletDialog === 'open' ? t('crypto.wallet.openNamed', { name: dialogName }) : walletDialog === 'create' ? t('crypto.wallet.createNew') : t('crypto.wallet.restoreFromSeed')}</span>
               <button className="mwv-dialog-close" onClick={resetDialog}><X size={14} /></button>
             </div>
             <div className="mwv-dialog-body">
               {walletDialog !== 'open' && (
                 <label className="mwv-dialog-label">
-                  Wallet Name
+                  {t('crypto.wallet.walletName')}
                   <input
                     className="mwv-dialog-input"
                     value={dialogName}
@@ -412,13 +414,13 @@ export function Component() {
                 </label>
               )}
               <label className="mwv-dialog-label">
-                Password <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+                {t('crypto.wallet.password')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('crypto.wallet.optional')}</span>
                 <input
                   className="mwv-dialog-input"
                   type="password"
                   value={dialogPassword}
                   onChange={(e) => setDialogPassword(e.target.value)}
-                  placeholder="Leave empty for no password"
+                  placeholder={t('crypto.wallet.noPasswordPlaceholder')}
                   autoFocus={walletDialog === 'open'}
                   onKeyDown={(e) => e.key === 'Enter' && handleDialogSubmit()}
                 />
@@ -426,23 +428,23 @@ export function Component() {
               {walletDialog === 'restore' && (
                 <>
                   <label className="mwv-dialog-label">
-                    Mnemonic Seed <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(25 words)</span>
+                    {t('crypto.wallet.mnemonicSeed')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('crypto.wallet.words25')}</span>
                     <textarea
                       className="mwv-dialog-input mwv-dialog-textarea"
                       value={dialogSeed}
                       onChange={(e) => setDialogSeed(e.target.value)}
-                      placeholder="Enter your 25-word mnemonic seed..."
+                      placeholder={t('crypto.wallet.seedPlaceholder')}
                       rows={3}
                     />
                   </label>
                   <label className="mwv-dialog-label">
-                    Restore Height <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+                    {t('crypto.wallet.restoreHeight')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('crypto.wallet.optional')}</span>
                     <input
                       className="mwv-dialog-input"
                       type="number"
                       value={dialogRestoreHeight}
                       onChange={(e) => setDialogRestoreHeight(e.target.value)}
-                      placeholder="0 (scans from genesis)"
+                      placeholder={t('crypto.wallet.genesisPlaceholder')}
                     />
                   </label>
                 </>
@@ -450,15 +452,15 @@ export function Component() {
               {dialogError && <div className="mwv-dialog-error">{dialogError}</div>}
             </div>
             <div className="mwv-dialog-footer">
-              <button className="mwv-dialog-btn-cancel" onClick={resetDialog}>Cancel</button>
+              <button className="mwv-dialog-btn-cancel" onClick={resetDialog}>{t('crypto.wallet.cancel')}</button>
               <button
                 className="mwv-dialog-btn-ok"
                 disabled={dialogSubmitting}
                 onClick={handleDialogSubmit}
               >
                 {dialogSubmitting
-                  ? <><Loader2 size={13} className="spin" /> Submitting...</>
-                  : walletDialog === 'open' ? 'Open' : walletDialog === 'create' ? 'Create' : 'Restore'}
+                  ? <><Loader2 size={13} className="spin" /> {t('crypto.wallet.submitting')}</>
+                  : walletDialog === 'open' ? t('crypto.wallet.open') : walletDialog === 'create' ? t('crypto.wallet.create') : t('crypto.wallet.restore')}
               </button>
             </div>
           </div>

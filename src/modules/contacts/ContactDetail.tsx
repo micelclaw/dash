@@ -27,6 +27,7 @@ import { AvatarCropModal } from '@/components/shared/AvatarCropModal';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { useMailState } from '@/modules/mail/hooks/use-mail-state';
 import { useAuthStore } from '@/stores/auth.store';
+import { useI18n } from '@/i18n';
 import type { Contact } from './types';
 import type { LinkedRecord } from '@/types/links';
 
@@ -122,6 +123,7 @@ const actionButtonStyle: React.CSSProperties = {
 export function ContactDetail({
   contact, onEdit, onDelete, onBack, onContactUpdated, linkedRecords, linkedRecordsLoading,
 }: ContactDetailProps) {
+  const { t } = useI18n();
   useCoNavigation('contact', contact.id);
   const navigate = useNavigate();
   const [deleteHover, setDeleteHover] = useState(false);
@@ -179,9 +181,9 @@ export function ContactDetail({
       reader.onload = () => setCropSrc(reader.result as string);
       reader.readAsDataURL(blob);
     } catch {
-      toast.error('Failed to load image');
+      toast.error(t('contacts.imageLoadFailed'));
     }
-  }, [token]);
+  }, [token, t]);
 
   const handleCropConfirm = useCallback(async (blob: Blob) => {
     setCropSrc(null);
@@ -192,11 +194,11 @@ export function ContactDetail({
       const updated = (res as any).data ?? res;
       setAvatarErr(false);
       onContactUpdated?.(updated);
-      toast.success('Avatar updated');
+      toast.success(t('contacts.avatarUpdated'));
     } catch {
-      toast.error('Failed to upload avatar');
+      toast.error(t('contacts.avatarUpdateFailed'));
     }
-  }, [contact.id, onContactUpdated]);
+  }, [contact.id, onContactUpdated, t]);
   const primaryEmail = contact.emails?.find(e => e.primary)?.address || contact.emails?.[0]?.address;
   const primaryPhone = contact.phones?.find(p => p.primary)?.number || contact.phones?.[0]?.number;
 
@@ -227,7 +229,7 @@ export function ContactDetail({
           }}
         >
           <ChevronLeft size={16} />
-          Back
+          {t('contacts.back')}
         </button>
       )}
 
@@ -292,7 +294,7 @@ export function ContactDetail({
                   onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Upload size={14} /> Upload from device
+                  <Upload size={14} /> {t('contacts.uploadDevice')}
                 </button>
                 {contact.avatar_path && (
                   <button
@@ -302,8 +304,8 @@ export function ContactDetail({
                       try {
                         await api.patch(`/contacts/${contact.id}`, { avatar_path: null });
                         onContactUpdated?.();
-                        toast.success('Avatar removed');
-                      } catch { toast.error('Failed to remove avatar'); }
+                        toast.success(t('contacts.avatarRemoved'));
+                      } catch { toast.error(t('contacts.avatarRemoveFailed')); }
                     }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, width: '100%',
@@ -314,7 +316,7 @@ export function ContactDetail({
                     onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Trash2 size={14} /> Remove avatar
+                    <Trash2 size={14} /> {t('contacts.removeAvatar')}
                   </button>
                 )}
                 <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
@@ -323,13 +325,13 @@ export function ContactDetail({
                     display: 'flex', alignItems: 'center', gap: 6,
                     fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 6,
                   }}>
-                    <FolderOpen size={12} /> Choose from Cloud
+                    <FolderOpen size={12} /> {t('contacts.chooseCloud')}
                   </div>
                   <input
                     value={cloudSearch ?? ''}
                     onChange={e => handleCloudSearch(e.target.value)}
                     onClick={e => e.stopPropagation()}
-                    placeholder="Search images..."
+                    placeholder={t('contacts.searchImages')}
                     autoFocus
                     style={{
                       width: '100%', padding: '6px 8px', fontSize: '0.75rem',
@@ -339,7 +341,7 @@ export function ContactDetail({
                     }}
                   />
                   {cloudLoading && (
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', padding: '6px 0' }}>Searching...</div>
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', padding: '6px 0' }}>{t('contacts.searching')}</div>
                   )}
                   {cloudResults.length > 0 && (
                     <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 4 }}>

@@ -24,6 +24,7 @@ import {
   updateSharePermission, deleteShare,
   type RecordShare, type SharePermission,
 } from '@/services/shares.service';
+import { useI18n } from '@/i18n';
 
 interface SharedListSectionProps {
   shares: RecordShare[];
@@ -31,32 +32,33 @@ interface SharedListSectionProps {
 }
 
 export function SharedListSection({ shares, onChanged }: SharedListSectionProps) {
+  const { t } = useI18n();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const handlePermission = useCallback(async (shareId: string, permission: SharePermission) => {
     setBusyId(shareId);
     try {
       await updateSharePermission(shareId, permission);
-      toast.success('Permiso actualizado');
+      toast.success(t('shared.sharedList.permissionSuccess'));
       onChanged();
-    } catch { toast.error('No se pudo cambiar el permiso'); }
+    } catch { toast.error(t('shared.sharedList.permissionError')); }
     setBusyId(null);
-  }, [onChanged]);
+  }, [onChanged, t]);
 
   const handleRevoke = useCallback(async (shareId: string) => {
     setBusyId(shareId);
     try {
       await deleteShare(shareId);
-      toast.success('Compartición revocada');
+      toast.success(t('shared.sharedList.revokeSuccess'));
       onChanged();
-    } catch { toast.error('No se pudo revocar'); }
+    } catch { toast.error(t('shared.sharedList.revokeError')); }
     setBusyId(null);
-  }, [onChanged]);
+  }, [onChanged, t]);
 
   if (shares.length === 0) {
     return (
       <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-        Aún no está compartido con nadie.
+        {t('shared.sharedList.none')}
       </p>
     );
   }
@@ -64,7 +66,7 @@ export function SharedListSection({ shares, onChanged }: SharedListSectionProps)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {shares.map(s => {
-        const name = s.shared_with?.display_name || s.shared_with?.email || 'Usuario';
+        const name = s.shared_with?.display_name || s.shared_with?.email || t('shared.people.unknown');
         return (
           <div key={s.id} style={{
             display: 'flex', alignItems: 'center', gap: 8,
@@ -82,6 +84,7 @@ export function SharedListSection({ shares, onChanged }: SharedListSectionProps)
             </div>
             <select
               value={s.permission}
+              aria-label={`${name}: ${t('shared.people.view')}`}
               disabled={busyId === s.id}
               onChange={e => void handlePermission(s.id, e.target.value as SharePermission)}
               style={{
@@ -90,13 +93,14 @@ export function SharedListSection({ shares, onChanged }: SharedListSectionProps)
                 fontSize: '0.6875rem', color: 'var(--text)', fontFamily: 'var(--font-sans)', cursor: 'pointer',
               }}
             >
-              <option value="view">Solo lectura</option>
-              <option value="edit">Puede editar</option>
+              <option value="view">{t('shared.people.view')}</option>
+              <option value="edit">{t('shared.people.edit')}</option>
             </select>
             <button
               onClick={() => void handleRevoke(s.id)}
               disabled={busyId === s.id}
-              title="Revocar"
+              title={t('shared.links.revoke')}
+              aria-label={`${t('shared.links.revoke')}: ${name}`}
               style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: 'var(--text-muted)', padding: 2, flexShrink: 0,

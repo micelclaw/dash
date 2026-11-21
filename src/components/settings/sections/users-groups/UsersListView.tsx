@@ -92,7 +92,7 @@ export function UsersListView() {
           {u.id === selfId && <span className="text-xs text-[var(--text-dim)]">(tú)</span>}
           {isProvisioningAgents(u) && (
             <Badge variant="outline" className="gap-1 whitespace-nowrap border-[var(--amber,#d4a017)]/40 text-[var(--amber,#d4a017)]" title="El usuario ya puede iniciar sesión; sus agentes se están creando en segundo plano">
-              <Loader2 className="h-3 w-3 animate-spin" /> Provisionando agentes {u.agents_provisioned}/{u.agents_expected}…
+              {u.agents_preparation==='preparing'&&<Loader2 className="h-3 w-3 animate-spin"/>} {u.agents_preparation==='preparing'?'Creando agentes':u.agents_preparation==='error'?'Preparación fallida':'Agentes pendientes'} {u.agents_provisioned}/{u.agents_expected}
             </Badge>
           )}
         </div>

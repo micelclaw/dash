@@ -17,6 +17,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useMusicStore } from '@/stores/music.store';
 import { AlbumCard } from '../components/AlbumCard';
 import type { AlbumSummary } from '@/services/music.service';
+import { useI18n } from '@/i18n';
 
 const CARD_WIDTH = 160;
 
@@ -32,6 +33,7 @@ function Rail({ title, albums, onSeeAll }: { title: string; albums: AlbumSummary
 }
 
 export function HomeView() {
+  const { t } = useI18n();
   const homeRails = useMusicStore((s) => s.homeRails);
   const loading = useMusicStore((s) => s.loadingHome);
 
@@ -41,7 +43,7 @@ export function HomeView() {
 
   if (!homeRails) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('music.loading')}</div>
     ) : null;
   }
 
@@ -54,8 +56,8 @@ export function HomeView() {
     return (
       <EmptyState
         icon={Music}
-        title="Your library is empty"
-        description="Add music to your Navidrome library to see it here."
+        title={t('music.emptyLibrary')}
+        description={t('music.addToLibrary')}
       />
     );
   }
@@ -68,9 +70,9 @@ export function HomeView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 16 }}>
-      <Rail title="Recently played" albums={homeRails.recent} onSeeAll={seeAll('recent')} />
-      <Rail title="Most played" albums={homeRails.frequent} onSeeAll={seeAll('frequent')} />
-      <Rail title="Recently added" albums={homeRails.newest} onSeeAll={seeAll('newest')} />
+      <Rail title={t('music.recentlyPlayed')} albums={homeRails.recent} onSeeAll={seeAll('recent')} />
+      <Rail title={t('music.mostPlayed')} albums={homeRails.frequent} onSeeAll={seeAll('frequent')} />
+      <Rail title={t('music.recentlyAdded')} albums={homeRails.newest} onSeeAll={seeAll('newest')} />
     </div>
   );
 }

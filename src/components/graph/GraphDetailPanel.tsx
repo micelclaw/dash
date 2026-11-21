@@ -23,6 +23,7 @@ import { labelOfResultDomain } from '@/config/search-domains';
 import { entityTypeColor, PATH_ENDPOINT_COLOR } from './graph-utils';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
 import type { LucideIcon } from 'lucide-react';
+import { useI18n, hasMessage } from '@/i18n';
 
 interface GraphDetailPanelProps {
   node: GraphNode | null;
@@ -92,12 +93,23 @@ interface MentionsResponse {
 }
 
 export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onEntityHover, onNavigateAway, mode = 'entities', pathNodes, pathNotFound, pathArmingName, onStartPath, onClearPath, onExplore, onFocusPathNode }: GraphDetailPanelProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [mentionGroups, setMentionGroups] = useState<MentionGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAllConnected, setShowAllConnected] = useState(false);
   const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set());
   const [showAllMentions, setShowAllMentions] = useState(false);
+  const typeLabel = (type: string) => {
+    const key = `graph.type.${type}`;
+    return hasMessage(key) ? t(key) : type;
+  };
+  const domainLabel = (domain: string) => {
+    const type = normalizeDomain(domain);
+    const searchKey = `search.domain.${type}`;
+    const graphKey = `graph.type.${type}`;
+    return hasMessage(searchKey) ? t(searchKey) : hasMessage(graphKey) ? t(graphKey) : labelOfResultDomain(type);
+  };
 
   // Reset expand states when node changes
   useEffect(() => {
@@ -220,7 +232,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
           <Route size={16} style={{ color: PATH_ENDPOINT_COLOR, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '0.04em' }}>
-              CAMINO MÁS CORTO
+              {t('graph.path.title')}
             </div>
             <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{start.name}</span>
@@ -228,22 +240,22 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{end.name}</span>
             </div>
           </div>
-          <button onClick={() => onClearPath?.()} title="Limpiar camino" style={{
+          <button onClick={() => onClearPath?.()} title={t('graph.path.clear')} aria-label={t('graph.path.clear')} style={{
             background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)',
             display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
             fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
           }}>
-            <X size={14} /> Limpiar
+            <X size={14} /> {t('graph.path.clear')}
           </button>
         </div>
         <div style={{ padding: '8px 16px', fontSize: '0.6875rem', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)' }}>
-          {hops} {hops === 1 ? 'salto' : 'saltos'} · {pathNodes.length} nodos
+          {t(hops === 1 ? 'graph.path.hopOne' : 'graph.path.hopMany', { count: hops })} · {t('graph.path.nodes', { count: pathNodes.length })}
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
           {pathNodes.map((n, i) => {
             const { Icon, color } = resolveNodeVisual(n);
             const isEndpoint = i === 0 || i === pathNodes.length - 1;
-            const tag = i === 0 ? 'INICIO' : i === pathNodes.length - 1 ? 'FIN' : `paso ${i}`;
+            const tag = i === 0 ? t('graph.path.start') : i === pathNodes.length - 1 ? t('graph.path.end') : t('graph.path.step', { count: i });
             return (
               <button
                 key={n.id}
@@ -290,19 +302,17 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
         }}>
           <Route size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           <div style={{ flex: 1, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '0.04em' }}>
-            CAMINO MÁS CORTO
+            {t('graph.path.title')}
           </div>
-          <button onClick={() => onClearPath?.()} title="Cerrar" style={{
+          <button onClick={() => onClearPath?.()} title={t('graph.path.close')} aria-label={t('graph.path.close')} style={{
             background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)',
             display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
           }}>
-            <X size={14} /> Limpiar
+            <X size={14} /> {t('graph.path.clear')}
           </button>
         </div>
         <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Sin camino entre <strong style={{ color: 'var(--text)' }}>«{pathNotFound.startName}»</strong> y{' '}
-          <strong style={{ color: 'var(--text)' }}>«{pathNotFound.endName}»</strong> en el subgrafo cargado.
-          Prueba a subir el límite de nodos (250 / 500 / All).
+          {t('graph.path.notFound', { start: pathNotFound.startName, end: pathNotFound.endName })}
         </div>
       </>,
     );
@@ -320,7 +330,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
         gap: 8, color: 'var(--text-muted)', fontSize: '0.8125rem',
       }}>
         <Maximize2 size={24} style={{ opacity: 0.3 }} />
-        Click a node to view details
+        {t('graph.detail.clickNode')}
       </div>
     );
   }
@@ -379,7 +389,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             fontSize: '0.6875rem', color: 'var(--text-muted)',
             textTransform: 'capitalize',
           }}>
-            {node.entity_type}
+            {typeLabel(node.entity_type)}
           </div>
         </div>
         <HeatBadge score={node.heat_score} />
@@ -396,7 +406,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             fontSize: '0.6875rem', color: PATH_ENDPOINT_COLOR, lineHeight: 1.4,
           }}>
             <Route size={13} style={{ flexShrink: 0 }} />
-            <span>Elige el nodo <strong>final</strong> para trazar el camino desde «{pathArmingName}».</span>
+            <span>{t('graph.detail.armingHint', { start: pathArmingName })}</span>
           </div>
         )}
 
@@ -409,13 +419,13 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
               {node.mention_count}
             </div>
-            {isRecordMode ? 'Connections' : 'Mentions'}
+            {isRecordMode ? t('graph.detail.connections') : t('graph.detail.mentions')}
           </div>
           <div>
             <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
               {(node.heat_score * 100).toFixed(0)}%
             </div>
-            Heat
+            {t('graph.detail.heat')}
           </div>
         </div>
 
@@ -431,10 +441,11 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
               fontSize: '0.75rem', fontWeight: 500, color: PATH_ENDPOINT_COLOR,
               fontFamily: 'var(--font-sans)',
             }}
-            title="Elige luego otro nodo (o Shift+click) para el camino más corto"
+            title={t('graph.detail.traceTitle')}
+            aria-label={t('graph.detail.traceTitle')}
           >
             <Route size={14} />
-            Trazar camino desde aquí
+            {t('graph.detail.trace')}
           </button>
         )}
 
@@ -450,10 +461,11 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
               fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)',
               fontFamily: 'var(--font-sans)',
             }}
-            title="Recarga el grafo centrado en este nodo (su vecindad)"
+            title={t('graph.detail.exploreTitle')}
+            aria-label={t('graph.detail.exploreTitle')}
           >
             <LocateFixed size={14} />
-            Explorar vecindad
+            {t('graph.detail.explore')}
           </button>
         )}
 
@@ -471,7 +483,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             }}
           >
             <Icon size={14} />
-            View {node.entity_type}
+            {t('graph.detail.viewRecord', { type: typeLabel(node.entity_type) })}
           </button>
         )}
 
@@ -482,7 +494,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
               fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
               textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4,
             }}>
-              Aliases
+              {t('graph.detail.aliases')}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {(node.aliases ?? []).map(alias => (
@@ -516,11 +528,11 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
                   textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
                 }}>
-                  Mentioned in
+                  {t('graph.detail.mentionedIn')}
                 </div>
                 {visibleMentionGroups.map(group => {
                   const groupEnt = resolveEntity(group.domain);
-                  const groupLabel = labelOfResultDomain(normalizeDomain(group.domain));
+                  const groupLabel = domainLabel(group.domain);
                   const DomainIcon = groupEnt.Icon;
                   const meta = { color: groupEnt.color };
                   const count = group.records.length;
@@ -530,7 +542,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   if (count === 1) {
                     const rec = group.records[0];
                     if (!rec) return null;
-                    const title = rec.record_title || `1 ${groupLabel.toLowerCase()}`;
+                    const title = rec.record_title || t('graph.detail.oneRecord', { domain: groupLabel.toLowerCase() });
                     return (
                       <button
                         key={group.domain}
@@ -616,8 +628,8 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                     }}
                   >
                     {showAllMentions
-                      ? 'Show less'
-                      : `Show more (${mentionGroups.length - MENTION_GROUPS_PAGE})`
+                      ? t('graph.detail.showLess')
+                      : t('graph.detail.showMore', { count: mentionGroups.length - MENTION_GROUPS_PAGE })
                     }
                   </button>
                 )}
@@ -631,7 +643,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
                   textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
                 }}>
-                  {isRecordMode ? 'Connected records' : 'Connected entities'}
+                  {isRecordMode ? t('graph.detail.connectedRecords') : t('graph.detail.connectedEntities')}
                 </div>
                 {visibleConnected.map(entity => {
                   const entityEnt = isRecordMode ? resolveEntity(entity.entity_type) : null;
@@ -677,8 +689,8 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                     }}
                   >
                     {showAllConnected
-                      ? 'Show less'
-                      : `Show more (${connectedEntities.length - CONNECTED_PAGE_SIZE})`
+                      ? t('graph.detail.showLess')
+                      : t('graph.detail.showMore', { count: connectedEntities.length - CONNECTED_PAGE_SIZE })
                     }
                   </button>
                 )}
@@ -691,7 +703,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                 fontSize: '0.75rem', color: 'var(--text-muted)',
                 textAlign: 'center', padding: '12px 0',
               }}>
-                {isRecordMode ? 'No connected records found' : 'No connections or mentions found'}
+                {isRecordMode ? t('graph.detail.noneRecords') : t('graph.detail.noneEntities')}
               </div>
             )}
           </>

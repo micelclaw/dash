@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { FolderOpen, FolderPlus, Upload, Search, X, Rows3, Rows4, ExternalLink } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { FileBreadcrumb } from '@/components/shared/FileBreadcrumb';
 import { ViewToggle } from '@/components/shared/ViewToggle';
 import { useDriveStore } from '@/stores/drive.store';
@@ -37,6 +38,7 @@ export function DriveToolbar({
   onNewFolder, onUpload,
   isMobile,
 }: DriveToolbarProps) {
+  const { t } = useI18n();
   const [localSearch, setLocalSearch] = useState(search);
   const [newFolderHovered, setNewFolderHovered] = useState(false);
   const [uploadHovered, setUploadHovered] = useState(false);
@@ -116,7 +118,8 @@ export function DriveToolbar({
           type="text"
           value={localSearch}
           onChange={e => setLocalSearch(e.target.value)}
-          placeholder="Search files..."
+          placeholder={t('drive.toolbar.search.placeholder')}
+          aria-label={t('drive.toolbar.search.placeholder')}
           style={{
             flex: 1,
             minWidth: 0,
@@ -135,6 +138,7 @@ export function DriveToolbar({
               setLocalSearch('');
               onSearchChange('');
             }}
+            aria-label={t('drive.toolbar.search.clear')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -153,8 +157,8 @@ export function DriveToolbar({
         <button
           type="button"
           onClick={() => onSearchAllFiles(localSearch)}
-          title="Search all files"
-          aria-label="Search all files"
+          title={t('drive.toolbar.search.all')}
+          aria-label={t('drive.toolbar.search.all')}
           style={{ display: 'flex', alignItems: 'center', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: 2, flexShrink: 0 }}
         >
           <ExternalLink size={14} />
@@ -167,8 +171,8 @@ export function DriveToolbar({
       {/* Density toggle (D6) */}
       <button
         onClick={() => setDensity(compact ? 'comfortable' : 'compact')}
-        title={compact ? 'Density: Compact — switch to Comfortable' : 'Density: Comfortable — switch to Compact'}
-        aria-label="Toggle density"
+        title={t(compact ? 'drive.toolbar.density.compactTitle' : 'drive.toolbar.density.comfortableTitle')}
+        aria-label={t('drive.toolbar.density.toggle')}
         aria-pressed={compact}
         onMouseEnter={() => setDensityHovered(true)}
         onMouseLeave={() => setDensityHovered(false)}
@@ -193,7 +197,8 @@ export function DriveToolbar({
       {/* New Folder button */}
       <button
         onClick={onNewFolder}
-        title="New folder"
+        title={t('drive.toolbar.newFolder')}
+        aria-label={t('drive.toolbar.newFolder')}
         onMouseEnter={() => setNewFolderHovered(true)}
         onMouseLeave={() => setNewFolderHovered(false)}
         style={{
@@ -217,7 +222,8 @@ export function DriveToolbar({
       {/* Upload button — icon-only on mobile */}
       <button
         onClick={onUpload}
-        title="Upload file"
+        title={t('drive.toolbar.upload')}
+        aria-label={t('drive.toolbar.upload')}
         onMouseEnter={() => setUploadHovered(true)}
         onMouseLeave={() => setUploadHovered(false)}
         style={{
@@ -239,7 +245,7 @@ export function DriveToolbar({
         }}
       >
         <Upload size={14} />
-        {!isMobile && 'Upload'}
+        {!isMobile && t('drive.toolbar.uploadAction')}
       </button>
     </div>
   );

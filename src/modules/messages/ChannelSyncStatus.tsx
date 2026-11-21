@@ -3,15 +3,16 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { getConnectorSyncSchedule, runConnector } from '@/services/sync.service';
+import { useI18n } from '@/i18n';
 import type { ConnectorSyncSchedule, ConnectorRunAction } from '@/services/sync.service';
 import type { PlatformCapability } from '@/services/messages.service';
 
 const feedback: Record<ConnectorRunAction, string> = {
-  sync_started: 'Sincronización solicitada; los mensajes aparecerán cuando termine.',
-  stream_reconnected: 'Reconexión solicitada.',
-  stream_already_live: 'El canal ya está conectado en tiempo real.',
-  refreshed: 'Actualización solicitada; el historial aparecerá cuando termine.',
-  noop: 'Este canal recibe mensajes en tiempo real; no hay nada que sincronizar.',
+  sync_started: 'messages.syncStarted',
+  stream_reconnected: 'messages.reconnectRequested',
+  stream_already_live: 'messages.alreadyConnected',
+  refreshed: 'messages.refreshRequested',
+  noop: 'messages.nothingToSync',
 };
 
 export function ChannelSyncStatus({ capability }: { capability?: PlatformCapability }) {
@@ -22,6 +23,7 @@ export function ChannelSyncStatus({ capability }: { capability?: PlatformCapabil
 }
 
 function PullSyncStatus({ connectorId }: { connectorId: string }) {
+  const { t, locale } = useI18n();
   const [schedule, setSchedule] = useState<ConnectorSyncSchedule | null>();
   const [error, setError] = useState(false);
   const [running, setRunning] = useState(false);
@@ -43,7 +45,7 @@ function PullSyncStatus({ connectorId }: { connectorId: string }) {
         if (pendingSince.current !== null) {
           if (result?.status === 'syncing') sawSyncing.current = true;
           else if (sawSyncing.current || Date.now() - pendingSince.current >= 30_000) {
-            if (!sawSyncing.current) toast.info('La solicitud fue aceptada, pero no se ha confirmado su finalización. Puedes consultar el estado o reintentar.');
+            if (!sawSyncing.current) toast.info(t('messages.syncAcceptedUnconfirmed'));
             pendingSince.current = null; setRequested(false);
           }
         }
@@ -51,7 +53,7 @@ function PullSyncStatus({ connectorId }: { connectorId: string }) {
     } catch {
       if (mounted.current && current === request.current) setError(true);
     }
-  }, [connectorId]);
+  }, [connectorId, t]);
 
   useEffect(() => {
     mounted.current = true;
@@ -89,10 +91,10 @@ function PullSyncStatus({ connectorId }: { connectorId: string }) {
         if (action === 'sync_started' && completionAtStart === completions.current) {
           pendingSince.current = Date.now(); sawSyncing.current = false; setRequested(true);
         }
-        toast.success(feedback[action]);
+        toast.success(t(feedback[action]));
       }
     } catch {
-      if (mounted.current) toast.error('No se pudo solicitar la sincronización. Puede que ya esté en curso; revisa el estado o vuelve a intentarlo.');
+      if (mounted.current) toast.error(t('messages.syncFailed'));
     } finally {
       runningRef.current = false;
       if (mounted.current) {
@@ -106,20 +108,20 @@ function PullSyncStatus({ connectorId }: { connectorId: string }) {
 
   if (schedule === null) return null;
   const blocked = !schedule || error || !['connected', 'active', 'error'].includes(schedule.status);
-  const state = schedule?.status === 'paused' ? 'Sincronización pausada.'
-    : schedule?.status === 'pending_pairing' ? 'Pendiente de vinculación.'
-    : schedule?.status === 'syncing' ? 'Sincronización en curso.'
-    : schedule?.status === 'error' ? 'La última sincronización falló; puedes reintentar.' : '';
+  const state = schedule?.status === 'paused' ? t('messages.syncPaused')
+    : schedule?.status === 'pending_pairing' ? t('messages.pendingPairing')
+    : schedule?.status === 'syncing' ? t('messages.syncInProgress')
+    : schedule?.status === 'error' ? t('messages.lastSyncFailed') : '';
   const last = schedule?.last_sync_at ? new Date(schedule.last_sync_at) : null;
   return (
-    <section aria-label="Sincronización del canal" style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+    <section aria-label={t('messages.channelSync')} style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
       <div style={{ flex: '1 1 220px' }} aria-live="polite">
-        {error ? 'No se pudo consultar la sincronización.' : !schedule ? 'Consultando sincronización…' : <>
-          <div>{schedule.interval_minutes === null ? 'Sincronización periódica (intervalo no disponible).' : `Sincronización cada ${schedule.interval_minutes} min.`} No es tiempo real; los mensajes de fuera llegan en el siguiente sondeo y puede tardar más si hay retrasos.</div>
-          <div>{state} Última sincronización: {last && Number.isFinite(last.getTime()) ? last.toLocaleString() : 'todavía no registrada'}.</div>
+        {error ? t('messages.syncQueryFailed') : !schedule ? t('messages.checkingSync') : <>
+          <div>{schedule.interval_minutes === null ? t('messages.periodicSyncNoInterval') : t('messages.syncInterval', { minutes: schedule.interval_minutes })} {t('messages.notRealtime')}</div>
+          <div>{state} {t('messages.lastSync')} {last && Number.isFinite(last.getTime()) ? last.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US') : t('messages.notRecorded')}.</div>
         </>}
       </div>
-      {error ? <Button type="button" variant="outline" size="sm" onClick={() => { void refresh(); }}>Reintentar</Button> : <Button type="button" variant="outline" size="sm" onClick={() => { void run(); }} disabled={running || requested || blocked}>{running ? 'Solicitando…' : requested ? 'Sincronización solicitada…' : 'Sincronizar ahora'}</Button>}
+      {error ? <Button type="button" variant="outline" size="sm" onClick={() => { void refresh(); }}>{t('messages.retry')}</Button> : <Button type="button" variant="outline" size="sm" onClick={() => { void run(); }} disabled={running || requested || blocked}>{running ? t('messages.requesting') : requested ? t('messages.syncRequested') : t('messages.syncNow')}</Button>}
     </section>
   );
 }

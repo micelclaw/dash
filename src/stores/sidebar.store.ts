@@ -4,14 +4,13 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 interface SidebarStore {
   /** Effective visual state — driven by userCollapsed + viewport auto-collapse + hover */
   collapsed: boolean;
-  /** User's explicit preference via Cmd+B / toggle button (persisted) */
+  /** User's explicit preference via Cmd+B / toggle button (synchronized per user) */
   userCollapsed: boolean;
-  /** Pin mode: if true, sidebar stays as-is. If false, auto-collapse + hover-expand */
+  /** Pin mode, synchronized per user: if false, auto-collapse + hover-expand */
   pinned: boolean;
   /** Whether the sidebar is temporarily expanded by mouse hover (transient) */
   hoverExpanded: boolean;
@@ -47,9 +46,7 @@ interface SidebarStore {
   unhideModule: (id: string) => void;
 }
 
-export const useSidebarStore = create<SidebarStore>()(
-  persist(
-    (set, get) => ({
+export const useSidebarStore = create<SidebarStore>((set, get) => ({
       collapsed: false,
       userCollapsed: false,
       pinned: true, // Default: pinned (current behavior)
@@ -84,26 +81,4 @@ export const useSidebarStore = create<SidebarStore>()(
         set((s) => (s.hiddenModules.includes(id) ? s : { hiddenModules: [...s.hiddenModules, id] })),
       unhideModule: (id: string) =>
         set((s) => ({ hiddenModules: s.hiddenModules.filter((x) => x !== id) })),
-    }),
-    {
-      name: 'claw-sidebar',
-      partialize: (state) => ({
-        userCollapsed: state.userCollapsed,
-        pinned: state.pinned,
-        moduleOrder: state.moduleOrder,
-        hiddenModules: state.hiddenModules,
-      }),
-      merge: (persisted, current) => {
-        const p = persisted as Partial<SidebarStore>;
-        return {
-          ...current,
-          userCollapsed: p.userCollapsed ?? false,
-          collapsed: p.userCollapsed ?? false,
-          pinned: p.pinned ?? true,
-          moduleOrder: p.moduleOrder ?? {},
-          hiddenModules: p.hiddenModules ?? [],
-        };
-      },
-    },
-  ),
-);
+    }));

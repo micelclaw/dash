@@ -14,6 +14,13 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n';
+
+const OPTION_LABEL_KEYS: Record<string, string> = {
+  solid: 'sketches.segmented.solid',
+  dashed: 'sketches.segmented.dashed',
+  dotted: 'sketches.segmented.dotted',
+};
 
 export function Segmented<T extends string>({
   options,
@@ -24,6 +31,8 @@ export function Segmented<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>
       {options.map((s) => (
@@ -31,6 +40,7 @@ export function Segmented<T extends string>({
           key={s}
           variant="ghost"
           size="sm"
+          aria-pressed={value === s}
           onClick={() => onChange(s)}
           className={cn(
             'h-auto px-2 py-[3px] text-[10px] font-normal capitalize border border-[var(--border,#333)]',
@@ -40,7 +50,7 @@ export function Segmented<T extends string>({
           )}
           style={{ borderRadius: 4 }}
         >
-          {s}
+          {OPTION_LABEL_KEYS[s] ? t(OPTION_LABEL_KEYS[s]!) : s}
         </Button>
       ))}
     </div>

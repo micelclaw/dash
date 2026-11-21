@@ -13,6 +13,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Terminal, Globe, Plus, X, Columns2, Rows2, Square } from 'lucide-react';
 import { useTerminalStore, type TerminalTab } from '@/stores/terminal.store';
+import { useI18n } from '@/i18n';
 
 interface TabBarProps {
   onNewTab: () => void;
@@ -22,6 +23,7 @@ interface TabBarProps {
 }
 
 export function TabBar({ onNewTab, onNewSSH, onConnectSaved, onCloseTab }: TabBarProps) {
+  const { t } = useI18n();
   const tabs = useTerminalStore((s) => s.tabs);
   const activeTabId = useTerminalStore((s) => s.activeTabId);
   const splitMode = useTerminalStore((s) => s.splitMode);
@@ -74,7 +76,8 @@ export function TabBar({ onNewTab, onNewSSH, onConnectSaved, onCloseTab }: TabBa
         <button
           ref={btnRef}
           onClick={() => setMenuOpen((v) => !v)}
-          title="New tab"
+          title={t('terminal.newTab')}
+          aria-label={t('terminal.newTab')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -111,12 +114,12 @@ export function TabBar({ onNewTab, onNewSSH, onConnectSaved, onCloseTab }: TabBa
           >
             <MenuItem
               icon={<Terminal size={13} />}
-              label="Local Shell"
+              label={t('terminal.localShell')}
               onClick={() => { onNewTab(); setMenuOpen(false); }}
             />
             <MenuItem
               icon={<Globe size={13} />}
-              label="SSH Connection..."
+              label={t('terminal.sshConnection')}
               onClick={() => { onNewSSH(); setMenuOpen(false); }}
             />
 
@@ -134,7 +137,7 @@ export function TabBar({ onNewTab, onNewSSH, onConnectSaved, onCloseTab }: TabBa
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                 }}>
-                  Saved
+                  {t('terminal.saved')}
                 </div>
                 {connections.map((c) => (
                   <MenuItem
@@ -157,19 +160,19 @@ export function TabBar({ onNewTab, onNewSSH, onConnectSaved, onCloseTab }: TabBa
           icon={<Square size={13} />}
           active={splitMode === 'none'}
           onClick={() => setSplitMode('none')}
-          title="No split"
+          title={t('terminal.noSplit')}
         />
         <SplitButton
           icon={<Columns2 size={13} />}
           active={splitMode === 'vertical'}
           onClick={() => setSplitMode('vertical')}
-          title="Split vertical"
+          title={t('terminal.splitVertical')}
         />
         <SplitButton
           icon={<Rows2 size={13} />}
           active={splitMode === 'horizontal'}
           onClick={() => setSplitMode('horizontal')}
-          title="Split horizontal"
+          title={t('terminal.splitHorizontal')}
         />
       </div>
     </div>
@@ -217,6 +220,7 @@ function TabItem({ tab, isActive, onClick, onClose }: {
   onClick: () => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const Icon = tab.type === 'ssh' ? Globe : Terminal;
 
   return (
@@ -249,6 +253,8 @@ function TabItem({ tab, isActive, onClick, onClose }: {
       </span>
       <button
         onClick={(e) => { e.stopPropagation(); onClose(); }}
+        title={t('terminal.closeTab', { tab: tab.label })}
+        aria-label={t('terminal.closeTab', { tab: tab.label })}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -280,6 +286,7 @@ function SplitButton({ icon, active, onClick, title }: {
     <button
       onClick={onClick}
       title={title}
+      aria-label={title}
       style={{
         display: 'flex',
         alignItems: 'center',

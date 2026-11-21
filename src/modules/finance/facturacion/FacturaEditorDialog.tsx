@@ -40,6 +40,7 @@ import { openInvoicePdf } from './invoicePdf';
 import { useFacturacionNav } from './navigation';
 import { DocumentRelatedPanel } from './DocumentRelatedPanel';
 import { Tip } from '../lib/glossary';
+import { useI18n } from '@/i18n';
 
 interface DraftLine {
   id?: string; // id de la línea persistida (undefined = nueva, aún no guardada)
@@ -71,6 +72,7 @@ export function FacturaEditorDialog({
    *  ignora: prevalece el tipo del doc cargado. */
   docType?: DocType;
 }) {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const {
     contacts,
@@ -369,10 +371,10 @@ export function FacturaEditorDialog({
     setBusy('draft');
     try {
       await persist();
-      toast.success('Draft saved');
+      toast.success(t('finance.billing.editor.draftSaved'));
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
+      toast.error(e instanceof Error ? e.message : t('finance.saveFailed'));
     } finally {
       setBusy(null);
     }
@@ -387,9 +389,9 @@ export function FacturaEditorDialog({
       await fetchDocument(doc.id);
       const fresh = useFinanceBillingStore.getState().currentDoc;
       if (fresh && fresh.id === doc.id) setSavedDoc(fresh);
-      toast.success(isBill ? 'Factura recibida registrada' : `${isQuote ? 'Presupuesto emitido' : 'Factura emitida'}${fresh?.number ? ` (${fresh.number})` : ''}`);
+      toast.success(t('finance.billing.editor.documentIssued'));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t issue');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.editor.issueFailed'));
     } finally {
       setBusy(null);
     }
@@ -401,10 +403,10 @@ export function FacturaEditorDialog({
     setBusy('convert');
     try {
       const inv = await convertQuote(savedDoc.id);
-      toast.success('Presupuesto convertido a factura');
+      toast.success(t('finance.billing.editor.quoteConverted'));
       openInvoice(inv.id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t convert');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.editor.convertFailed'));
     } finally {
       setBusy(null);
     }
@@ -416,7 +418,7 @@ export function FacturaEditorDialog({
     try {
       await openInvoicePdf(savedDoc.id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t generate the PDF (is Office running?)');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.editor.pdfFailed'));
     } finally {
       setBusy(null);
     }
@@ -449,16 +451,16 @@ export function FacturaEditorDialog({
     try {
       let docId = savedDoc?.id;
       if (!isEmitted) {
-        if (!contactId) { toast.error('Pick a customer to preview'); return; }
-        if (validLines.length === 0) { toast.error('Add at least one valid line to preview'); return; }
+        if (!contactId) { toast.error(t('finance.billing.editor.pickCustomerPreview')); return; }
+        if (validLines.length === 0) { toast.error(t('finance.billing.editor.addLinePreview')); return; }
         const doc = await persist();
         docId = doc.id;
       }
-      if (!docId) { toast.error('Save the draft before previewing'); return; }
+      if (!docId) { toast.error(t('finance.billing.editor.saveBeforePreview')); return; }
       const html = await fetchPreviewHtml(docId);
       setPreviewHtml(html);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t generate the preview');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.editor.previewFailed'));
     } finally {
       setBusy(null);
     }
@@ -483,9 +485,9 @@ export function FacturaEditorDialog({
       await fetchDocument(savedDoc.id);
       const fresh = useFinanceBillingStore.getState().currentDoc;
       if (fresh && fresh.id === savedDoc.id) setSavedDoc(fresh);
-      toast.success('Justificante adjuntado');
+      toast.success(t('finance.billing.editor.receiptAttached'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Couldn\'t attach the receipt');
+      toast.error(err instanceof Error ? err.message : t('finance.billing.editor.receiptAttachFailed'));
     } finally {
       setBusy(null);
     }
@@ -499,9 +501,9 @@ export function FacturaEditorDialog({
       await fetchDocument(savedDoc.id);
       const fresh = useFinanceBillingStore.getState().currentDoc;
       if (fresh && fresh.id === savedDoc.id) setSavedDoc(fresh);
-      toast.success('Justificante quitado');
+      toast.success(t('finance.billing.editor.receiptRemoved'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Couldn\'t remove the receipt');
+      toast.error(err instanceof Error ? err.message : t('finance.billing.editor.receiptRemoveFailed'));
     } finally {
       setBusy(null);
     }
@@ -522,14 +524,14 @@ export function FacturaEditorDialog({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-              {isQuote
-                ? (documentId ? 'Editar presupuesto' : 'New quote')
+              {t(isQuote
+                ? (documentId ? 'finance.billing.editor.editQuote' : 'finance.billing.editor.newQuote')
                 : isBill
-                  ? (documentId ? 'Editar factura recibida' : 'Nueva factura recibida')
-                  : (documentId ? 'Editar factura' : 'Nueva factura')}
+                  ? (documentId ? 'finance.billing.editor.editBill' : 'finance.billing.editor.newBill')
+                  : (documentId ? 'finance.billing.editor.editInvoice' : 'finance.billing.editor.newInvoice'))}
             </h2>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono, monospace)' }}>
-              {isBill ? (number ? `Nº proveedor ${number}` : 'Factura del proveedor') : (number ?? 'Provisional no. — assigned on issue')}
+              {isBill ? (number ? `${t('finance.billing.supplierNumber')} ${number}` : t('finance.billing.editor.newBill')) : (number ?? '—')}
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
@@ -541,15 +543,15 @@ export function FacturaEditorDialog({
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Cliente (venta) / Proveedor (factura recibida) */}
             <div>
-              <label style={labelStyle}>{isBill ? 'Supplier' : 'Customer'}</label>
+              <label style={labelStyle}>{t(isBill ? 'finance.billing.supplier' : 'finance.billing.customer')}</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 <select ref={firstFieldRef} value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={isEmitted} style={{ ...fieldStyle, flex: 1 }}>
-                  <option value="">{isBill ? '— elige proveedor —' : '— elige cliente —'}</option>
+                  <option value="">{t(isBill ? 'finance.billing.editor.chooseSupplier' : 'finance.billing.editor.chooseCustomer')}</option>
                   {contacts.filter((c) => c.roles.includes(isBill ? 'supplier' : 'customer')).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 {!isEmitted && (
-                  <button onClick={() => setClienteOpen(true)} title={isBill ? 'New supplier' : 'New customer'} style={{ ...fieldStyle, width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Plus size={14} /> Nuevo
+                  <button onClick={() => setClienteOpen(true)} title={t(isBill ? 'finance.billing.editor.newSupplier' : 'finance.billing.editor.newCustomer')} style={{ ...fieldStyle, width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Plus size={14} /> {t('finance.billing.editor.new')}
                   </button>
                 )}
               </div>
@@ -558,9 +560,9 @@ export function FacturaEditorDialog({
             {/* Nº de la factura del proveedor (solo facturas recibidas) */}
             {isBill && (
               <div>
-                <label style={labelStyle}>Their invoice no.</label>
-                <input value={supplierNumber ?? ''} onChange={(e) => setSupplierNumber(e.target.value)} disabled={isEmitted} placeholder="the one on the supplier's paperwork" style={fieldStyle} />
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>The supplier sets it; we don't number it.</div>
+                <label style={labelStyle}>{t('finance.billing.editor.supplierInvoiceNo')}</label>
+                <input value={supplierNumber ?? ''} onChange={(e) => setSupplierNumber(e.target.value)} disabled={isEmitted} placeholder={t('finance.billing.editor.supplierInvoiceNo')} style={fieldStyle} />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('finance.billing.editor.supplierInvoiceHint')}</div>
               </div>
             )}
 
@@ -579,7 +581,7 @@ export function FacturaEditorDialog({
             {/* Categoría de ingreso (solo ventas — la factura recibida usa categoría por línea) */}
             {!isBill && (
               <div>
-                <label style={labelStyle}>Income category</label>
+                <label style={labelStyle}>{t('finance.billing.editor.incomeCategory')}</label>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
                   <option value="">— sin categoría —</option>
                   {categories.filter((c) => c.kind === 'income').map((c) => (
@@ -595,9 +597,9 @@ export function FacturaEditorDialog({
             {/* Proyecto (F4): imputa el documento a un proyecto → rentabilidad por proyecto. */}
             {projects.length > 0 && (
               <div>
-                <label style={labelStyle}>Project</label>
+                <label style={labelStyle}>{t('finance.billing.editor.project')}</label>
                 <select value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
-                  <option value="">— sin proyecto —</option>
+                  <option value="">{t('finance.billing.editor.noProject')}</option>
                   {projects.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
                 </select>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
@@ -608,7 +610,7 @@ export function FacturaEditorDialog({
 
             {/* Descuento de documento */}
             <div>
-              <label style={labelStyle}>Discount</label>
+              <label style={labelStyle}>{t('finance.billing.editor.discount')}</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   value={discountValue}
@@ -624,8 +626,8 @@ export function FacturaEditorDialog({
                   disabled={isEmitted}
                   style={{ ...fieldStyle, width: 150 }}
                 >
-                  <option value="percent">% sobre la base</option>
-                  <option value="fixed">Fixed amount</option>
+                  <option value="percent">{t('finance.billing.editor.percentOfBase')}</option>
+                  <option value="fixed">{t('finance.billing.editor.fixedAmount')}</option>
                 </select>
               </div>
               {!isEmitted && (
@@ -638,9 +640,9 @@ export function FacturaEditorDialog({
             {/* Retención IRPF (a nivel documento, 0263): separada del IVA por línea. */}
             {retentionRates.length > 0 && (
               <div>
-                <label style={labelStyle}>Income tax withholding <Tip k="retencion" /></label>
+                <label style={labelStyle}>{t('finance.billing.editor.withholding')} <Tip k="retencion" /></label>
                 <select value={retentionRateId} onChange={(e) => setRetentionRateId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
-                  <option value="">— sin retención —</option>
+                  <option value="">{t('finance.billing.editor.noWithholding')}</option>
                   {retentionRates.map((t) => (
                     <option key={t.id} value={t.id}>{t.name} ({(Number(t.rate) * 100).toFixed(0)}%)</option>
                   ))}
@@ -655,19 +657,19 @@ export function FacturaEditorDialog({
 
             {/* Líneas */}
             <div>
-              <label style={labelStyle}>Lines</label>
+              <label style={labelStyle}>{t('finance.billing.editor.lines')}</label>
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 8 }}>
                 <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isMobile ? 560 : undefined }}>
                   <thead>
                     <tr>
-                      <th style={{ ...th, width: '28%' }}>Description</th>
-                      <th style={{ ...th, width: '10%' }}>Qty</th>
-                      <th style={{ ...th, width: '14%' }}>Price</th>
-                      <th style={{ ...th, width: '17%' }}>Disc.</th>
+                      <th style={{ ...th, width: '28%' }}>{t('finance.billing.description')}</th>
+                      <th style={{ ...th, width: '10%' }}>{t('finance.billing.qty')}</th>
+                      <th style={{ ...th, width: '14%' }}>{t('finance.billing.editor.price')}</th>
+                      <th style={{ ...th, width: '17%' }}>{t('finance.billing.editor.lineDiscount')}</th>
                       <th style={{ ...th, width: '18%' }}>IVA</th>
-                      {isBill && <th style={{ ...th, width: '16%' }}>Category</th>}
-                      <th style={{ ...th, width: '13%', textAlign: 'right' }}>Amount</th>
+                      {isBill && <th style={{ ...th, width: '16%' }}>{t('finance.billing.category')}</th>}
+                      <th style={{ ...th, width: '13%', textAlign: 'right' }}>{t('finance.amount')}</th>
                       <th style={{ width: 28 }} />
                     </tr>
                   </thead>
@@ -676,7 +678,7 @@ export function FacturaEditorDialog({
                       <tr key={i}>
                         <td style={{ padding: '3px 4px' }}>
                           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} disabled={isEmitted} placeholder="Description" style={{ ...cellInput, flex: 1, minWidth: 0 }} />
+                            <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} disabled={isEmitted} placeholder={t('finance.billing.description')} style={{ ...cellInput, flex: 1, minWidth: 0 }} />
                             {showItemLink && (
                               <InventoryItemSelect
                                 value={l.inventory_item_id}
@@ -708,7 +710,7 @@ export function FacturaEditorDialog({
                         <td style={{ padding: '3px 4px' }}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <input value={l.discount_value} onChange={(e) => setLine(i, { discount_value: e.target.value })} disabled={isEmitted} inputMode="decimal" placeholder="0" style={{ ...cellInput, flex: 1, minWidth: 0, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-                            <select value={l.discount_kind} onChange={(e) => setLine(i, { discount_kind: e.target.value as 'percent' | 'fixed' })} disabled={isEmitted} title="Discount type" style={{ ...cellInput, width: 'auto', padding: '6px 4px', flexShrink: 0 }}>
+                            <select value={l.discount_kind} onChange={(e) => setLine(i, { discount_kind: e.target.value as 'percent' | 'fixed' })} disabled={isEmitted} title={t('finance.billing.editor.discount')} style={{ ...cellInput, width: 'auto', padding: '6px 4px', flexShrink: 0 }}>
                               <option value="percent">%</option>
                               <option value="fixed">{currency === 'EUR' ? '€' : currency}</option>
                             </select>
@@ -716,7 +718,7 @@ export function FacturaEditorDialog({
                         </td>
                         <td style={{ padding: '3px 4px' }}>
                           <select value={l.tax_rate_id} onChange={(e) => setLine(i, { tax_rate_id: e.target.value })} disabled={isEmitted} style={cellInput}>
-                            <option value="">No VAT</option>
+                            <option value="">{t('finance.billing.editor.noVat')}</option>
                             {taxRates.filter((t) => t.tax_type !== 'irpf_retention').map((t) => (
                               <option key={t.id} value={t.id}>
                                 {t.name} ({(Number(t.rate) * 100).toFixed(0)}% {t.mode === 'inclusive' ? 'inc' : 'exc'})
@@ -727,14 +729,14 @@ export function FacturaEditorDialog({
                         {isBill && (
                           <td style={{ padding: '3px 4px' }}>
                             <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                              <select value={l.category_id} onChange={(e) => setLine(i, { category_id: e.target.value })} disabled={isEmitted || l.is_capital} title={l.is_capital ? 'Capital assets go to Fixed assets, not to an expense category' : 'Expense category'} style={{ ...cellInput, flex: 1, minWidth: 0, opacity: l.is_capital ? 0.5 : 1 }}>
+                              <select value={l.category_id} onChange={(e) => setLine(i, { category_id: e.target.value })} disabled={isEmitted || l.is_capital} title={l.is_capital ? t('finance.billing.editor.capitalAssetHint') : t('finance.billing.category')} style={{ ...cellInput, flex: 1, minWidth: 0, opacity: l.is_capital ? 0.5 : 1 }}>
                                 <option value="">— sin categoría —</option>
                                 {categories.filter((c) => c.kind === 'expense').map((c) => (
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                               </select>
-                              <label title="Bien de inversión (inmovilizado): se capitaliza y luego se deprecia, en vez de imputarse como gasto" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 14, cursor: isEmitted ? 'default' : 'pointer', flexShrink: 0, color: l.is_capital ? 'var(--mod-inventory, var(--amber))' : 'var(--text-dim)' }}>
-                                <input type="checkbox" checked={l.is_capital} disabled={isEmitted} onChange={(e) => setLine(i, { is_capital: e.target.checked })} aria-label="Capital asset" style={{ cursor: isEmitted ? 'default' : 'pointer' }} />
+                              <label title={t('finance.billing.editor.capitalAssetHint')} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 14, cursor: isEmitted ? 'default' : 'pointer', flexShrink: 0, color: l.is_capital ? 'var(--mod-inventory, var(--amber))' : 'var(--text-dim)' }}>
+                                <input type="checkbox" checked={l.is_capital} disabled={isEmitted} onChange={(e) => setLine(i, { is_capital: e.target.checked })} aria-label={t('finance.billing.editor.capitalAsset')} style={{ cursor: isEmitted ? 'default' : 'pointer' }} />
                                 <span aria-hidden>🏭</span>
                               </label>
                             </div>
@@ -744,7 +746,7 @@ export function FacturaEditorDialog({
                           {fmtMoney(lineImporte(l), currency)}
                         </td>
                         <td style={{ padding: '3px 0', textAlign: 'center' }}>
-                          <button onClick={() => removeDraftLine(i)} disabled={isEmitted || lines.length <= 1} title="Remove line" style={{ background: 'none', border: 'none', color: (isEmitted || lines.length <= 1) ? 'var(--text-muted)' : 'var(--text-dim)', cursor: (isEmitted || lines.length <= 1) ? 'default' : 'pointer', padding: 4 }}>
+                          <button onClick={() => removeDraftLine(i)} disabled={isEmitted || lines.length <= 1} title={t('finance.billing.editor.removeLine')} aria-label={t('finance.billing.editor.removeLine')} style={{ background: 'none', border: 'none', color: (isEmitted || lines.length <= 1) ? 'var(--text-muted)' : 'var(--text-dim)', cursor: (isEmitted || lines.length <= 1) ? 'default' : 'pointer', padding: 4 }}>
                             <Trash2 size={14} />
                           </button>
                         </td>
@@ -755,41 +757,41 @@ export function FacturaEditorDialog({
                 </div>
                 {!isEmitted && (
                   <button onClick={addDraftLine} style={{ marginTop: 8, width: '100%', padding: '7px 12px', cursor: 'pointer', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-                    <Plus size={14} /> Línea
+                    <Plus size={14} /> {t('finance.billing.editor.addLine')}
                   </button>
                 )}
               </div>
               {isEmitted && (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
                   {isQuote
-                    ? 'Presupuesto emitido. Puedes convertirlo en factura.'
+                    ? t('finance.billing.editor.quoteImmutable')
                     : isBill
-                      ? 'Factura recibida registrada: es inmutable. Registra su pago desde la pestaña Recibidas o Pagos.'
-                      : 'Factura emitida: es inmutable. Para corregirla, emite una nota de crédito desde la pestaña Facturas.'}
+                      ? t('finance.billing.editor.billImmutable')
+                      : t('finance.billing.editor.invoiceImmutable')}
                 </div>
               )}
             </div>
 
             {/* Condiciones de pago + notas */}
             <div>
-              <label style={labelStyle}>Payment terms</label>
+              <label style={labelStyle}>{t('finance.billing.editor.paymentTerms')}</label>
               <textarea
                 value={terms ?? ''}
                 onChange={(e) => setTerms(e.target.value)}
                 disabled={isEmitted}
                 rows={2}
-                placeholder="e.g. Net 30 by transfer to ES00 0000…"
+                placeholder={t('finance.billing.editor.paymentTermsPlaceholder')}
                 style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
             <div>
-              <label style={labelStyle}>Notes</label>
+              <label style={labelStyle}>{t('finance.billing.contact.notes')}</label>
               <textarea
                 value={notes ?? ''}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isEmitted}
                 rows={2}
-                placeholder="Notes the customer will see on the invoice (optional)"
+                placeholder={t('finance.billing.editor.customerNotes')}
                 style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
@@ -797,10 +799,10 @@ export function FacturaEditorDialog({
             {/* Justificante adjunto (solo facturas recibidas) */}
             {isBill && (
               <div>
-                <label style={labelStyle}>Receipt</label>
+                <label style={labelStyle}>{t('finance.billing.editor.receipt')}</label>
                 {!savedDoc ? (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', background: 'var(--card)' }}>
-                    Save the draft to attach a receipt.
+                    {t('finance.billing.editor.saveDraftToAttach')}
                   </div>
                 ) : attachment ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', background: 'var(--card)' }}>
@@ -816,7 +818,8 @@ export function FacturaEditorDialog({
                     <button
                       onClick={onRemoveAttachment}
                       disabled={busy !== null}
-                      title="Quitar justificante"
+                      title={t('finance.billing.editor.receiptRemoved')}
+                      aria-label={t('finance.billing.editor.receiptRemoved')}
                       style={{ background: 'none', border: 'none', color: busy ? 'var(--text-muted)' : 'var(--text-dim)', cursor: busy ? 'wait' : 'pointer', padding: 4, flexShrink: 0 }}
                     >
                       {busy === 'attach' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
@@ -825,11 +828,11 @@ export function FacturaEditorDialog({
                 ) : (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', background: 'var(--card)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, color: 'var(--text-dim)' }}>
                     {busy === 'attach' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Paperclip size={14} />}
-                    Adjuntar justificante (PDF, imagen…)
+                    {t('finance.billing.editor.attachReceipt')}
                     <input type="file" onChange={onAttachFile} disabled={busy !== null} style={{ display: 'none' }} />
                   </label>
                 )}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Saved to Drive (Documents) and linked to this invoice.</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('finance.billing.editor.receiptSaved')}</div>
               </div>
             )}
           </div>
@@ -837,24 +840,24 @@ export function FacturaEditorDialog({
           {/* Panel de totales */}
           <div style={{ width: isMobile ? '100%' : 220, flexShrink: 0 }}>
             <div style={{ position: 'sticky', top: 0, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 16, fontFamily: 'var(--font-mono, monospace)' }}>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, fontFamily: 'var(--font-sans, inherit)', fontWeight: 600 }}>Totals</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>Base</span><span>{fmtMoney(liveTotals.subtotal, currency)}</span></div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, fontFamily: 'var(--font-sans, inherit)', fontWeight: 600 }}>{t('finance.billing.editor.totals')}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>{t('finance.billing.base')}</span><span>{fmtMoney(liveTotals.subtotal, currency)}</span></div>
               {savedDoc && Number(savedDoc.discount_value ?? 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}>
-                  <span>Discount</span>
+                  <span>{t('finance.billing.editor.discount')}</span>
                   <span>{savedDoc.discount_kind === 'percent' ? `${Number(savedDoc.discount_value)}%` : `−${fmtMoney(savedDoc.discount_value, currency)}`}</span>
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>IVA</span><span>{fmtMoney(liveTotals.tax, currency)}</span></div>
               {liveTotals.retention > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--warning)' }}><span>− Retención IRPF</span><span>−{fmtMoney(liveTotals.retention, currency)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--warning)' }}><span>− {t('finance.billing.editor.withholding')}</span><span>−{fmtMoney(liveTotals.retention, currency)}</span></div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 2px', fontSize: 17, fontWeight: 700, color: 'var(--text)', borderTop: '1px solid var(--border)', marginTop: 6 }}>
-                <span style={{ fontSize: liveTotals.retention > 0 ? 13 : 17 }}>{liveTotals.retention > 0 ? (isBill ? 'Total to pay' : 'Total to collect') : 'TOTAL'}</span>
+                <span style={{ fontSize: liveTotals.retention > 0 ? 13 : 17 }}>{liveTotals.retention > 0 ? t(isBill ? 'finance.billing.editor.totalToPay' : 'finance.billing.editor.totalToCollect') : t('finance.billing.totalUpper')}</span>
                 <span>{fmtMoney(liveTotals.total, currency)}</span>
               </div>
               {!liveTotals.fromServer && (
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'var(--font-sans, inherit)' }}>Estimated. Confirmed on save.</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'var(--font-sans, inherit)' }}>{t('finance.billing.editor.estimated')}</div>
               )}
             </div>
           </div>
@@ -869,11 +872,11 @@ export function FacturaEditorDialog({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '16px 20px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
           {isEmitted ? (
             <>
-              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Close</button>
+              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.close')}</button>
               {isQuote && savedDoc?.status !== 'converted' && (
                 <button onClick={onConvertToInvoice} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {busy === 'convert' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <FileText size={14} />}
-                  Convertir a factura
+                  {t('finance.billing.editor.convertInvoice')}
                 </button>
               )}
               {/* PDF / vista previa / envío por email son acciones de VENTA; no aplican a una factura recibida. */}
@@ -881,36 +884,36 @@ export function FacturaEditorDialog({
                 <>
                   <button onClick={onPreview} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {busy === 'preview' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Eye size={14} />}
-                    Vista previa
+                    {t('finance.billing.editor.preview')}
                   </button>
                   <button onClick={onDownloadPdf} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {busy === 'pdf' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <FileDown size={14} />}
-                    PDF
+                    {t('finance.billing.editor.downloadPdf')}
                   </button>
                   <button onClick={onSendEmail} disabled={busy !== null} style={{ padding: '8px 18px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#fff', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {busy === 'send' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
-                    Enviar por email
+                    {t('finance.billing.editor.sendEmail')}
                   </button>
                 </>
               )}
             </>
           ) : (
             <>
-              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.cancel')}</button>
               {/* La vista previa renderiza el documento como factura NUESTRA → no aplica a una factura recibida. */}
               {!isBill && (
                 <button onClick={onPreview} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {busy === 'preview' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Eye size={14} />}
-                  Vista previa
+                  {t('finance.billing.editor.preview')}
                 </button>
               )}
               <button onClick={onSaveDraft} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {busy === 'draft' && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                Save draft
+                {t('finance.billing.editor.saveDraft')}
               </button>
               <button onClick={onEmit} disabled={busy !== null} style={{ padding: '8px 18px', background: isBill ? 'var(--mod-finance)' : 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {busy === 'emit' && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                {isQuote ? 'Issue quote' : isBill ? 'Registrar' : 'Issue invoice'}
+                {isQuote ? t('finance.billing.editor.issueQuote') : isBill ? t('finance.billing.editor.register') : t('finance.billing.editor.issueInvoice')}
               </button>
             </>
           )}
@@ -930,19 +933,19 @@ export function FacturaEditorDialog({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eye size={16} style={{ color: 'var(--mod-finance)' }} />
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Vista previa{number ? ` — ${number}` : ''}</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{t('finance.billing.editor.preview')}{number ? ` — ${number}` : ''}</h3>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={onDownloadPdf} disabled={busy !== null} title="Descargar PDF" style={{ padding: '6px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={onDownloadPdf} disabled={busy !== null} title={t('finance.billing.editor.downloadPdf')} style={{ padding: '6px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {busy === 'pdf' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <FileDown size={13} />}
-                  Descargar PDF
+                  {t('finance.billing.editor.downloadPdf')}
                 </button>
-                <button onClick={() => setPreviewHtml(null)} title="Close" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
+                <button onClick={() => setPreviewHtml(null)} title={t('finance.close')} aria-label={t('finance.close')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
               </div>
             </div>
             <iframe
               srcDoc={previewHtml}
-              title="preview"
+              title={t('finance.billing.editor.preview')}
               sandbox=""
               style={{ flex: 1, width: '100%', border: 'none', background: '#fff' }}
             />

@@ -11,37 +11,42 @@
  */
 
 import { X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 const SHORTCUTS = [
   {
-    category: 'Navigation',
+    id: 'navigation',
+    categoryKey: 'projects.shortcutsOverlay.category.navigation',
     items: [
-      { keys: 'Escape', desc: 'Close card detail / clear selection' },
-      { keys: '/', desc: 'Focus search' },
-      { keys: '?', desc: 'Toggle shortcuts help' },
+      { keys: 'Escape', actionKey: 'projects.shortcutsOverlay.action.closeCard' },
+      { keys: '/', actionKey: 'projects.shortcutsOverlay.action.focusSearch' },
+      { keys: '?', actionKey: 'projects.shortcutsOverlay.action.toggleHelp' },
     ],
   },
   {
-    category: 'Views',
+    id: 'views',
+    categoryKey: 'projects.shortcutsOverlay.category.views',
     items: [
-      { keys: 'Alt+1', desc: 'Board view' },
-      { keys: 'Alt+2', desc: 'Table view' },
-      { keys: 'Alt+3', desc: 'Gantt view' },
-      { keys: 'Alt+4', desc: 'Calendar view' },
-      { keys: 'Alt+5', desc: 'Dashboard view' },
+      { keys: 'Alt+1', actionKey: 'projects.shortcutsOverlay.action.boardView' },
+      { keys: 'Alt+2', actionKey: 'projects.shortcutsOverlay.action.tableView' },
+      { keys: 'Alt+3', actionKey: 'projects.shortcutsOverlay.action.ganttView' },
+      { keys: 'Alt+4', actionKey: 'projects.shortcutsOverlay.action.calendarView' },
+      { keys: 'Alt+5', actionKey: 'projects.shortcutsOverlay.action.dashboardView' },
     ],
   },
   {
-    category: 'Card Operations',
+    id: 'card-operations',
+    categoryKey: 'projects.shortcutsOverlay.category.cardOperations',
     items: [
-      { keys: '1-4', desc: 'Set priority (1=urgent, 4=low)' },
-      { keys: 'x', desc: 'Toggle multi-select' },
-      { keys: 'Delete', desc: 'Delete selected card' },
+      { keys: '1-4', actionKey: 'projects.shortcutsOverlay.action.priority' },
+      { keys: 'x', actionKey: 'projects.shortcutsOverlay.action.multiSelect' },
+      { keys: 'Delete', actionKey: 'projects.shortcutsOverlay.action.deleteCard' },
     ],
   },
 ];
 
 export function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   return (
     <div style={{
       position: 'fixed',
@@ -70,9 +75,10 @@ export function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
           padding: '12px 16px',
           borderBottom: '1px solid var(--border)',
         }}>
-          <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>Keyboard Shortcuts</span>
+          <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{t('projects.shortcutsOverlay.title')}</span>
           <button
             onClick={onClose}
+            aria-label={t('projects.shortcutsOverlay.close')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, display: 'flex' }}
           >
             <X size={16} />
@@ -81,7 +87,7 @@ export function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
 
         <div style={{ padding: 16 }}>
           {SHORTCUTS.map((group) => (
-            <div key={group.category} style={{ marginBottom: 16 }}>
+            <div key={group.id} style={{ marginBottom: 16 }}>
               <div style={{
                 color: 'var(--text-dim)',
                 fontSize: 11,
@@ -90,7 +96,7 @@ export function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
                 letterSpacing: '0.05em',
                 marginBottom: 8,
               }}>
-                {group.category}
+                {t(group.categoryKey)}
               </div>
               {group.items.map((item) => (
                 <div
@@ -102,7 +108,7 @@ export function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
                     padding: '4px 0',
                   }}
                 >
-                  <span style={{ color: 'var(--text)', fontSize: 12 }}>{item.desc}</span>
+                  <span style={{ color: 'var(--text)', fontSize: 12 }}>{t(item.actionKey)}</span>
                   <kbd style={{
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',

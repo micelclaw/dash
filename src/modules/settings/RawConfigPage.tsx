@@ -44,6 +44,7 @@ import { TypeToConfirmModal } from '@/components/settings/shared/TypeToConfirmMo
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RetryBanner } from '@/components/settings/shared/RetryBanner';
 import { clawEditorTheme, clawHighlightStyle } from '@/modules/micelhub/editor-theme';
+import { useI18n } from '@/i18n';
 
 const SESSION_FLAG = 'oc7-raw-warning-acknowledged';
 
@@ -82,6 +83,7 @@ const RAW_CONFIG_ERROR_OVERRIDES = {
 
 export default function RawConfigPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
@@ -170,12 +172,12 @@ export default function RawConfigPage() {
       seedRef.current = true;
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      if (status === 403) toast.error('Admin role required');
-      else toast.error('Failed to load openclaw.json');
+      if (status === 403) toast.error(t('settings.raw.adminRequired'));
+      else toast.error(t('settings.raw.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (warningAcknowledged) fetchConfig();
@@ -185,7 +187,7 @@ export default function RawConfigPage() {
   useEffect(() => {
     if (!seedRef.current) return;
     if (!content.trim()) {
-      setParseError('File is empty');
+      setParseError(t('settings.raw.fileEmpty'));
       setSchemaErrors([]);
       return;
     }
@@ -196,10 +198,10 @@ export default function RawConfigPage() {
       const result = validateAgainstSchema(content);
       setSchemaErrors(result.errors);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : 'Invalid JSON');
+      setParseError(err instanceof Error ? err.message : t('settings.raw.invalidJson'));
       setSchemaErrors([]);
     }
-  }, [content, validateAgainstSchema]);
+  }, [content, validateAgainstSchema, t]);
 
   // ─── Save ─────────────────────────────────────────────────────────
   const dirty = content !== originalContent;
@@ -210,9 +212,9 @@ export default function RawConfigPage() {
   const saveBlocked = !!parseError || schemaInvalid || schemaUnavailable;
 
   const requestSave = () => {
-    if (parseError) { toast.error('Fix the JSON syntax error before saving'); return; }
-    if (schemaInvalid) { toast.error(`Fix ${schemaErrors.length} schema error${schemaErrors.length === 1 ? '' : 's'} before saving`); return; }
-    if (schemaUnavailable) { toast.error('Schema not loaded — cannot validate. Retry the schema first.'); return; }
+    if (parseError) { toast.error(t('settings.raw.fixJsonBeforeSave')); return; }
+    if (schemaInvalid) { toast.error(t('settings.raw.fixSchemaErrors', { count: schemaErrors.length })); return; }
+    if (schemaUnavailable) { toast.error(t('settings.raw.schemaUnavailable')); return; }
     setShowSaveConfirm(true);
   };
 
@@ -222,10 +224,10 @@ export default function RawConfigPage() {
       const result = await gwService.saveRawConfig(content, hash);
       setHash(result.new_hash);
       setOriginalContent(content);
-      toast.success(`Saved. Backup: ${result.backup.split('/').pop()}`);
+      toast.success(`${t('settings.raw.saved')}. ${t('settings.raw.backups')}: ${result.backup.split('/').pop()}`);
       setShowSaveConfirm(false);
     } catch (err) {
-      toast.error(describeError(err, 'Save failed', RAW_CONFIG_ERROR_OVERRIDES));
+      toast.error(describeError(err, t('settings.raw.saveFailed'), RAW_CONFIG_ERROR_OVERRIDES));
     } finally {
       setSaving(false);
     }
@@ -236,7 +238,7 @@ export default function RawConfigPage() {
   };
 
   const handleRefresh = () => {
-    if (dirty && !confirm('Discard your unsaved changes?')) return;
+    if (dirty && !confirm(t('settings.raw.discardChanges'))) return;
     fetchConfig();
   };
 
@@ -246,7 +248,7 @@ export default function RawConfigPage() {
       const list = await gwService.listRawConfigBackups();
       setBackups(list);
     } catch {
-      toast.error('Failed to list backups');
+      toast.error(t('settings.raw.backupListFailed'));
     }
   };
 
@@ -262,9 +264,9 @@ export default function RawConfigPage() {
       setContent(restored);
       setShowBackups(false);
       setPendingRestore(null);
-      toast.success('Backup loaded into the editor — review it and press Save to apply');
+      toast.success(t('settings.raw.backupLoaded'));
     } catch (err) {
-      toast.error(describeError(err, 'Failed to read the backup'));
+      toast.error(describeError(err, t('settings.raw.backupReadFailed')));
     } finally {
       setRestoring(false);
     }
@@ -280,12 +282,12 @@ export default function RawConfigPage() {
   if (!isAdmin) {
     return (
       <div style={{ padding: 40, textAlign: 'center', fontFamily: 'var(--font-sans)' }}>
-        <h2 style={{ color: 'var(--text)', fontSize: '1rem' }}>Forbidden</h2>
+        <h2 style={{ color: 'var(--text)', fontSize: '1rem' }}>{t('settings.raw.forbidden')}</h2>
         <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-          Only admins can edit the raw OpenClaw config.
+          {t('settings.raw.forbiddenDescription')}
         </p>
         <button onClick={() => navigate('/settings')} style={ghostButtonStyle()}>
-          ← Back to Settings
+          ← {t('settings.raw.back')}
         </button>
       </div>
     );
@@ -318,21 +320,18 @@ export default function RawConfigPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <AlertTriangle size={22} style={{ color: '#f59e0b' }} />
             <h2 style={{ margin: 0, fontSize: '1rem', color: 'var(--text)' }}>
-              Editing this file directly can break OpenClaw
+              {t('settings.raw.warningHeading')}
             </h2>
           </div>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 16 }}>
             <p style={{ margin: '0 0 10px' }}>
-              You are about to edit <code>~/.openclaw/openclaw.json</code> directly. A malformed JSON or invalid
-              field can break the Gateway and require manual recovery from a terminal.
+              {t('settings.raw.warningBody')} {t('settings.raw.warningDetails')}
             </p>
             <p style={{ margin: '0 0 10px' }}>
-              <strong>Backups:</strong> every save creates a timestamped backup in <code>~/.openclaw/backups/</code>.
-              The last 10 backups are kept; older ones are pruned automatically.
+              <strong>{t('settings.raw.backups')}:</strong> {t('settings.raw.backupsInfo')}
             </p>
             <p style={{ margin: 0 }}>
-              For most settings, use the dedicated sections in Settings instead. This editor is for fields that have
-              no UI yet (about 22 sections of the OpenClaw schema).
+              {t('settings.raw.warningUseSections')}
             </p>
           </div>
           <label
@@ -347,11 +346,11 @@ export default function RawConfigPage() {
             }}
           >
             <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
-            I understand the risks
+            {t('settings.raw.understandRisk')}
           </label>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button onClick={() => navigate('/settings')} style={ghostButtonStyle()}>
-              Cancel
+              {t('settings.raw.cancel')}
             </button>
             <button
               onClick={acknowledgeWarning}
@@ -362,7 +361,7 @@ export default function RawConfigPage() {
                 cursor: understood ? 'pointer' : 'default',
               }}
             >
-              Continue
+              {t('settings.raw.continue')}
             </button>
           </div>
         </div>
@@ -372,7 +371,7 @@ export default function RawConfigPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>Loading…</div>
+      <div style={{ padding: 40, color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>{t('settings.raw.loading')}</div>
     );
   }
 
@@ -405,22 +404,22 @@ export default function RawConfigPage() {
           flexShrink: 0,
         }}
       >
-        <button onClick={() => navigate('/settings')} style={iconButtonStyle()} title="Back to Settings">
+        <button onClick={() => navigate('/settings')} style={iconButtonStyle()} title={t('settings.raw.back')}>
           <ArrowLeft size={14} />
         </button>
         <div style={{ flex: 1 }}>
           <h1 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            Raw config editor
+            {t('settings.raw.title')}
           </h1>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
             {path}
           </div>
         </div>
 
-        <button onClick={loadBackups} style={ghostButtonStyle()} title="View backups">
-          <History size={13} style={{ marginRight: 4 }} /> Backups
+        <button onClick={loadBackups} style={ghostButtonStyle()} title={t('settings.raw.viewBackups')}>
+          <History size={13} style={{ marginRight: 4 }} /> {t('settings.raw.backups')}
         </button>
-        <button onClick={handleRefresh} style={iconButtonStyle()} title="Reload from disk">
+        <button onClick={handleRefresh} style={iconButtonStyle()} title={t('settings.raw.reloadFromDisk')}>
           <RefreshCw size={14} />
         </button>
         <button
@@ -429,10 +428,10 @@ export default function RawConfigPage() {
           title={
             saveBlocked
               ? parseError
-                ? 'Fix syntax error first'
+                ? t('settings.raw.fixJson')
                 : schemaInvalid
-                ? `Fix ${schemaErrors.length} schema error${schemaErrors.length === 1 ? '' : 's'} first`
-                : 'Schema not loaded — retry the schema first'
+                ? t('settings.raw.fixSchemaFirst', { count: schemaErrors.length })
+                : t('settings.raw.retrySchema')
               : undefined
           }
           style={{
@@ -451,7 +450,7 @@ export default function RawConfigPage() {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
+          <Save size={14} /> {saving ? t('settings.raw.saving') : dirty ? t('settings.raw.save') : t('settings.raw.saved')}
         </button>
       </div>
 
@@ -461,8 +460,8 @@ export default function RawConfigPage() {
         <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
           <RetryBanner
             severity="error"
-            title="Schema unavailable"
-            message={`${schemaError ?? 'failed to load'} — Save is disabled until the schema reloads.`}
+            title={t('settings.raw.schemaUnavailableTitle')}
+            message={t('settings.raw.schemaUnavailableMessage', { error: schemaError ?? t('settings.raw.schemaLoadFailed') })}
             onRetry={handleRetrySchema}
             loading={schemaLoading}
           />
@@ -520,19 +519,19 @@ export default function RawConfigPage() {
         ) : schemaInvalid ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
             <span style={{ fontWeight: 600 }}>
-              ⚠ {schemaErrors.length} schema error{schemaErrors.length === 1 ? '' : 's'}
+              ⚠ {t('settings.raw.schemaErrors', { count: schemaErrors.length })}
             </span>
             {schemaErrors.slice(0, 3).map((e, i) => (
               <span key={i} style={{ opacity: 0.85 }}>· {describeAjvError(e)}</span>
             ))}
             {schemaErrors.length > 3 && (
-              <span style={{ opacity: 0.6 }}>… and {schemaErrors.length - 3} more</span>
+              <span style={{ opacity: 0.6 }}>… {t('settings.raw.moreErrors', { count: schemaErrors.length - 3 })}</span>
             )}
           </div>
         ) : (
           <span>
-            {dirty ? '● Unsaved changes' : '✓ Synced'}
-            {schema && ' · schema loaded'}
+            {dirty ? `● ${t('settings.raw.unsavedChanges')}` : `✓ ${t('settings.raw.synced')}`}
+            {schema && ` · ${t('settings.raw.schemaLoaded')}`}
             {' · '}
             {content.length} chars
           </span>
@@ -546,21 +545,15 @@ export default function RawConfigPage() {
         open={showSaveConfirm}
         onClose={() => setShowSaveConfirm(false)}
         onConfirm={handleSave}
-        title="Overwrite openclaw.json?"
+        title={t('settings.raw.overwriteTitle')}
         description={
           <>
-            This rewrites your entire OpenClaw config. A backup will be created in
-            {' '}<code style={{
-              padding: '1px 4px', background: 'var(--surface)', borderRadius: 4,
-              fontFamily: 'var(--font-mono, monospace)',
-            }}>~/.openclaw/backups/</code>
-            {' '}but the running Gateway will reload immediately and any error in the new
-            config can break the system until you restore from the shell.
+            {t('settings.raw.confirmDescription')}
           </>
         }
         requireWord="SAVE"
-        confirmLabel="Overwrite"
-        runningLabel="Saving…"
+        confirmLabel={t('settings.raw.overwrite')}
+        runningLabel={t('settings.raw.saving')}
         running={saving}
         confirmIcon={Power}
       />
@@ -594,14 +587,14 @@ export default function RawConfigPage() {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <h3 style={{ margin: 0, fontSize: '0.9375rem', color: 'var(--text)' }}>
-                Backups (last {backups.length})
+                {t('settings.raw.backupCount', { count: backups.length })}
               </h3>
               <button onClick={() => setShowBackups(false)} style={iconButtonStyle()}>
                 <X size={14} />
               </button>
             </div>
             {backups.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No backups yet.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{t('settings.raw.noBackups')}</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {backups.map((b) => (
@@ -628,9 +621,9 @@ export default function RawConfigPage() {
                         onClick={() => requestRestore(b)}
                         disabled={restoring}
                         style={{ ...ghostButtonStyle(), flexShrink: 0 }}
-                        title="Load this backup into the editor"
+                        title={t('settings.raw.loadBackupTitle')}
                       >
-                        Restore
+                        {t('settings.raw.restore')}
                       </button>
                     </div>
                   </div>
@@ -638,8 +631,7 @@ export default function RawConfigPage() {
               </div>
             )}
             <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 12 }}>
-              Restore loads the backup into the editor — nothing is written until you press Save,
-              and saving keeps a backup of the current config first.
+              {t('settings.raw.restoreHelp')}
             </p>
           </div>
         </div>
@@ -649,9 +641,9 @@ export default function RawConfigPage() {
         open={!!pendingRestore}
         onClose={() => setPendingRestore(null)}
         onConfirm={() => { if (pendingRestore) void doRestore(pendingRestore); }}
-        title="Discard your unsaved changes?"
-        description="Loading this backup replaces what is in the editor. Nothing is written to disk until you press Save."
-        confirmLabel="Load backup"
+        title={t('settings.raw.discardChanges')}
+        description={t('settings.raw.discardForBackupDescription')}
+        confirmLabel={t('settings.raw.loadBackup')}
         variant="warning"
       />
     </div>

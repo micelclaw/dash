@@ -11,19 +11,21 @@
  */
 
 import type { SearchResult } from '@/types/search';
+import { useI18n } from '@/i18n';
 
 interface ProvenanceBreakdownProps {
   result: SearchResult;
 }
 
 const SIGNALS = [
-  { key: 'fulltext_score', label: 'Full-text', color: '#60a5fa' },
-  { key: 'vector_score', label: 'Semantic', color: '#a78bfa' },
-  { key: 'heat_score', label: 'Heat', color: '#f43f5e' },
-  { key: 'graph_score', label: 'Graph', color: '#34d399' },
+  { key: 'fulltext_score', labelKey: 'search.signalFullText', color: '#60a5fa' },
+  { key: 'vector_score', labelKey: 'search.signalSemantic', color: '#a78bfa' },
+  { key: 'heat_score', labelKey: 'search.signalHeat', color: '#f43f5e' },
+  { key: 'graph_score', labelKey: 'search.signalGraph', color: '#34d399' },
 ] as const;
 
 export function ProvenanceBreakdown({ result }: ProvenanceBreakdownProps) {
+  const { t } = useI18n();
   const prov = result.provenance;
   if (!prov) return null;
 
@@ -37,9 +39,9 @@ export function ProvenanceBreakdown({ result }: ProvenanceBreakdownProps) {
         letterSpacing: '0.05em',
         fontFamily: 'var(--font-sans)',
       }}>
-        Signal breakdown
+        {t('search.signalBreakdown')}
       </div>
-      {SIGNALS.map(({ key, label, color }) => {
+      {SIGNALS.map(({ key, labelKey, color }) => {
         const value = (prov as Record<string, number | null>)[key];
         const pct = value != null ? Math.min(Math.abs(value), 1) * 100 : 0;
         return (
@@ -51,7 +53,7 @@ export function ProvenanceBreakdown({ result }: ProvenanceBreakdownProps) {
               flexShrink: 0,
               fontFamily: 'var(--font-sans)',
             }}>
-              {label}
+              {t(labelKey)}
             </span>
             <div style={{
               flex: 1,

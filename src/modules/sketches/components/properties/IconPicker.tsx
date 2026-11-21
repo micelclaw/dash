@@ -14,6 +14,7 @@
 
 import { useState } from 'react';
 import { icons } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { PanelInput, RemoveButton } from './shared';
 
 const COMMON_ICONS = [
@@ -29,6 +30,7 @@ export function IconPicker({
   value?: string;
   onChange: (icon: string) => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(false);
 
@@ -43,17 +45,18 @@ export function IconPicker({
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
         <PanelInput
           type="text"
+          aria-label={t('sketches.iconPicker.search')}
           value={search || value || ''}
           onChange={(e) => {
             setSearch(e.target.value);
             setExpanded(true);
           }}
           onFocus={() => setExpanded(true)}
-          placeholder="Search icons..."
+          placeholder={t('sketches.iconPicker.search')}
           style={{ flex: 1, fontSize: 10 }}
         />
         {value && (
-          <RemoveButton onClick={() => onChange('')} className="text-[11px]" title="Clear icon" />
+          <RemoveButton onClick={() => onChange('')} className="text-[11px]" title={t('sketches.iconPicker.clear')} aria-label={t('sketches.iconPicker.clear')} />
         )}
       </div>
       {expanded && (
@@ -78,6 +81,7 @@ export function IconPicker({
                   setExpanded(false);
                 }}
                 title={name}
+                aria-label={t('sketches.iconPicker.select', { name })}
                 style={{
                   width: 28,
                   height: 28,
@@ -98,7 +102,7 @@ export function IconPicker({
           })}
           {filteredIcons.length === 0 && (
             <span style={{ gridColumn: '1 / -1', fontSize: 10, color: 'var(--text-dim)', padding: 4 }}>
-              No icons found
+              {t('sketches.iconPicker.noResults')}
             </span>
           )}
         </div>

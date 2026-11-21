@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, QrCode, Download, Power, Copy, Check, X, AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { WgClient } from '../hooks/use-wg-clients';
+import { useI18n } from '@/i18n';
 
 interface WgPeersSectionProps {
   clients: WgClient[];
@@ -37,27 +38,28 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+function timeAgo(dateStr: string | null, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (!dateStr) return t('vpn.never');
   const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60_000) return 'Just now';
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
-  return `${Math.floor(diff / 86400_000)}d ago`;
+  if (diff < 60_000) return t('vpn.justNow');
+  if (diff < 3600_000) return t('vpn.minutesAgo', { count: Math.floor(diff / 60_000) });
+  if (diff < 86400_000) return t('vpn.hoursAgo', { count: Math.floor(diff / 3600_000) });
+  return t('vpn.daysAgo', { count: Math.floor(diff / 86400_000) });
 }
 
-function peerStatus(client: WgClient): { label: string; color: string } {
-  if (!client.enabled) return { label: 'Disabled', color: '#6b7280' };
-  if (!client.latest_handshake_at) return { label: 'Waiting', color: '#6b7280' };
+function peerStatus(client: WgClient, t: (key: string) => string): { label: string; color: string } {
+  if (!client.enabled) return { label: t('vpn.disabled'), color: '#6b7280' };
+  if (!client.latest_handshake_at) return { label: t('vpn.waiting'), color: '#6b7280' };
   const diff = Date.now() - new Date(client.latest_handshake_at).getTime();
-  if (diff < 180_000) return { label: 'Online', color: '#22c55e' };
-  if (diff < 900_000) return { label: 'Recent', color: '#f59e0b' };
-  return { label: 'Offline', color: '#6b7280' };
+  if (diff < 180_000) return { label: t('vpn.online'), color: '#22c55e' };
+  if (diff < 900_000) return { label: t('vpn.recent'), color: '#f59e0b' };
+  return { label: t('vpn.offline'), color: '#6b7280' };
 }
 
 export function WgPeersSection({
   clients, loading, endpointChanged, endpointReachable, endpointMethod, onDismissIpChange, onCreate, onRemove, onToggle, onRename: _onRename, onGetConfig, onGetQrCode,
 }: WgPeersSectionProps) {
+  const { t } = useI18n();
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -106,7 +108,7 @@ export function WgPeersSection({
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-        Loading peers...
+        {t('vpn.loadingPeers')}
       </div>
     );
   }
@@ -116,7 +118,7 @@ export function WgPeersSection({
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)', margin: 0, fontFamily: 'var(--font-sans)' }}>
-          Peers ({clients.length})
+          {t('vpn.peerCount', { count: clients.length })}
         </h2>
         <button
           onClick={() => setShowAdd(true)}
@@ -128,7 +130,7 @@ export function WgPeersSection({
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <Plus size={14} /> New Peer
+          <Plus size={14} /> {t('vpn.newPeer')}
         </button>
       </div>
 
@@ -146,11 +148,12 @@ export function WgPeersSection({
         }}>
           <AlertTriangle size={18} style={{ flexShrink: 0 }} />
           <span style={{ flex: 1 }}>
-            Your public IP has changed. Re-scan the QR code on your devices to update the VPN connection.
+            {t('vpn.ipChanged')}
           </span>
           <button
             onClick={onDismissIpChange}
-            title="Dismiss"
+            title={t('vpn.dismiss')}
+            aria-label={t('vpn.dismiss')}
             style={{
               padding: '4px', background: 'transparent', border: 'none',
               color: '#f59e0b', cursor: 'pointer', display: 'flex', flexShrink: 0,
@@ -175,12 +178,12 @@ export function WgPeersSection({
         }}>
           <AlertTriangle size={18} style={{ flexShrink: 0, color: '#ef4444', marginTop: 1 }} />
           <div style={{ color: 'var(--text-dim)' }}>
-            <strong style={{ color: '#ef4444' }}>WireGuard is not reachable from the internet.</strong>
+            <strong style={{ color: '#ef4444' }}>{t('vpn.unreachableTitle')}</strong>
             <br />
-            Your router does not support UPnP or the WireGuard UDP port is blocked.
+            {t('vpn.unreachableReason')}
             <br />
             <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-              Use <strong>Tailscale</strong> for zero-config remote access, or open the WireGuard UDP port on your router manually.
+              {t('vpn.unreachableHelp')}
             </span>
           </div>
         </div>
@@ -198,7 +201,8 @@ export function WgPeersSection({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            placeholder="Peer name (e.g. iPhone, Laptop)"
+            placeholder={t('vpn.peerNamePlaceholder')}
+            aria-label={t('vpn.peerNamePlaceholder')}
             style={{
               flex: 1, padding: '8px 12px',
               background: 'var(--bg)', border: '1px solid var(--border)',
@@ -216,7 +220,7 @@ export function WgPeersSection({
               fontFamily: 'var(--font-sans)', opacity: creating || !newName.trim() ? 0.5 : 1,
             }}
           >
-            {creating ? 'Creating...' : 'Create'}
+            {creating ? t('vpn.creating') : t('vpn.create')}
           </button>
           <button
             onClick={() => { setShowAdd(false); setNewName(''); }}
@@ -237,12 +241,12 @@ export function WgPeersSection({
           border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)',
           color: 'var(--text-muted)', fontSize: '0.875rem',
         }}>
-          No peers configured. Click "New Peer" to add one.
+          {t('vpn.noPeersNew')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {clients.map((client) => {
-            const status = peerStatus(client);
+            const status = peerStatus(client, t);
             return (
               <div
                 key={client.id}
@@ -282,7 +286,7 @@ export function WgPeersSection({
                     fontFamily: 'var(--font-mono, monospace)',
                   }}>
                     <span>{client.address}</span>
-                    <span>Handshake: {timeAgo(client.latest_handshake_at)}</span>
+                    <span>{t('vpn.handshake', { time: timeAgo(client.latest_handshake_at, t) })}</span>
                     <span>↓ {formatBytes(client.transfer_rx)}</span>
                     <span>↑ {formatBytes(client.transfer_tx)}</span>
                   </div>
@@ -290,16 +294,16 @@ export function WgPeersSection({
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <IconButton title="Toggle" onClick={() => onToggle(client.id, !client.enabled)}>
+                  <IconButton title={t('vpn.toggle')} onClick={() => onToggle(client.id, !client.enabled)}>
                     <Power size={14} style={{ color: client.enabled ? '#22c55e' : '#6b7280' }} />
                   </IconButton>
-                  <IconButton title="QR Code" onClick={() => handleShowQr(client)}>
+                  <IconButton title={t('vpn.qrCode')} onClick={() => handleShowQr(client)}>
                     <QrCode size={14} />
                   </IconButton>
-                  <IconButton title="Download Config" onClick={() => handleShowConfig(client)}>
+                  <IconButton title={t('vpn.downloadConfig')} onClick={() => handleShowConfig(client)}>
                     <Download size={14} />
                   </IconButton>
-                  <IconButton title="Delete" onClick={() => setDeletePeer(client)}>
+                  <IconButton title={t('vpn.delete')} onClick={() => setDeletePeer(client)}>
                     <Trash2 size={14} style={{ color: '#ef4444' }} />
                   </IconButton>
                 </div>
@@ -317,9 +321,9 @@ export function WgPeersSection({
           if (deletePeer) await onRemove(deletePeer.id);
           setDeletePeer(null);
         }}
-        title="Delete Peer?"
-        description={`This will permanently remove "${deletePeer?.name}" and revoke their VPN access.`}
-        confirmLabel="Delete"
+        title={t('vpn.deletePeerConfirm')}
+        description={t('vpn.deletePeerDescription', { name: deletePeer?.name ?? '' })}
+        confirmLabel={t('vpn.delete')}
         variant="danger"
       />
 
@@ -329,15 +333,15 @@ export function WgPeersSection({
           <div style={{ width: 520 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0, fontFamily: 'var(--font-sans)' }}>
-                {configModal.client.name} — Config
+                {t('vpn.config', { name: configModal.client.name })}
               </h3>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={handleCopyConfig} style={actionBtnStyle}>
                   {copied ? <Check size={14} /> : <Copy size={14} />}
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? t('vpn.copiedConfig') : t('vpn.copyConfig')}
                 </button>
                 <button onClick={handleDownloadConfig} style={actionBtnStyle}>
-                  <Download size={14} /> Download
+                  <Download size={14} /> {t('vpn.downloadConfig')}
                 </button>
               </div>
             </div>
@@ -358,10 +362,10 @@ export function WgPeersSection({
         <ModalOverlay onClose={() => setQrModal(null)}>
           <div style={{ textAlign: 'center' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 16px', fontFamily: 'var(--font-sans)' }}>
-              {qrModal.client.name} — QR Code
+              {t('vpn.qrTitle', { name: qrModal.client.name })}
             </h3>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: '0 0 16px' }}>
-              Scan with the WireGuard app on your device
+              {t('vpn.scanWithWireguard')}
             </p>
             <div
               style={{

@@ -11,6 +11,9 @@
  */
 
 import { memo } from 'react';
+import { useI18n } from '@/i18n';
+import { formatGridTime } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 import type { MeetingMessage as MeetingMessageType } from '../types';
 
 interface MeetingMessageProps {
@@ -22,10 +25,9 @@ interface MeetingMessageProps {
 // streamea). Con memo (comparación por referencia de `message`, el único prop) solo re-renderiza la
 // burbuja que cambia, no las N del transcript → stream fluido en councils largos.
 export const MeetingMessage = memo(function MeetingMessage({ message }: MeetingMessageProps) {
-  const time = new Date(message.created_at).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const { locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
+  const time = formatGridTime(new Date(message.created_at), locale, general);
 
   return (
     <div style={{

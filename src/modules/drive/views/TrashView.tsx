@@ -29,6 +29,7 @@ import { useFilesQuery } from '../hooks/use-files-query';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
 import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveInspector } from '../components/inspector/DriveInspector';
+import { useI18n } from '@/i18n';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { FileRecord } from '@/types/files';
 
@@ -42,6 +43,7 @@ type ConfirmKind =
  * (confirmed) and an "Empty trash" action.
  */
 export function TrashView() {
+  const { t } = useI18n();
   const { files, loading, error, refetch } = useFilesQuery({
     only_deleted: true,
     limit: 200,
@@ -75,30 +77,30 @@ export function TrashView() {
   const restoreOne = useCallback(async (file: FileRecord) => {
     try {
       await api.post(`/files/${file.id}/restore`);
-      toast.success(`"${file.filename}" restored`);
+      toast.success(t('drive.trash.toast.restoredOne', { name: file.filename }));
       setSelectedIds(prev => { const n = new Set(prev); n.delete(file.id); return n; });
       setSelectedFile(prev => prev?.id === file.id ? null : prev);
       await refetch();
     } catch {
-      toast.error('Restore failed');
+      toast.error(t('drive.trash.toast.restoreFailed'));
     }
-  }, [refetch]);
+  }, [refetch, t]);
 
   const restoreMany = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
     setBusy(true);
     try {
       await api.post('/files/bulk', { action: 'restore', ids });
-      toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} restored`);
+      toast.success(t(ids.length === 1 ? 'drive.trash.toast.restoredOneCount' : 'drive.trash.toast.restoredManyCount', { count: ids.length }));
       setSelectedIds(new Set());
       setSelectedFile(null);
       await refetch();
     } catch {
-      toast.error('Bulk restore failed');
+      toast.error(t('drive.trash.toast.bulkRestoreFailed'));
     } finally {
       setBusy(false);
     }
-  }, [refetch]);
+  }, [refetch, t]);
 
   const restoreSelected = useCallback(async () => {
     await restoreMany([...selectedIds]);
@@ -112,24 +114,24 @@ export function TrashView() {
     try {
       if (target.kind === 'one') {
         await api.delete(`/files/${target.id}?permanent=true`);
-        toast.success('Deleted forever');
+        toast.success(t('drive.trash.toast.deletedForever'));
         setSelectedIds(prev => { const n = new Set(prev); n.delete(target.id); return n; });
         setSelectedFile(prev => prev?.id === target.id ? null : prev);
       } else {
         const ids = target.kind === 'selected' ? [...selectedIds] : files.map(f => f.id);
         if (ids.length === 0) return;
         await api.post('/files/bulk', { action: 'delete', ids, params: { permanent: true } });
-        toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} deleted forever`);
+        toast.success(t(ids.length === 1 ? 'drive.trash.toast.deletedOneCount' : 'drive.trash.toast.deletedManyCount', { count: ids.length }));
         setSelectedIds(new Set());
         setSelectedFile(null);
       }
       await refetch();
     } catch {
-      toast.error('Permanent delete failed');
+      toast.error(t('drive.trash.toast.permanentDeleteFailed'));
     } finally {
       setBusy(false);
     }
-  }, [confirm, selectedIds, files, refetch]);
+  }, [confirm, selectedIds, files, refetch, t]);
 
   const hasSelection = selectedIds.size > 0;
   const allChecked = files.length > 0 && files.every(f => selectedIds.has(f.id));
@@ -198,8 +200,8 @@ export function TrashView() {
     return (
       <EmptyState
         icon={Trash2}
-        title="Trash is empty"
-        description="Deleted files land here. You can restore them or delete them forever."
+        title={t('drive.trash.empty.title')}
+        description={t('drive.trash.empty.description')}
       />
     );
   }
@@ -208,19 +210,19 @@ export function TrashView() {
     if (!confirm) return { title: '', description: '' };
     if (confirm.kind === 'one') {
       return {
-        title: `Delete "${confirm.name}" forever?`,
-        description: 'This cannot be undone — the file is removed permanently.',
+        title: t('drive.trash.confirm.deleteOne.title', { name: confirm.name }),
+        description: t('drive.trash.confirm.deleteOne.description'),
       };
     }
     if (confirm.kind === 'selected') {
       return {
-        title: `Delete ${selectedIds.size} item${selectedIds.size === 1 ? '' : 's'} forever?`,
-        description: 'This cannot be undone — the files are removed permanently.',
+        title: t(selectedIds.size === 1 ? 'drive.trash.confirm.deleteSelected.oneTitle' : 'drive.trash.confirm.deleteSelected.manyTitle', { count: selectedIds.size }),
+        description: t('drive.trash.confirm.deleteSelected.description'),
       };
     }
     return {
-      title: `Empty trash (${files.length} item${files.length === 1 ? '' : 's'})?`,
-      description: 'Everything in the trash is permanently removed. This cannot be undone.',
+      title: t('drive.trash.confirm.empty.title', { count: files.length }),
+      description: t('drive.trash.confirm.empty.description'),
     };
   })();
 
@@ -233,17 +235,17 @@ export function TrashView() {
       }}>
         <Trash2 size={14} style={{ color: 'var(--mod-drive)' }} />
         <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
-          {files.length} item{files.length === 1 ? '' : 's'} in trash
+          {t(files.length === 1 ? 'drive.trash.count.one' : 'drive.trash.count.other', { count: files.length })}
         </span>
         <div style={{ flex: 1 }} />
         {hasSelection && (
           <>
-            <ActionButton icon={RotateCcw} label={`Restore (${selectedIds.size})`} onClick={() => { void restoreSelected(); }} disabled={busy} />
-            <ActionButton icon={X} label={`Delete (${selectedIds.size})`} onClick={() => setConfirm({ kind: 'selected' })} disabled={busy} danger />
+            <ActionButton icon={RotateCcw} label={t('drive.trash.action.restoreCount', { count: selectedIds.size })} onClick={() => { void restoreSelected(); }} disabled={busy} />
+            <ActionButton icon={X} label={t('drive.trash.action.deleteCount', { count: selectedIds.size })} onClick={() => setConfirm({ kind: 'selected' })} disabled={busy} danger />
             <SelectionMenuButton items={selectionMenuItems} />
           </>
         )}
-        <ActionButton icon={Trash2} label="Empty trash" onClick={() => setConfirm({ kind: 'all' })} disabled={busy || files.length === 0} danger />
+        <ActionButton icon={Trash2} label={t('drive.trash.action.empty')} onClick={() => setConfirm({ kind: 'all' })} disabled={busy || files.length === 0} danger />
       </div>
 
       {/* List + inspector (D5) */}
@@ -271,9 +273,9 @@ export function TrashView() {
             onChange={toggleAll}
             style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
           />
-          <span>Name</span>
-          {!isMobile && <span>Size</span>}
-          {!isMobile && <span>Deleted</span>}
+          <span>{t('drive.trash.column.name')}</span>
+          {!isMobile && <span>{t('drive.trash.column.size')}</span>}
+          {!isMobile && <span>{t('drive.trash.column.deleted')}</span>}
           <span />
         </div>
 
@@ -295,7 +297,7 @@ export function TrashView() {
         ))}
 
         {loading && (
-          <div style={{ padding: '12px 16px', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading…</div>
+          <div style={{ padding: '12px 16px', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('drive.trash.loading')}</div>
         )}
       </div>
 
@@ -320,7 +322,7 @@ export function TrashView() {
         onConfirm={() => { void handleConfirmedDelete(); }}
         title={confirmCopy.title}
         description={confirmCopy.description}
-        confirmLabel="Delete forever"
+        confirmLabel={t('drive.trash.confirm.deleteForever')}
         variant="danger"
       />
     </div>
@@ -340,6 +342,7 @@ function TrashRow({ file, checked, selected, hasSelection, contextItems, isMobil
   onRestore: () => void;
   onDeleteForever: () => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   // Móvil: long-press alterna la selección; con selección activa, tap = toggle.
   const longPress = useLongPress(onToggle, isMobile);
@@ -395,8 +398,8 @@ function TrashRow({ file, checked, selected, hasSelection, contextItems, isMobil
         </span>
       )}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-        <ActionButton icon={RotateCcw} label={isMobile ? '' : 'Restore'} title="Restore" onClick={onRestore} />
-        <ActionButton icon={X} label={isMobile ? '' : 'Delete forever'} title="Delete forever" onClick={onDeleteForever} danger />
+        <ActionButton icon={RotateCcw} label={isMobile ? '' : t('drive.trash.action.restore')} title={t('drive.trash.action.restore')} onClick={onRestore} />
+        <ActionButton icon={X} label={isMobile ? '' : t('drive.trash.action.deleteForever')} title={t('drive.trash.action.deleteForever')} onClick={onDeleteForever} danger />
       </div>
     </div>
       }

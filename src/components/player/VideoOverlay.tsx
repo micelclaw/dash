@@ -13,10 +13,12 @@
 import { X } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useI18n } from '@/i18n';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
 export function VideoOverlay() {
+  const { t } = useI18n();
   const currentItem = usePlayerStore((s) => s.currentItem);
   const videoOverlayVisible = usePlayerStore((s) => s.videoOverlayVisible);
   const closeVideoOverlay = usePlayerStore((s) => s.closeVideoOverlay);
@@ -63,7 +65,7 @@ export function VideoOverlay() {
             fontSize: '0.85rem',
           }}
         >
-          <X size={16} /> Close
+          <X size={16} /> {t('media.close')}
         </button>
         <video
           src={streamUrl}

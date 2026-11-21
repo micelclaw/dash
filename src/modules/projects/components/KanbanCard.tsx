@@ -18,6 +18,7 @@ import { useProjectsStore } from '@/stores/projects.store';
 import { TagChip } from '@/components/shared/TagChip';
 import { PRIORITY_COLORS, getCardAgeOpacity, getChecklistProgressColor } from '../utils/design-tokens';
 import type { Card } from '../types';
+import { useI18n } from '@/i18n';
 
 const OVERDUE_COLOR = 'var(--error)';
 
@@ -26,9 +27,16 @@ function isOverdue(dueDate: string | null, completedAt: string | null): boolean 
   return new Date(dueDate) < new Date();
 }
 
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function formatDate(date: string, locale: string): string {
+  return new Date(date).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' });
 }
+
+const PRIORITY_LABEL_KEYS: Record<string, string> = {
+  urgent: 'projects.kanbanCard.priority.urgent',
+  high: 'projects.kanbanCard.priority.high',
+  medium: 'projects.kanbanCard.priority.medium',
+  low: 'projects.kanbanCard.priority.low',
+};
 
 interface KanbanCardProps {
   card: Card;
@@ -47,6 +55,7 @@ export const KanbanCard = React.memo(function KanbanCard({
   dependencyCount = 0,
   linkCount = 0,
 }: KanbanCardProps) {
+  const { t, locale } = useI18n();
   const selectCard = useProjectsStore((s) => s.selectCard);
   const multiSelectedIds = useProjectsStore((s) => s.multiSelectedIds);
   const toggleMultiSelect = useProjectsStore((s) => s.toggleMultiSelect);
@@ -160,7 +169,7 @@ export const KanbanCard = React.memo(function KanbanCard({
         {/* Title row: priority dot + card number + title */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
           {card.priority && card.priority !== 'none' && (
-            <span style={{
+            <span role={PRIORITY_LABEL_KEYS[card.priority] ? 'img' : undefined} aria-label={PRIORITY_LABEL_KEYS[card.priority] ? t(PRIORITY_LABEL_KEYS[card.priority]!) : undefined} style={{
               width: 8,
               height: 8,
               borderRadius: '50%',
@@ -264,6 +273,7 @@ export const KanbanCard = React.memo(function KanbanCard({
             <span style={{ marginLeft: "auto", display: "inline-flex", order: 10 }}><EntitySource entity={card} domain="tasks" /></span>
             {card.due_date && (
               <span
+                title={t('projects.kanbanCard.dueDate', { date: formatDate(card.due_date, locale) })}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -276,7 +286,7 @@ export const KanbanCard = React.memo(function KanbanCard({
                 }}
               >
                 <Calendar size={11} />
-                {formatDate(card.due_date)}
+                {formatDate(card.due_date, locale)}
               </span>
             )}
 
@@ -287,7 +297,8 @@ export const KanbanCard = React.memo(function KanbanCard({
                   setChecklistOpen((v) => !v);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                title={checklistOpen ? 'Hide checklist' : 'Show checklist'}
+                title={t(checklistOpen ? 'projects.kanbanCard.checklist.hide' : 'projects.kanbanCard.checklist.show')}
+                aria-label={t('projects.kanbanCard.checklist.progress', { checked, total: checklist.length })}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -331,7 +342,7 @@ export const KanbanCard = React.memo(function KanbanCard({
                   fontSize: 11,
                   color: 'var(--warning, #f59e0b)',
                 }}
-                title={`${dependencyCount} dependencies`}
+                title={t(dependencyCount === 1 ? 'projects.kanbanCard.dependencies.one' : 'projects.kanbanCard.dependencies.many', { count: dependencyCount })}
               >
                 <GitBranch size={11} />
                 {dependencyCount}
@@ -347,7 +358,7 @@ export const KanbanCard = React.memo(function KanbanCard({
                   fontSize: 11,
                   color: 'var(--text-dim)',
                 }}
-                title={`${linkCount} linked items`}
+                title={t(linkCount === 1 ? 'projects.kanbanCard.links.one' : 'projects.kanbanCard.links.many', { count: linkCount })}
               >
                 <Link2 size={11} />
                 {linkCount}

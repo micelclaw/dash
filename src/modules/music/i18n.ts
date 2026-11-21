@@ -1,0 +1,68 @@
+export const musicMessages = {
+  en: {
+    'music.home': 'Home', 'music.albums': 'Albums', 'music.artists': 'Artists', 'music.playlists': 'Playlists', 'music.favorites': 'Favorites', 'music.search': 'Search music…', 'music.aiSearch': 'Describe what you want to hear…', 'music.loading': 'Loading…', 'music.searching': 'Searching…',
+    'music.emptyLibrary': 'Your library is empty', 'music.addToLibrary': 'Add music to your Navidrome library to see it here.', 'music.recentlyPlayed': 'Recently played', 'music.mostPlayed': 'Most played', 'music.recentlyAdded': 'Recently added', 'music.noAlbums': 'No albums', 'music.noAlbumsFilter': 'No albums found for this filter.', 'music.noArtists': 'No artists', 'music.noArtistsLibrary': 'Your music library has no artists yet.', 'music.noFavorites': 'No favorites yet', 'music.favoriteHint': 'Star tracks and albums to find them here.', 'music.noResults': 'No results', 'music.tracks': 'Tracks',
+    'music.newPlaylist': 'New playlist', 'music.noPlaylists': 'No playlists', 'music.createPlaylistHint': 'Create a playlist to group your favorite tracks.', 'music.playlistName': 'Playlist name', 'music.play': 'Play', 'music.more': 'More', 'music.rename': 'Rename', 'music.delete': 'Delete', 'music.create': 'Create', 'music.renamePlaylist': 'Rename playlist', 'music.deletePlaylist': 'Delete playlist', 'music.deletePlaylistConfirm': '“{name}” will be permanently deleted.', 'music.songs': '{count} songs', 'music.song': '1 song', 'music.star': 'Add to favorites', 'music.unstar': 'Remove from favorites',
+  
+    "music.cancel": "Cancel",
+    "music.loadMore": "Load more",
+    "music.newest": "Newest",
+    "music.recent": "Recent",
+    "music.frequent": "Frequent",
+    "music.random": "Random",
+    "music.starred": "Starred",
+    "music.alphabetical": "A–Z",
+    "music.noTracks": "No tracks",
+    "music.addToQueue": "Add to queue",
+    "music.playNext": "Play next",
+    "music.addToPlaylist": "Add to playlist",
+    "music.noPlaylistsTrack": "No playlists",
+    "music.removeFromPlaylist": "Remove from playlist",
+    "music.playAll": "Play all",
+    "music.shuffle": "Shuffle",
+    "music.back": "Back",
+    "music.albumCountOne": "{count} album",
+    "music.albumCountMany": "{count} albums",
+  
+    'music.searchNoResults': 'Nothing in your library matches that search.',
+  
+    "music.album": "Album",
+    "music.artist": "Artist",
+  
+    "music.albumPlayFailed": "Could not play album",
+    "music.playlistPlayFailed": "Could not play playlist",
+  },
+  es: {
+    'music.home': 'Inicio', 'music.albums': 'Álbumes', 'music.artists': 'Artistas', 'music.playlists': 'Listas', 'music.favorites': 'Favoritos', 'music.search': 'Buscar música…', 'music.aiSearch': 'Describe qué te apetece escuchar…', 'music.loading': 'Cargando…', 'music.searching': 'Buscando…',
+    'music.emptyLibrary': 'Tu biblioteca está vacía', 'music.addToLibrary': 'Añade música a tu biblioteca de Navidrome para verla aquí.', 'music.recentlyPlayed': 'Reproducido recientemente', 'music.mostPlayed': 'Más reproducido', 'music.recentlyAdded': 'Añadido recientemente', 'music.noAlbums': 'No hay álbumes', 'music.noAlbumsFilter': 'No se encontraron álbumes con este filtro.', 'music.noArtists': 'No hay artistas', 'music.noArtistsLibrary': 'Todavía no hay artistas en tu biblioteca.', 'music.noFavorites': 'Todavía no hay favoritos', 'music.favoriteHint': 'Marca canciones y álbumes con una estrella para verlos aquí.', 'music.noResults': 'Sin resultados', 'music.tracks': 'Canciones',
+    'music.newPlaylist': 'Nueva lista', 'music.noPlaylists': 'No hay listas', 'music.createPlaylistHint': 'Crea una lista para agrupar tus canciones favoritas.', 'music.playlistName': 'Nombre de la lista', 'music.play': 'Reproducir', 'music.more': 'Más opciones', 'music.rename': 'Cambiar nombre', 'music.delete': 'Eliminar', 'music.create': 'Crear', 'music.renamePlaylist': 'Cambiar nombre de la lista', 'music.deletePlaylist': 'Eliminar lista', 'music.deletePlaylistConfirm': '«{name}» se eliminará definitivamente.', 'music.songs': '{count} canciones', 'music.song': '1 canción', 'music.star': 'Añadir a favoritos', 'music.unstar': 'Quitar de favoritos',
+  
+    "music.cancel": "Cancelar",
+    "music.loadMore": "Cargar más",
+    "music.newest": "Más recientes",
+    "music.recent": "Recientes",
+    "music.frequent": "Más reproducidos",
+    "music.random": "Aleatorio",
+    "music.starred": "Favoritos",
+    "music.alphabetical": "A–Z",
+    "music.noTracks": "No hay canciones",
+    "music.addToQueue": "Añadir a la cola",
+    "music.playNext": "Reproducir a continuación",
+    "music.addToPlaylist": "Añadir a una lista",
+    "music.noPlaylistsTrack": "No hay listas",
+    "music.removeFromPlaylist": "Quitar de la lista",
+    "music.playAll": "Reproducir todo",
+    "music.shuffle": "Aleatorio",
+    "music.back": "Volver",
+    "music.albumCountOne": "{count} álbum",
+    "music.albumCountMany": "{count} álbumes",
+  
+    'music.searchNoResults': 'No hay nada en tu biblioteca que coincida con esta búsqueda.',
+  
+    "music.album": "Álbum",
+    "music.artist": "Artista",
+  
+    "music.albumPlayFailed": "No se pudo reproducir el álbum",
+    "music.playlistPlayFailed": "No se pudo reproducir la lista",
+  },
+} as const;

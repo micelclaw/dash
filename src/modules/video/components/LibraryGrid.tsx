@@ -17,11 +17,12 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import type { VideoSortBy } from '@/services/video.service';
 import { useVideoStore } from '@/stores/video.store';
 import { PosterCard } from './PosterCard';
+import { useI18n } from '@/i18n';
 
-const SORT_CHIPS: { id: VideoSortBy; label: string }[] = [
-  { id: 'SortName', label: 'A–Z' },
-  { id: 'DateCreated', label: 'Recently added' },
-  { id: 'CommunityRating', label: 'Top rated' },
+const SORT_CHIPS: { id: VideoSortBy; labelKey: string }[] = [
+  { id: 'SortName', labelKey: 'video.sortAlphabetical' },
+  { id: 'DateCreated', labelKey: 'video.sortRecentlyAdded' },
+  { id: 'CommunityRating', labelKey: 'video.sortTopRated' },
 ];
 
 /**
@@ -29,6 +30,7 @@ const SORT_CHIPS: { id: VideoSortBy; label: string }[] = [
  * Load more button (same chrome as the music AlbumsView).
  */
 export function LibraryGrid({ kind }: { kind: 'movies' | 'series' }) {
+  const { t } = useI18n();
   const listing = useVideoStore((s) => s[kind]);
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export function LibraryGrid({ kind }: { kind: 'movies' | 'series' }) {
                 transition: 'background var(--transition-fast)',
               }}
             >
-              {chip.label}
+              {t(chip.labelKey)}
             </button>
           );
         })}
@@ -70,8 +72,8 @@ export function LibraryGrid({ kind }: { kind: 'movies' | 'series' }) {
       {listing.items.length === 0 && !listing.loading ? (
         <EmptyState
           icon={Clapperboard}
-          title={kind === 'movies' ? 'No movies' : 'No series'}
-          description="Nothing in this library yet."
+          title={kind === 'movies' ? t('video.noMovies') : t('video.noSeries')}
+          description={t('video.nothingInLibrary')}
         />
       ) : (
         <MediaGrid>
@@ -98,7 +100,7 @@ export function LibraryGrid({ kind }: { kind: 'movies' | 'series' }) {
               opacity: listing.loading ? 0.6 : 1,
             }}
           >
-            {listing.loading ? 'Loading…' : 'Load more'}
+            {listing.loading ? t('video.loading') : t('video.loadMore')}
           </button>
         </div>
       )}

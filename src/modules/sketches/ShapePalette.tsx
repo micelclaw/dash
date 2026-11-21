@@ -13,6 +13,7 @@
 import { useCallback, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { NodeShapeType } from './types';
+import { useI18n } from '@/i18n';
 
 interface ShapeEntry {
   type: NodeShapeType;
@@ -327,6 +328,7 @@ function ShapePreview({ type }: { type: NodeShapeType }) {
 // ─── ShapePalette Component ────────────────────────────────
 
 export function ShapePalette() {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -381,7 +383,7 @@ export function ShapePalette() {
         />
         <input
           type="text"
-          placeholder="Search shapes..."
+          placeholder={t('sketches.searchShapes')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{

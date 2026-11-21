@@ -16,12 +16,14 @@ import { useState } from 'react';
 import { X, Image } from 'lucide-react';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
 import { getPreviewUrl } from '@/lib/file-utils';
+import { useI18n } from '@/i18n';
 
 interface SimilarPhotosPanelProps {
   onNavigateToPhoto: (photoId: string) => void;
 }
 
 export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProps) {
+  const { t } = useI18n();
   const similarResults = usePhotoAiStore((s) => s.similarResults);
   const similarLoading = usePhotoAiStore((s) => s.similarLoading);
   const similarMode = usePhotoAiStore((s) => s.similarMode);
@@ -73,10 +75,12 @@ export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProp
             fontFamily: 'var(--font-sans)',
           }}
         >
-          Similar photos
+          {t('photos.extra.similarPhotos')}
         </span>
         <button
           onClick={closeSimilarPanel}
+          aria-label={t('photos.extra.close')}
+          title={t('photos.extra.close')}
           onMouseEnter={() => setHoveredBtn('close')}
           onMouseLeave={() => setHoveredBtn(null)}
           style={{
@@ -105,11 +109,11 @@ export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProp
           flexShrink: 0,
         }}
       >
-        <button style={tabStyle('visual')} onClick={() => setSimilarMode('visual')}>
-          Visual
+        <button style={tabStyle('visual')} onClick={() => setSimilarMode('visual')} aria-pressed={similarMode === 'visual'}>
+          {t('photos.extra.visual')}
         </button>
-        <button style={tabStyle('concept')} onClick={() => setSimilarMode('concept')}>
-          Concept
+        <button style={tabStyle('concept')} onClick={() => setSimilarMode('concept')} aria-pressed={similarMode === 'concept'}>
+          {t('photos.extra.concept')}
         </button>
       </div>
 
@@ -125,7 +129,7 @@ export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProp
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Finding similar photos...
+            {t('photos.extra.findingSimilar')}
           </div>
         ) : !similarResults || similarResults.length === 0 ? (
           <div
@@ -137,7 +141,7 @@ export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProp
               fontFamily: 'var(--font-sans)',
             }}
           >
-            No similar photos found
+            {t('photos.extra.noSimilar')}
           </div>
         ) : (
           <div
@@ -177,6 +181,7 @@ function SimilarThumbnail({
   similarity: number;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -185,9 +190,13 @@ function SimilarThumbnail({
   return (
     <div
       onClick={onClick}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); } }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={`${filename}\n${Math.round(similarity * 100)}% similar`}
+      role="button"
+      tabIndex={0}
+      aria-label={t('photos.extra.similarTitle', { filename, percent: Math.round(similarity * 100) })}
+      title={t('photos.extra.similarTitle', { filename, percent: Math.round(similarity * 100) })}
       style={{
         position: 'relative',
         aspectRatio: '1 / 1',

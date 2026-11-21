@@ -22,6 +22,7 @@ import { api } from '@/services/api';
 import { useFinanceBillingStore, type FinanceDocDetail } from '@/stores/finance-billing.store';
 import { fmtMoney, todayISO } from '@/modules/finance/personal/lib';
 import { useEscapeClose } from '../use-escape-close';
+import { useI18n } from '@/i18n';
 
 interface AccountOption {
   id: string;
@@ -32,11 +33,11 @@ interface AccountOption {
 }
 
 const METHODS: { id: string; label: string }[] = [
-  { id: 'transfer', label: 'Transfer' },
-  { id: 'card', label: 'Tarjeta' },
-  { id: 'cash', label: 'Efectivo' },
-  { id: 'direct_debit', label: 'Direct debit' },
-  { id: 'other', label: 'Otro' },
+  { id: 'transfer', label: 'finance.payment.method.transfer' },
+  { id: 'card', label: 'finance.payment.method.card' },
+  { id: 'cash', label: 'finance.payment.method.cash' },
+  { id: 'direct_debit', label: 'finance.payment.method.directDebit' },
+  { id: 'other', label: 'finance.payment.method.other' },
 ];
 
 export function RegistrarPagoDialog({
@@ -48,6 +49,7 @@ export function RegistrarPagoDialog({
   onClose: () => void;
   document: FinanceDocDetail;
 }) {
+  const { t } = useI18n();
   const { recordPayment } = useFinanceBillingStore();
   // Una factura RECIBIDA (bill) es un PAGO saliente a proveedor; el resto, un cobro.
   const isBill = document.type === 'bill';
@@ -81,7 +83,7 @@ export function RegistrarPagoDialog({
         setAccounts(treasury);
         if (treasury[0]) setAccountId(treasury[0].id);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Couldn\'t load the accounts');
+        toast.error(e instanceof Error ? e.message : t('finance.error.load'));
       }
     })();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -92,9 +94,9 @@ export function RegistrarPagoDialog({
 
   const submit = async () => {
     const amt = amount.replace(',', '.').trim();
-    if (!amt || Number(amt) <= 0) { toast.error('Enter an amount'); return; }
-    if (Number(amt) > pending + 0.005) { toast.error('The amount is more than what\'s outstanding'); return; }
-    if (!accountId) { toast.error(isBill ? 'Elige la cuenta de pago' : 'Elige la cuenta del cobro'); return; }
+    if (!amt || Number(amt) <= 0) { toast.error(t('finance.payment.enterAmount')); return; }
+    if (Number(amt) > pending + 0.005) { toast.error(t('finance.payment.amountExceeds')); return; }
+    if (!accountId) { toast.error(t(isBill ? 'finance.payment.noAccount.bill' : 'finance.payment.noAccount.receipt')); return; }
     setSaving(true);
     try {
       await recordPayment({
@@ -105,10 +107,10 @@ export function RegistrarPagoDialog({
         method,
         reference: reference || undefined,
       });
-      toast.success(isBill ? 'Payment recorded' : 'Cobro registrado');
+      toast.success(t(isBill ? 'finance.payment.recorded.bill' : 'finance.payment.recorded.receipt'));
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : (isBill ? 'Couldn\'t record the payment' : 'Couldn\'t record the payment in'));
+      toast.error(e instanceof Error ? e.message : t(isBill ? 'finance.payment.saveFailed.bill' : 'finance.payment.saveFailed.receipt'));
     } finally {
       setSaving(false);
     }
@@ -121,46 +123,46 @@ export function RegistrarPagoDialog({
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 410, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '10vh' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 420, maxWidth: '92vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{isBill ? 'Registrar pago a proveedor' : 'Registrar cobro'}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{t(isBill ? 'finance.payment.title.bill' : 'finance.payment.title.receipt')}</h2>
+          <button onClick={onClose} aria-label={t('finance.close')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          {document.number ?? 'Draft'} · Pendiente <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--info)' }}>{fmtMoney(pending, document.currency)}</span>
+          {document.number ?? 'Draft'} · {t('finance.payment.outstanding')} <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--info)' }}>{fmtMoney(pending, document.currency)}</span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Amount</label>
+            <label style={labelStyle}>{t('finance.amount')}</label>
             <input ref={amountRef} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0,00"
               style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center' }} />
           </div>
           <div>
-            <label style={labelStyle}>{isBill ? 'Pay from' : 'Receiving account'}</label>
+            <label style={labelStyle}>{t(isBill ? 'finance.payment.payFrom' : 'finance.payment.receivingAccount')}</label>
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
-              <option value="">— elige cuenta —</option>
+              <option value="">{t('finance.payment.chooseAccount')}</option>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Method</label>
+            <label style={labelStyle}>{t('finance.payment.method')}</label>
             <select value={method} onChange={(e) => setMethod(e.target.value)} style={fieldStyle}>
-              {METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              {METHODS.map((m) => <option key={m.id} value={m.id}>{t(m.label)}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Reference (optional)</label>
-            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. transfer reference" style={fieldStyle} />
+            <label style={labelStyle}>{t('finance.payment.reference')}</label>
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('finance.payment.referencePlaceholder')} style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Date</label>
+            <label style={labelStyle}>{t('finance.date')}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.cancel')}</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: isBill ? 'var(--mod-finance)' : 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : (isBill ? 'Registrar pago' : 'Registrar cobro')}
+            {saving ? t('finance.saving') : (isBill ? t('finance.payment.title.bill') : t('finance.payment.title.receipt'))}
           </button>
         </div>
       </div>

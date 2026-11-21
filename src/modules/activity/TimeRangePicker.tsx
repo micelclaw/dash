@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, ChevronDown, X } from 'lucide-react';
 import type { TimeRange } from './adapters/types';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 type PresetKey =
   | 'last_hour'
@@ -160,20 +161,26 @@ function localInputValueToIso(value: string): string {
   return d.toISOString();
 }
 
-function formatRangeLabel(range: TimeRange | undefined): string {
-  if (!range) return 'Todo el histórico';
+const PRESET_MESSAGE_KEYS: Record<PresetKey, string> = {
+  last_hour: 'activity.rangeLastHour', last_12h: 'activity.rangeLast12h', last_24h: 'activity.rangeLast24h',
+  last_7d: 'activity.rangeLast7d', last_30d: 'activity.rangeLast30d', today: 'activity.rangeToday',
+  yesterday: 'activity.rangeYesterday', this_week: 'activity.rangeThisWeek', this_month: 'activity.rangeThisMonth',
+};
+
+function formatRangeLabel(range: TimeRange | undefined, t: ReturnType<typeof useI18n>['t'], locale: string): string {
+  if (!range) return t('activity.rangeAll');
   const detected = detectPreset(range);
   if (detected && detected !== 'custom') {
-    return PRESETS.find((p) => p.key === detected)?.label ?? 'Rango personalizado';
+    return t(PRESET_MESSAGE_KEYS[detected]);
   }
   // Custom — render the actual window compactly.
   const from = new Date(range.from);
   const to = new Date(range.to);
   const sameDay = from.toDateString() === to.toDateString();
   if (sameDay) {
-    return `${from.toLocaleDateString()} ${from.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${to.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return `${from.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US')} ${from.toLocaleTimeString(locale === 'es' ? 'es-ES' : 'en-US', { hour: '2-digit', minute: '2-digit' })} — ${to.toLocaleTimeString(locale === 'es' ? 'es-ES' : 'en-US', { hour: '2-digit', minute: '2-digit' })}`;
   }
-  return `${from.toLocaleDateString()} — ${to.toLocaleDateString()}`;
+  return `${from.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US')} — ${to.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-US')}`;
 }
 
 interface Props {
@@ -182,6 +189,7 @@ interface Props {
 }
 
 export function TimeRangePicker({ range, onChange }: Props) {
+  const { t, locale } = useI18n();
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -228,7 +236,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
   }, [open]);
 
   const activePresetKey = useMemo(() => detectPreset(range), [range]);
-  const label = useMemo(() => formatRangeLabel(range), [range]);
+  const label = useMemo(() => formatRangeLabel(range, t, locale), [range, t, locale]);
 
   function pickPreset(preset: Preset) {
     onChange(preset.compute(new Date()));
@@ -256,7 +264,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]"
-        aria-label="Rango temporal"
+        aria-label={t('activity.rangeLabel')}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
@@ -272,7 +280,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
               e.stopPropagation();
               clear();
             }}
-            aria-label="Limpiar rango"
+            aria-label={t('activity.clearRange')}
           />
         )}
         {!hasRange && <ChevronDown size={12} className="text-[var(--text-muted)]" />}
@@ -281,7 +289,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
       {open && (
         <div
           role="dialog"
-          aria-label="Selector de rango temporal"
+          aria-label={t('activity.rangePicker')}
           className={`absolute right-0 top-full mt-1 z-30 rounded-md border border-[var(--border)] bg-[var(--bg)] shadow-lg ${
             isMobile ? 'w-[calc(100vw-2rem)] max-w-[440px]' : 'w-[440px]'
           }`}
@@ -290,7 +298,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
             {/* Presets — left column */}
             <div className={`py-1 ${isMobile ? 'border-b' : 'border-r'} border-[var(--border)]`}>
               <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
-                Presets
+                {t('activity.presets')}
               </div>
               {PRESETS.map((preset) => (
                 <button
@@ -300,7 +308,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
                     activePresetKey === preset.key ? 'bg-[var(--surface-hover)] text-[var(--primary)]' : ''
                   }`}
                 >
-                  {preset.label}
+                  {t(PRESET_MESSAGE_KEYS[preset.key])}
                 </button>
               ))}
             </div>
@@ -308,10 +316,10 @@ export function TimeRangePicker({ range, onChange }: Props) {
             {/* Custom range — right column */}
             <div className="py-1 px-3 flex flex-col gap-2">
               <div className="text-[10px] uppercase tracking-wide text-[var(--text-muted)] pt-0.5">
-                Personalizado
+                {t('activity.custom')}
               </div>
               <label className="text-[11px] flex flex-col gap-1 text-[var(--text-muted)]">
-                Desde
+                {t('activity.from')}
                 <input
                   type="datetime-local"
                   value={draftFrom}
@@ -320,7 +328,7 @@ export function TimeRangePicker({ range, onChange }: Props) {
                 />
               </label>
               <label className="text-[11px] flex flex-col gap-1 text-[var(--text-muted)]">
-                Hasta
+                {t('activity.until')}
                 <input
                   type="datetime-local"
                   value={draftTo}
@@ -333,13 +341,13 @@ export function TimeRangePicker({ range, onChange }: Props) {
                   onClick={clear}
                   className="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]"
                 >
-                  Limpiar
+                  {t('activity.clearRange')}
                 </button>
                 <button
                   onClick={applyCustom}
                   className="text-xs px-3 py-1 rounded bg-[var(--primary)] text-white hover:opacity-90"
                 >
-                  Aplicar
+                  {t('activity.applyRange')}
                 </button>
               </div>
             </div>

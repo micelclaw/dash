@@ -1,3 +1,4 @@
+import { OfficeEditorRouter } from './OfficeEditorRouter';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -23,6 +24,7 @@ import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useOfficeBridge } from './hooks/use-office-bridge';
 import { useOfficeWs } from './hooks/use-office-ws';
+import {useI18n} from '@/i18n';
 
 // Fallback local (dev por http). En producción/.claw se resuelve en runtime a la
 // URL https del document server (office.<dominio>) para evitar contenido mixto
@@ -54,7 +56,8 @@ function isLoopbackBase(url: string): boolean {
   }
 }
 
-export function Component() {
+function LegacyOnlyOfficeEditor() {
+  const {t}=useI18n();const tRef=useRef(t);useEffect(()=>{tRef.current=t;},[t]);
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -279,7 +282,7 @@ export function Component() {
         if (!alive()) return;
         if (!started) {
           addLog('ERROR: ONLYOFFICE did not start within the timeout.');
-          setError('ONLYOFFICE did not start within the timeout. Check available RAM.');
+          setError(tRef.current('office.legacy.startTimeout'));
           setPhase('error');
           return;
         }
@@ -320,8 +323,7 @@ export function Component() {
         const domain = useServiceUrlsStore.getState().primaryDomain;
         const domainHint = domain ? `office.${domain}` : 'office.<tu-dominio>';
         const accessHint = domain ? `https://${domain}` : 'https://<tu-dominio>';
-        const msg = `No se puede alcanzar el servidor de documentos (${domainHint}). `
-          + `Revisa tu método de acceso: conéctate por ${accessHint} (no por IP).`;
+        const msg = tRef.current('office.legacy.remoteError',{domain:domainHint,access:accessHint});
         addLog(`ERROR: ${msg}`);
         setError(msg);
         setPhase('error');
@@ -333,7 +335,7 @@ export function Component() {
       if (!alive()) return;
       if (!apiLoaded) {
         addLog('ERROR: Could not load ONLYOFFICE editor script after 40 attempts.');
-        setError('Could not connect to ONLYOFFICE Document Server after multiple attempts. Check that port 8080 is accessible.');
+        setError(tRef.current('office.legacy.connectError'));
         setPhase('error');
         return;
       }
@@ -344,7 +346,7 @@ export function Component() {
       setPhase('ready');
     } catch (err) {
       if (!alive()) return;
-      const msg = err instanceof Error ? err.message : 'Failed to open editor';
+      const msg = err instanceof Error ? err.message : tRef.current('office.legacy.openError');
       addLog(`ERROR: ${msg}`);
       setError(msg);
       setPhase('error');
@@ -420,7 +422,7 @@ export function Component() {
           <>
             <Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} />
             <span style={{ fontSize: 14 }}>
-              {wasWaitingRef.current ? 'Preparing editor...' : 'Opening document...'}
+              {t(wasWaitingRef.current ? 'office.legacy.preparing' : 'office.legacy.opening')}
             </span>
           </>
         )}
@@ -429,10 +431,10 @@ export function Component() {
           <>
             <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: '#f59e0b' }} />
             <span style={{ fontSize: 14 }}>
-              {phase === 'starting' ? 'Starting ONLYOFFICE Document Server...' : 'Waiting for ONLYOFFICE to be ready...'}
+              {t(phase === 'starting' ? 'office.legacy.starting' : 'office.legacy.waiting')}
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              This may take up to 90 seconds on first launch
+              {t('office.external.dbFirst')}
             </span>
           </>
         )}
@@ -440,14 +442,13 @@ export function Component() {
         {phase === 'not-installed' && (
           <>
             <Download size={32} style={{ color: 'var(--text-muted)' }} />
-            <span style={{ fontSize: 14, fontWeight: 500 }}>ONLYOFFICE is not installed</span>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>{t('office.legacy.notInstalled')}</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 400, textAlign: 'center' }}>
-              ONLYOFFICE Document Server is required for editing documents in the browser.
-              It will be automatically downloaded and installed (~500 MB).
+              {t('office.legacy.required')}
             </span>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button onClick={() => navigate('/office')} style={secondaryBtn}>
-                Back to Office
+                {t('office.router.office')}
               </button>
               <button
                 onClick={async () => {
@@ -459,17 +460,17 @@ export function Component() {
                     if (started) {
                       await initEditor();
                     } else {
-                      setError('Installation timed out. Check available disk space and RAM.');
+                      setError(t('office.legacy.installTimeout'));
                       setPhase('error');
                     }
                   } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Installation failed');
+                    setError(err instanceof Error ? err.message : t('office.legacy.installFailed'));
                     setPhase('error');
                   }
                 }}
                 style={primaryBtn}
               >
-                Install & Start
+                {t('office.legacy.installStart')}
               </button>
             </div>
           </>
@@ -478,7 +479,7 @@ export function Component() {
         {phase === 'error' && (
           <>
             <AlertTriangle size={32} style={{ color: 'var(--error)' }} />
-            <span style={{ fontSize: 14 }}>Failed to open document</span>
+            <span style={{ fontSize: 14 }}>{t('office.legacy.failed')}</span>
             {error && (
               <span style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 400, textAlign: 'center' }}>
                 {error}
@@ -486,10 +487,10 @@ export function Component() {
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button onClick={() => navigate('/office')} style={secondaryBtn}>
-                Back to Office
+                {t('office.router.office')}
               </button>
               <button onClick={initEditor} style={primaryBtn}>
-                Retry
+                {t('office.external.retry')}
               </button>
             </div>
           </>
@@ -506,7 +507,7 @@ export function Component() {
             lineHeight: 1.6, color: 'var(--text-muted)',
           }}>
             {startupLogs.length === 0 && (
-              <div style={{ color: 'var(--text-muted)', opacity: 0.5 }}>Fetching logs...</div>
+              <div style={{ color: 'var(--text-muted)', opacity: 0.5 }}>{t('office.legacy.logs')}</div>
             )}
             {startupLogs.map((line, i) => (
               <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
@@ -557,10 +558,10 @@ export function Component() {
         background: 'var(--surface)', color: 'var(--text-dim)',
         transition: 'height 0.12s ease',
       }}>
-        <button onClick={() => navigate('/office')} style={iconBtn} title="Volver a Office">
+        <button onClick={() => navigate('/office')} style={iconBtn} title={t('office.router.office')} aria-label={t('office.router.office')}>
           <ArrowLeft size={14} />
         </button>
-        <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
+        <span style={{ fontWeight: 500, color: 'var(--text)' }}>{t('office.legacy.editor')}</span>
         <div style={{ flex: 1 }} />
         <EmbedActions
           slug="onlyoffice" fallbackUrl={ONLYOFFICE_FALLBACK_URL} ramMb={ramMb}
@@ -588,7 +589,8 @@ export function Component() {
           cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4,
           fontSize: 11,
         }}
-        title="Salir de pantalla completa (ESC)"
+        title={t('office.external.exitFull')}
+        aria-label={t('office.external.exitFull')}
       >
         <Minimize2 size={12} /> ESC
       </button>
@@ -612,3 +614,5 @@ const primaryBtn: React.CSSProperties = {
   border: 'none', borderRadius: 'var(--radius-md)',
   color: '#fff', cursor: 'pointer', fontSize: 13,
 };
+
+export function Component() { return <OfficeEditorRouter legacy={LegacyOnlyOfficeEditor} />; }

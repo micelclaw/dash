@@ -16,6 +16,7 @@ import { Check, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { AppIcon } from '@/components/shared/AppIcon';
+import { useI18n } from '@/i18n';
 
 interface AvailableSkill {
   id: string;
@@ -42,6 +43,7 @@ interface AssignAppsModalProps {
 export function AssignAppsModal({
   agentId, agentName, agentAvatar, currentSkillIds, open, onClose, onSaved,
 }: AssignAppsModalProps) {
+  const { t } = useI18n();
   const [available, setAvailable] = useState<AvailableSkill[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -67,10 +69,10 @@ export function AssignAppsModal({
         }
         setSelected(initialSelected);
       })
-      .catch(() => toast.error('Failed to load available apps'))
+      .catch(() => toast.error(t('shared.assign.loadError')))
       .finally(() => setLoading(false));
     setSearch('');
-  }, [open, currentSkillIds]);
+  }, [open, currentSkillIds, t]);
 
   const toggleSkill = useCallback((id: string) => {
     setSelected(prev => {
@@ -84,15 +86,15 @@ export function AssignAppsModal({
     setSaving(true);
     try {
       await api.patch(`/managed-agents/${agentId}/skills`, { skills: [...selected] });
-      toast.success('Apps updated');
+      toast.success(t('shared.assign.updated'));
       onSaved();
       onClose();
     } catch {
-      toast.error('Failed to update apps');
+      toast.error(t('shared.assign.updateError'));
     } finally {
       setSaving(false);
     }
-  }, [agentId, selected, onSaved, onClose]);
+  }, [agentId, selected, onSaved, onClose, t]);
 
   if (!open) return null;
 
@@ -120,10 +122,10 @@ export function AssignAppsModal({
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
           <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            Assign Apps — {agentAvatar && <span>{agentAvatar}</span>} {agentName}
+            {t('shared.assign.title')} — {agentAvatar && <span>{agentAvatar}</span>} {agentName}
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Click an app to assign or remove it from this agent.
+            {t('shared.assign.description')}
           </p>
         </div>
 
@@ -134,7 +136,8 @@ export function AssignAppsModal({
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search apps..."
+              placeholder={t('shared.assign.search')}
+              aria-label={t('shared.assign.search')}
               autoFocus
               style={{
                 flex: 1, background: 'none', border: 'none', outline: 'none',
@@ -147,10 +150,10 @@ export function AssignAppsModal({
         {/* Grid */}
         <div style={{ padding: '12px 20px', overflow: 'auto', flex: 1 }}>
           {loading ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', textAlign: 'center', padding: 20 }}>Loading...</p>
+            <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', textAlign: 'center', padding: 20 }}>{t('shared.assign.loading')}</p>
           ) : filtered.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', textAlign: 'center', padding: 20 }}>
-              {search ? 'No apps match your search.' : 'No apps available.'}
+              {search ? t('shared.assign.noMatches') : t('shared.assign.none')}
             </p>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
@@ -160,6 +163,7 @@ export function AssignAppsModal({
                   <button
                     key={skill.id}
                     onClick={() => toggleSkill(skill.id)}
+                    aria-pressed={isSelected}
                     style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center',
                       justifyContent: 'center', gap: 4, height: 72, position: 'relative',
@@ -196,7 +200,7 @@ export function AssignAppsModal({
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('shared.action.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -209,7 +213,7 @@ export function AssignAppsModal({
               opacity: saving ? 0.7 : 1,
             }}
           >
-            {saving ? 'Saving...' : `Save (${selected.size} apps)`}
+            {saving ? t('shared.action.saving') : t('shared.assign.saveCount', { count: selected.size })}
           </button>
         </div>
       </div>

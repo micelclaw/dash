@@ -15,6 +15,7 @@ import Draggable from 'react-draggable';
 import { Minus, X } from 'lucide-react';
 import { useFloatingPanelsStore, type PanelId } from '@/stores/floating-panels.store';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 interface FloatingPanelProps {
   id: PanelId;
@@ -24,6 +25,7 @@ interface FloatingPanelProps {
 }
 
 export function FloatingPanel({ id, title, icon, children }: FloatingPanelProps) {
+  const { t } = useI18n();
   const panels = useFloatingPanelsStore((s) => s.panels);
   const closePanel = useFloatingPanelsStore((s) => s.closePanel);
   const minimizePanel = useFloatingPanelsStore((s) => s.minimizePanel);
@@ -78,6 +80,8 @@ export function FloatingPanel({ id, title, icon, children }: FloatingPanelProps)
         {!isMobile && (
           <button
             onClick={(e) => { e.stopPropagation(); minimizePanel(id); }}
+            title={t('floating.minimize')}
+            aria-label={t('floating.minimize')}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 24, height: 24, background: 'transparent', border: 'none',
@@ -91,6 +95,8 @@ export function FloatingPanel({ id, title, icon, children }: FloatingPanelProps)
         )}
         <button
           onClick={(e) => { e.stopPropagation(); closePanel(id); }}
+          title={t('floating.close')}
+          aria-label={t('floating.close')}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 24, height: 24, background: 'transparent', border: 'none',
@@ -115,6 +121,8 @@ export function FloatingPanel({ id, title, icon, children }: FloatingPanelProps)
   if (isMobile) {
     return (
       <div
+        role="region"
+        aria-label={title}
         style={{
           position: 'fixed',
           inset: 0,
@@ -153,6 +161,8 @@ export function FloatingPanel({ id, title, icon, children }: FloatingPanelProps)
     >
       <div
         ref={nodeRef}
+        role="region"
+        aria-label={title}
         onMouseDown={handleMouseDown}
         style={{
           position: 'absolute',

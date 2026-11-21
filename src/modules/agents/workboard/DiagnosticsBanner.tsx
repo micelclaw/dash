@@ -11,18 +11,11 @@
  */
 
 import { AlertTriangle } from 'lucide-react';
+import { hasMessage, useI18n } from '@/i18n';
 import type { WorkboardDiagnostic } from './types';
 
-const KIND_LABEL: Record<string, string> = {
-  stranded_ready: 'lista sin reclamar',
-  running_without_heartbeat: 'en curso sin heartbeat',
-  blocked_too_long: 'bloqueada demasiado tiempo',
-  repeated_failures: 'fallos repetidos',
-  missing_proof: 'falta proof',
-  orphaned_session: 'sesión huérfana',
-};
-
 export function DiagnosticsBanner({ diagnostics }: { diagnostics: WorkboardDiagnostic[] }) {
+  const { t } = useI18n();
   if (!diagnostics || diagnostics.length === 0) return null;
   const worst = diagnostics.some((d) => d.severity === 'critical' || d.severity === 'error');
   const color = worst ? 'var(--red, #ef4444)' : 'var(--amber)';
@@ -33,8 +26,11 @@ export function DiagnosticsBanner({ diagnostics }: { diagnostics: WorkboardDiagn
     }}>
       <AlertTriangle size={14} style={{ color, flexShrink: 0 }} />
       <span style={{ color: 'var(--text-dim)' }}>
-        {diagnostics.length} {diagnostics.length === 1 ? 'aviso' : 'avisos'}:{' '}
-        {diagnostics.slice(0, 3).map((d) => KIND_LABEL[d.kind] ?? d.kind).join(' · ')}
+        {t(diagnostics.length === 1 ? 'agents.workboard.diagnostics.warningOne' : 'agents.workboard.diagnostics.warningMany', { count: diagnostics.length })}:{' '}
+        {diagnostics.slice(0, 3).map((d) => {
+          const key = `agents.workboard.diagnostics.kind.${d.kind}`;
+          return hasMessage(key) ? t(key) : d.kind;
+        }).join(' · ')}
         {diagnostics.length > 3 ? ` · +${diagnostics.length - 3}` : ''}
       </span>
     </div>

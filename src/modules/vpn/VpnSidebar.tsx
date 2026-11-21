@@ -18,6 +18,7 @@ import {
 import type { VpnStatus } from './hooks/use-vpn';
 import type { TailscaleStatus } from './hooks/use-tailscale';
 import type { WgEasyStatus } from './hooks/use-wg-easy';
+import { useI18n } from '@/i18n';
 
 export type VpnSection = 'overview' | 'wg-easy' | 'peers' | 'backup' | 'tailscale' | 'ideas';
 
@@ -30,11 +31,11 @@ interface VpnSidebarProps {
   tailscaleStatus: TailscaleStatus | null;
 }
 
-const WG_ITEMS: { id: VpnSection; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: 'peers', label: 'Peers', icon: Users },
-  { id: 'wg-easy', label: 'WireGuard Panel', icon: ExternalLink },
-  { id: 'backup', label: 'Backup', icon: Download },
-  { id: 'ideas', label: 'Ideas', icon: Lightbulb },
+const WG_ITEMS: { id: VpnSection; icon: React.ComponentType<{ size?: number }> }[] = [
+  { id: 'peers', icon: Users },
+  { id: 'wg-easy', icon: ExternalLink },
+  { id: 'backup', icon: Download },
+  { id: 'ideas', icon: Lightbulb },
 ];
 
 const MOBILE_BREAKPOINT = 768;
@@ -50,18 +51,10 @@ function useIsMobile() {
   return mobile;
 }
 
-const SECTION_LABELS: Record<VpnSection, string> = {
-  overview: 'Overview',
-  peers: 'Peers',
-  'wg-easy': 'WireGuard Panel',
-  backup: 'Backup',
-  tailscale: 'Tailscale',
-  ideas: 'Ideas',
-};
-
 export function VpnSidebar({
   active, onChange, vpnStatus, peerCount, wgEasyStatus, tailscaleStatus,
 }: VpnSidebarProps) {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
@@ -75,7 +68,7 @@ export function VpnSidebar({
       {/* Overview — shared */}
       <NavItem
         icon={LayoutDashboard}
-        label="Overview"
+        label={t('vpn.overview')}
         active={active === 'overview'}
         onClick={() => handleNav('overview')}
       />
@@ -83,12 +76,12 @@ export function VpnSidebar({
       <div style={{ height: 1, background: 'var(--border)', margin: '8px 12px' }} />
 
       {/* WireGuard section */}
-      <SectionHeader label="WireGuard" />
+      <SectionHeader label={t('vpn.wireguard')} />
       {WG_ITEMS.map(item => (
         <NavItem
           key={item.id}
           icon={item.icon}
-          label={item.id === 'peers' ? `Peers (${peerCount})` : item.label}
+          label={item.id === 'peers' ? t('vpn.peerCount', { count: peerCount }) : t(`vpn.${item.id === 'wg-easy' ? 'wireguardPanel' : item.id}`)}
           active={active === item.id}
           onClick={() => handleNav(item.id)}
           dot={item.id === 'wg-easy'
@@ -105,7 +98,7 @@ export function VpnSidebar({
       <SectionHeader label="Tailscale" />
       <NavItem
         icon={Globe}
-        label="Status"
+        label={t('vpn.status')}
         active={active === 'tailscale'}
         onClick={() => handleNav('tailscale')}
         dot={
@@ -129,6 +122,8 @@ export function VpnSidebar({
         }}>
           <button
             onClick={() => setOpen(!open)}
+            title={open ? t('vpn.closeMenu') : t('vpn.openMenu')}
+            aria-label={open ? t('vpn.closeMenu') : t('vpn.openMenu')}
             style={{
               background: 'none', border: 'none', padding: 0,
               color: 'var(--text)', cursor: 'pointer',
@@ -143,7 +138,7 @@ export function VpnSidebar({
             flexShrink: 0,
           }} />
           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-            VPN — {SECTION_LABELS[active]}
+            VPN — {t(`vpn.${active === 'wg-easy' ? 'wireguardPanel' : active === 'backup' ? 'backup' : active === 'ideas' ? 'ideas' : active}`)}
           </span>
         </div>
 

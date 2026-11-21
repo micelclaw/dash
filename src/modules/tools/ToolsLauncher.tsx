@@ -12,6 +12,7 @@
 
 import { Calculator, ArrowLeftRight, Timer, Mic } from 'lucide-react';
 import { useFloatingPanelsStore, type PanelId } from '@/stores/floating-panels.store';
+import { hasMessage, useI18n } from '@/i18n';
 
 interface ToolCard {
   id: string;
@@ -32,11 +33,12 @@ const UTILITIES: ToolCard[] = [
 ];
 
 export function ToolsLauncher() {
+  const { t } = useI18n();
   const openPanel = useFloatingPanelsStore((s) => s.openPanel);
 
   return (
     <div style={{ maxWidth: 720 }}>
-      <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text)', marginBottom: 24 }}>Tools</h1>
+      <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text)', marginBottom: 24 }}>{t('tools.title')}</h1>
 
       {/* Utilities section */}
       <div style={{ marginBottom: 32 }}>
@@ -44,11 +46,18 @@ export function ToolsLauncher() {
           fontSize: '0.6875rem', fontWeight: 500, textTransform: 'uppercase',
           letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 12,
         }}>
-          Utilities
+          {t('tools.utilities')}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
           {UTILITIES.map((tool) => (
-            <ToolCardButton key={tool.id} tool={tool} onClick={() => openPanel(tool.panelId)} />
+            <ToolCardButton
+              key={tool.id}
+              tool={tool}
+              label={hasMessage(`tools.${tool.id === 'voice-recorder' ? 'recorder' : tool.id}`) ? t(`tools.${tool.id === 'voice-recorder' ? 'recorder' : tool.id}`) : tool.label}
+              description={hasMessage(`tools.${tool.id === 'voice-recorder' ? 'recorderDescription' : `${tool.id}Description`}`) ? t(`tools.${tool.id === 'voice-recorder' ? 'recorderDescription' : `${tool.id}Description`}`) : tool.description}
+              opensAsPanel={t('tools.opensAsPanel')}
+              onClick={() => openPanel(tool.panelId)}
+            />
           ))}
         </div>
       </div>
@@ -56,10 +65,11 @@ export function ToolsLauncher() {
   );
 }
 
-function ToolCardButton({ tool, onClick }: { tool: ToolCard; onClick: () => void }) {
+function ToolCardButton({ tool, label, description, opensAsPanel, onClick }: { tool: ToolCard; label: string; description: string; opensAsPanel: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
+      aria-label={`${label}: ${description}`}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 8, padding: '20px 16px',
@@ -80,14 +90,14 @@ function ToolCardButton({ tool, onClick }: { tool: ToolCard; onClick: () => void
       }}
     >
       <div style={{ color: 'var(--mod-tools)' }}>{tool.icon}</div>
-      <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{tool.label}</div>
-      <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{tool.description}</div>
+      <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{description}</div>
       <div style={{
         fontSize: '0.625rem', color: 'var(--text-muted)',
         padding: '2px 6px', background: 'var(--surface)',
         borderRadius: 'var(--radius-sm)', marginTop: 2,
       }}>
-        Opens as panel
+        {opensAsPanel}
       </div>
     </button>
   );

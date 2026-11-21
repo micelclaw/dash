@@ -19,6 +19,7 @@ import type { MailActionKey } from './lib/mail-actions';
 import { MailListItem, MAIL_ROW_MIN_HEIGHT, UNREAD_STRIPE_PX } from './MailListItem';
 import { groupEmailsByDate, readCollapsedGroups, writeCollapsedGroups } from './lib/mail-grouping';
 import type { Email, MailSortField, MailSortOrder } from './types';
+import { useI18n } from '@/i18n';
 
 /** Sentinel for the ungrouped list: renders the rows with no header at all. */
 const FLAT_GROUP_KEY = '__flat__';
@@ -213,6 +214,7 @@ export function MailList({
   total,
   onPageChange,
 }: MailListProps) {
+  const { t } = useI18n();
   const allIds = useMemo(() => emails.map((e) => e.id), [emails]);
   const allSelected = emails.length > 0 && selectedIds.size === emails.length;
   const someSelected = selectedIds.size > 0 && selectedIds.size < emails.length;
@@ -343,14 +345,14 @@ export function MailList({
                 transition: 'background var(--transition-fast)',
               }}
             >
-              Retry
+              {t('mail.listRetry')}
             </button>
           </div>
         ) : emails.length === 0 ? (
           <EmptyState
             icon={Mail}
-            title="No emails"
-            description="Try a different filter or folder"
+            title={t('mail.noEmails')}
+            description={t('mail.noEmailsHint')}
           />
         ) : (
           groups.map((group) => {

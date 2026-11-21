@@ -16,6 +16,7 @@ import { getMonthGridDays, isSameMonth, isToday, startOfDay } from '@/lib/date-h
 import { getCalendarColor } from '../types';
 import type { CalendarEvent } from '../types';
 import { DAY_NAMES } from './grid-constants';
+import { useI18n } from '@/i18n';
 
 const MAX_PILLS = 3;
 
@@ -29,6 +30,8 @@ interface MonthGridProps {
 }
 
 export function MonthGrid({ currentDate, events, onEventClick, onSlotClick, calendarColorMap }: MonthGridProps) {
+  const { locale, t } = useI18n();
+  const dayNames = DAY_NAMES.map((_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { weekday: 'short' }));
   const gridDays = useMemo(() => getMonthGridDays(currentDate), [currentDate]);
 
   // Group events by day string
@@ -64,7 +67,7 @@ export function MonthGrid({ currentDate, events, onEventClick, onSlotClick, cale
           flexShrink: 0,
         }}
       >
-        {DAY_NAMES.map((name) => (
+        {dayNames.map((name) => (
           <div
             key={name}
             style={{
@@ -102,6 +105,7 @@ export function MonthGrid({ currentDate, events, onEventClick, onSlotClick, cale
             onSlotClick={onSlotClick}
             onEventClick={onEventClick}
             calendarColorMap={calendarColorMap}
+            moreLabel={t('calendar.moreEvents')}
           />
         ))}
       </div>
@@ -119,6 +123,7 @@ interface MonthDayCellProps {
   onSlotClick?: (date: Date) => void;
   onEventClick: (event: CalendarEvent) => void;
   calendarColorMap?: Record<string, string>;
+  moreLabel: string;
 }
 
 /** One day cell of the month grid: day number + up to MAX_PILLS event pills */
@@ -132,6 +137,7 @@ function MonthDayCell({
   onSlotClick,
   onEventClick,
   calendarColorMap,
+  moreLabel,
 }: MonthDayCellProps) {
   const visible = events.slice(0, MAX_PILLS);
   const overflowCount = events.length - MAX_PILLS;
@@ -192,7 +198,7 @@ function MonthDayCell({
             padding: '0 4px',
           }}
         >
-          +{overflowCount} more
+          +{overflowCount} {moreLabel}
         </div>
       )}
     </div>

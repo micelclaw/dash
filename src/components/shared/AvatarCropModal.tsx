@@ -14,6 +14,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { useI18n } from '@/i18n';
 
 interface AvatarCropModalProps {
   open: boolean;
@@ -31,6 +32,7 @@ function centerAspectCrop(mediaWidth: number, mediaHeight: number): Crop {
 }
 
 export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCropModalProps) {
+  const { t } = useI18n();
   const [crop, setCrop] = useState<Crop>();
   const [saving, setSaving] = useState(false);
   useEscapeToClose(onClose, { enabled: open });
@@ -97,7 +99,7 @@ export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCr
         }}
       >
         <h3 style={{ margin: '0 0 16px', fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>
-          Crop avatar
+          {t('shared.avatarCrop.title')}
         </h3>
 
         <div style={{
@@ -115,7 +117,7 @@ export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCr
             <img
               ref={imgRef}
               src={imageSrc}
-              alt=""
+              alt={t('shared.avatarCrop.previewAlt')}
               onLoad={onImageLoad}
               style={{ maxHeight: 360, maxWidth: '100%', display: 'block' }}
             />
@@ -125,6 +127,7 @@ export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCr
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
           <button
             onClick={onClose}
+            aria-label={t('shared.avatarCrop.cancel')}
             style={{
               padding: '8px 16px', borderRadius: 'var(--radius-md)',
               fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
@@ -132,7 +135,7 @@ export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCr
               background: 'transparent', color: 'var(--text-dim)',
             }}
           >
-            Cancel
+            {t('shared.avatarCrop.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -145,7 +148,7 @@ export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCr
               opacity: saving ? 0.7 : 1,
             }}
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('shared.avatarCrop.saving') : t('shared.avatarCrop.save')}
           </button>
         </div>
       </div>

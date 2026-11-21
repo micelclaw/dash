@@ -1,3 +1,4 @@
+import { newOfficeDocument, officeRecentFiles, type OfficeEditorSession } from '@/modules/office/office-providers.service';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -61,18 +62,22 @@ interface OfficeState {
   fullscreen: boolean;
   loading: boolean;
   docsLoading: boolean;
+  creatingProvider: string | null;
+  creationError: { provider: string; message: string } | null;
+  createProviderDocument: (provider: string) => Promise<OfficeEditorSession | null>;
 
   setActiveApp: (app: OfficeApp) => void;
   toggleFullscreen: () => void;
   setFullscreen: (v: boolean) => void;
   fetchStatus: () => Promise<void>;
-  fetchRecentDocs: (mimeFilter?: string) => Promise<void>;
+  fetchRecentDocs: (mimeFilter?: string, formats?: readonly string[]) => Promise<void>;
   createSession: (fileId: string) => Promise<EditorSession>;
   createNewDocument: (type: 'docx' | 'xlsx' | 'pptx', filename?: string) => Promise<EditorSession>;
   startService: (service: string) => Promise<void>;
   clearSession: () => void;
 }
 
+let recentRequest = 0;
 export const useOfficeStore = create<OfficeState>((set, get) => ({
   activeApp: 'documents',
   status: null,
@@ -81,8 +86,28 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   fullscreen: false,
   loading: false,
   docsLoading: false,
+  creatingProvider: null,
+  creationError: null,
 
-  setActiveApp: (app) => set({ activeApp: app }),
+  createProviderDocument: async (provider) => {
+    // Zustand updates synchronously: double clicks and remounts share this guard.
+    if (get().creatingProvider) return null;
+    set({ creatingProvider: provider, creationError: null });
+    try {
+      return await newOfficeDocument(provider);
+    } catch (error) {
+      set({ creationError: { provider, message: error instanceof Error ? error.message : '' } });
+      return null;
+    } finally {
+      set({ creatingProvider: null });
+    }
+  },
+
+  setActiveApp: (app) => {
+    if(get().activeApp===app)return;
+    recentRequest++;
+    set({activeApp:app,recentDocs:[],docsLoading:false});
+  },
 
   toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
   setFullscreen: (v) => set({ fullscreen: v }),
@@ -96,15 +121,18 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
     }
   },
 
-  fetchRecentDocs: async (mimeFilter?: string) => {
+  fetchRecentDocs: async (mimeFilter?: string, formats?: readonly string[]) => {
+    const slot = mimeFilter === 'application/pdf' ? 'pdf'
+      : mimeFilter?.includes('spreadsheetml') ? 'spreadsheets'
+      : mimeFilter?.includes('presentationml') ? 'presentations' : 'documents';
+    if(get().activeApp!==slot)return;
+    const request=++recentRequest;
     set({ docsLoading: true });
     try {
-      const params: Record<string, string | number> = { sort: 'updated_at', limit: 12 };
-      if (mimeFilter) params.mime_type = mimeFilter;
-      const res = await api.get<{ data: RecentDoc[] }>('/files', params);
-      set({ recentDocs: res.data ?? [], docsLoading: false });
+      const docs = await officeRecentFiles(slot, formats);
+      if(request===recentRequest&&get().activeApp===slot)set({ recentDocs: docs, docsLoading: false });
     } catch {
-      set({ recentDocs: [], docsLoading: false });
+      if(request===recentRequest&&get().activeApp===slot)set({ recentDocs: [], docsLoading: false });
     }
   },
 

@@ -86,6 +86,16 @@ export async function setup2fa(): Promise<TwoFactorSetupResult> {
   return res.data;
 }
 
+export async function setupImported2fa(enrollmentToken: string): Promise<TwoFactorSetupResult> {
+  return (await api.post<{ data: TwoFactorSetupResult }>('/auth/enrollment/2fa/setup', { enrollment_token: enrollmentToken })).data;
+}
+export async function verifyImported2fa(enrollmentToken: string, code: string): Promise<{ backup_codes: string[] }> {
+  return (await api.post<{ data: { backup_codes: string[] } }>('/auth/enrollment/2fa/verify', { enrollment_token: enrollmentToken, code })).data;
+}
+export async function cancelImported2fa(enrollmentToken: string): Promise<void> {
+  await api.post('/auth/enrollment/2fa/cancel', { enrollment_token: enrollmentToken });
+}
+
 export async function verify2fa(code: string): Promise<{ backup_codes: string[] }> {
   const res = await api.post<{ data: { backup_codes: string[] } }>('/auth/2fa/verify', { code });
   return res.data;
@@ -149,4 +159,11 @@ export async function updateProfile(
     body,
   );
   return res.data;
+}
+
+/** Revokes exactly this refresh credential and clears session/Control UI cookies.
+ * Empty refresh is the cookie-only path for auto-login/native access, never a
+ * request to revoke all sessions or unpair a device. */
+export async function logoutSession(refreshToken: string): Promise<void> {
+  await api.post('/auth/logout', { refresh_token: refreshToken });
 }

@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { CustomFieldsEditor } from '@/modules/inventory/components/CustomFieldsEditor';
@@ -28,6 +29,7 @@ interface DetailsSectionProps {
 
 /** Sección "Details" plegable: cantidad editable + metadatos + custom fields. */
 export function DetailsSection({ item, readOnly, locationName, onUpdate }: DetailsSectionProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [qtyDraft, setQtyDraft] = useState(item.quantity);
   const [fieldsDraft, setFieldsDraft] = useState<Record<string, unknown>>({ ...(item.custom_fields ?? {}) });
@@ -53,9 +55,9 @@ export function DetailsSection({ item, readOnly, locationName, onUpdate }: Detai
     if (n === parseFloat(item.quantity)) return;
     try {
       await onUpdate({ quantity: n });
-      toast.success('Quantity updated');
+      toast.success(t('inventory.drawer.quantityUpdated'));
     } catch {
-      toast.error('Failed to update quantity');
+      toast.error(t('inventory.drawer.quantityFailed'));
       setQtyDraft(item.quantity);
     }
   };
@@ -63,9 +65,9 @@ export function DetailsSection({ item, readOnly, locationName, onUpdate }: Detai
   const handleSaveFields = async () => {
     try {
       await onUpdate({ custom_fields: fieldsDraft });
-      toast.success('Fields saved');
+      toast.success(t('inventory.drawer.fieldsSaved'));
     } catch {
-      toast.error('Failed to save fields');
+      toast.error(t('inventory.drawer.fieldsFailed'));
     }
   };
 
@@ -87,12 +89,12 @@ export function DetailsSection({ item, readOnly, locationName, onUpdate }: Detai
           textAlign: 'left',
         }}
       >
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Details
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {t('inventory.drawer.details')}
       </button>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <DetailRow
-            label="Quantity"
+            label={t('inventory.drawer.quantity')}
             value={
               item.track_stock && !readOnly ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -113,14 +115,14 @@ export function DetailsSection({ item, readOnly, locationName, onUpdate }: Detai
               )
             }
           />
-          <DetailRow label="Min qty" value={item.min_qty ? `${item.min_qty} ${item.uom}` : '—'} />
+          <DetailRow label={t('inventory.drawer.minQty')} value={item.min_qty ? `${item.min_qty} ${item.uom}` : '—'} />
           {(item.meter_unit || item.meter_value) && (
-            <DetailRow label="Meter unit" value={item.meter_unit ?? '—'} />
+            <DetailRow label={t('inventory.drawer.meterUnit')} value={item.meter_unit ?? '—'} />
           )}
-          <DetailRow label="Supplier SKU" value={item.supplier_sku ?? '—'} />
-          <DetailRow label="Location" value={locationName} />
-          <DetailRow label="Created by" value={item.created_by} />
-          <DetailRow label="Description" value={item.description ?? '—'} />
+          <DetailRow label={t('inventory.drawer.supplierSku')} value={item.supplier_sku ?? '—'} />
+          <DetailRow label={t('inventory.drawer.location')} value={locationName} />
+          <DetailRow label={t('inventory.drawer.createdBy')} value={item.created_by} />
+          <DetailRow label={t('inventory.drawer.description')} value={item.description ?? '—'} />
           {readOnly ? (
             item.custom_fields &&
             Object.entries(item.custom_fields).map(([key, value]) => (
@@ -142,14 +144,14 @@ export function DetailsSection({ item, readOnly, locationName, onUpdate }: Detai
                     color: 'var(--text-dim)',
                   }}
                 >
-                  Custom fields
+                  {t('inventory.drawer.customFields')}
                 </span>
                 {fieldsDirty && (
                   <button
                     style={{ ...btnPrimary, padding: '2px 8px', fontSize: '0.6875rem' }}
                     onClick={() => void handleSaveFields()}
                   >
-                    Save fields
+                    {t('inventory.drawer.saveFields')}
                   </button>
                 )}
               </div>

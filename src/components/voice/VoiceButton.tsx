@@ -17,6 +17,7 @@
 import { useCallback } from 'react';
 import { Mic, Loader2, Square } from 'lucide-react';
 import type { VoiceState } from '@/hooks/use-voice';
+import { useI18n } from '@/i18n';
 
 interface VoiceButtonProps {
   state: VoiceState;
@@ -32,6 +33,7 @@ function formatDuration(seconds: number): string {
 }
 
 export function VoiceButton({ state, duration, onStart, onStop }: VoiceButtonProps) {
+  const { t } = useI18n();
   const handleClick = useCallback(() => {
     if (state === 'recording') {
       onStop();
@@ -43,6 +45,8 @@ export function VoiceButton({ state, duration, onStart, onStop }: VoiceButtonPro
   if (state === 'processing') {
     return (
       <div
+        role="status"
+        aria-live="polite"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -56,7 +60,7 @@ export function VoiceButton({ state, duration, onStart, onStop }: VoiceButtonPro
         }}
       >
         <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-        Transcribing...
+        {t('voice.transcribing')}
       </div>
     );
   }
@@ -65,6 +69,8 @@ export function VoiceButton({ state, duration, onStart, onStop }: VoiceButtonPro
     return (
       <button
         onClick={handleClick}
+        title={t('voice.stopRecording')}
+        aria-label={t('voice.stopRecording')}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -98,7 +104,8 @@ export function VoiceButton({ state, duration, onStart, onStop }: VoiceButtonPro
   return (
     <button
       onClick={handleClick}
-      title="Push to talk"
+      title={t('voice.pushToTalk')}
+      aria-label={t('voice.pushToTalk')}
       style={{
         background: 'none',
         border: 'none',

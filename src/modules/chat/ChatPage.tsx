@@ -1,3 +1,7 @@
+import { useCoreProductivityProfile } from '@/hooks/use-core-productivity-profile';
+import '@/lib/chat-workspace-session';
+import { useChatWorkspaceStore } from '@/stores/chat-workspace.store';
+import { MCPAppApprovalList } from './mcp-apps/MCPAppApprovalList';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -40,12 +44,28 @@ import { ConversationCollaboration } from './ConversationCollaboration';
 import { ConversationTasksPanel } from './ConversationTasksPanel';
 
 export function Component() {
+  useCoreProductivityProfile();
   const isMobile = useIsMobile();
   const activeConvId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
   const activeConv = activeConvId ? conversations.find(c => c.id === activeConvId) : null;
   const userId = useAuthStore((s) => s.user?.id ?? null);
-  const [canvasOpen, setCanvasOpen] = useState(false);
+  const workspace = useChatWorkspaceStore(s => activeConvId ? s.byConversation[activeConvId] : undefined);
+  const canvasOpen = workspace?.panelOpen ?? false;
+  const setCanvasOpen = useCallback((open: boolean) => { if (activeConvId) useChatWorkspaceStore.getState().setPanel(activeConvId, open); }, [activeConvId]);
+  const [expanded, setExpanded] = useState(false);
+  const [canvasSuspendedForApp, setCanvasSuspendedForApp] = useState(false);
+  useEffect(() => { setCanvasSuspendedForApp(false); }, [canvasOpen, activeConvId]);
+  useEffect(() => {
+    const focus = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversation_id?: string }>).detail;
+      if (detail?.conversation_id !== activeConvId) return;
+      if (isMobile && canvasOpen) setCanvasSuspendedForApp(true);
+      setTimeout(() => document.querySelector('[data-mcp-app-approvals]')?.scrollIntoView({ block: 'center' }), 0);
+    };
+    window.addEventListener('micelclaw:mcp-app-focus-chat', focus);
+    return () => window.removeEventListener('micelclaw:mcp-app-focus-chat', focus);
+  }, [activeConvId, isMobile, canvasOpen]);
   const [canvasWidth, setCanvasWidth] = useState(520);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
@@ -80,7 +100,7 @@ export function Component() {
     // Capture the final width through the updater, avoiding stale state in the
     // closure used by pointerup.
     let finalWidth = startWidth;
-    const trackedMove = (moveEvent: PointerEvent) => { finalWidth = Math.max(320, Math.min(900, startWidth + startX - moveEvent.clientX)); setCanvasWidth(finalWidth); };
+    const trackedMove = (moveEvent: PointerEvent) => { const bounds = document.querySelector('[data-workspace-split]')?.getBoundingClientRect(); finalWidth = Math.max(320, Math.min(900, bounds ? bounds.width * .65 : 900, startWidth + startX - moveEvent.clientX)); setCanvasWidth(finalWidth); };
     const trackedEnd = () => { window.removeEventListener('pointermove', trackedMove); window.removeEventListener('pointerup', trackedEnd); if (userId) try { localStorage.setItem(`micelclaw.canvas.width.${userId}`, String(finalWidth)); } catch { /* ignore */ } };
     window.addEventListener('pointermove', trackedMove); window.addEventListener('pointerup', trackedEnd, { once: true });
   }, [canvasWidth, isMobile, userId]);
@@ -153,21 +173,10 @@ export function Component() {
   const { isActive: browserActive } = useBrowserSession();
 
   useEffect(() => {
-    // First real content opens Canvas once. Once a person closes it, later
-    // updates remain discoverable through the dot and never steal focus.
-    if (!activeConvId || !(hasContent || hasNativeCanvas || browserActive)) return;
-    const key = `micelclaw.canvas.opened.${activeConvId}`;
-    try {
-      if (sessionStorage.getItem(key)) return;
-      sessionStorage.setItem(key, '1');
-    } catch { /* Storage is optional; opening once is still preferable. */ }
-    setCanvasOpen(true);
-  }, [activeConvId, hasContent, hasNativeCanvas, browserActive]);
-  useEffect(() => {
     const open = () => setCanvasOpen(true);
     window.addEventListener('micelclaw:open-canvas', open);
     return () => window.removeEventListener('micelclaw:open-canvas', open);
-  }, []);
+  }, [setCanvasOpen]);
 
   const handleCollapse = useCallback(() => {
     setChatState(2);
@@ -288,7 +297,7 @@ export function Component() {
           {/* The same Canvas dashboard opens as a split pane on desktop and a
               full-screen overlay on PWA/Android. */}
           <button
-              aria-label={isMobile ? 'Abrir dashboard Canvas' : undefined}
+              aria-label="Abrir resultados"
               aria-pressed={canvasOpen}
               onClick={() => setCanvasOpen(!canvasOpen)}
               style={{
@@ -308,7 +317,7 @@ export function Component() {
               }}
             >
               <PanelRight size={14} />
-              {!isMobile && 'Canvas'}
+              {!isMobile && 'Resultados'}
               {!canvasOpen && (hasContent || hasNativeCanvas || browserActive) && (
                 <span style={{
                   position: 'absolute',
@@ -324,9 +333,9 @@ export function Component() {
         </div>
 
         {/* Chat + Canvas split */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div data-workspace-split style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, position: 'relative' }}>
           {/* Chat column */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div style={{ flex: 1, display: expanded && canvasOpen && !isMobile ? 'none' : 'flex', flexDirection: 'column', minWidth: 0 }}>
             <ContextCard />
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)]">
@@ -348,30 +357,26 @@ export function Component() {
               )}
             </div>
             <ChatPanel />
+        <MCPAppApprovalList conversationId={activeConvId} />
+        {isMobile && canvasOpen && canvasSuspendedForApp && <button onClick={() => setCanvasSuspendedForApp(false)} style={{ padding: 9, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }}>Return to App</button>}
+
+        {/* Input */}
+        <ChatInput
+          onCollapse={handleCollapse}
+          showCollapse
+        />
           </div>
 
-          {/* Canvas has a user-local, resizable width. The narrow grab area is
-              outside the panel so widget iframes keep their own interaction. */}
-          {!isMobile && canvasOpen && <>
-            <div
-              role="separator"
-              aria-label="Redimensionar Canvas"
-              aria-orientation="vertical"
-              onPointerDown={resizeCanvas}
-              onDoubleClick={() => setCanvasWidth(520)}
-              style={{ width: 7, flexShrink: 0, cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }}
-            />
-            <div style={{ width: canvasWidth, minWidth: 320, maxWidth: 900, display: 'flex', flexShrink: 0 }}><CanvasPanel onClose={() => setCanvasOpen(false)} /></div>
-          </>}
+          {/* One host survives hiding and mobile/desktop changes; loaded tabs keep their frames. */}
+          <div role="separator" aria-label="Redimensionar resultados" aria-orientation="vertical" tabIndex={canvasOpen && !isMobile && !expanded ? 0 : -1}
+            aria-valuemin={320} aria-valuemax={900} aria-valuenow={canvasWidth}
+            onPointerDown={resizeCanvas} onDoubleClick={() => setCanvasWidth(520)}
+            onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setCanvasWidth(width => Math.max(320, Math.min(900, width + (event.key === 'ArrowLeft' ? 32 : -32)))); } }}
+            style={{ display: canvasOpen && !isMobile && !expanded ? 'block' : 'none', width: 7, flexShrink: 0, cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }} />
+          <div data-workspace-host style={{ display: canvasOpen && !canvasSuspendedForApp ? 'flex' : 'none', ...(isMobile ? { position: 'absolute' as const, inset: 0, zIndex: 60 } : { width: expanded ? '100%' : canvasWidth, maxWidth: expanded ? '100%' : 'min(900px, 65%)', minWidth: expanded ? 0 : 320, flexShrink: 0 }) }}>
+            <CanvasPanel onClose={() => setCanvasOpen(false)} expanded={expanded} onExpand={isMobile ? undefined : () => setExpanded(value => !value)} />
+          </div>
         </div>
-
-        {/* On phones, a file link opens the same canvas as a full chat-local
-            overlay instead of navigating away to Agents → Workspaces. */}
-        {isMobile && canvasOpen && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex' }}>
-            <CanvasPanel onClose={() => setCanvasOpen(false)} />
-          </div>
-        )}
 
         {/* G8: Checkpoints drawer (fixed overlay, right side) */}
         {checkpointsOpen && activeConvId && (
@@ -384,11 +389,7 @@ export function Component() {
 
         {tasksOpen && activeConvId && <ConversationTasksPanel conversationId={activeConvId} onClose={() => setTasksOpen(false)} />}
 
-        {/* Input */}
-        <ChatInput
-          onCollapse={handleCollapse}
-          showCollapse
-        />
+
       </div>
 
       {/* Collapse indicator */}

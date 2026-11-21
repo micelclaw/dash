@@ -23,6 +23,7 @@ import { GraphColorModeToggle } from './GraphColorModeToggle';
 import { GraphDimensionToggle } from './GraphDimensionToggle';
 import { GRAPH_RECORD_DOMAIN_BY_TYPE } from '@/config/graph-domains';
 import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
+import { useI18n } from '@/i18n';
 
 type GraphMode = 'entities' | 'records';
 
@@ -51,6 +52,7 @@ interface GraphViewModalProps {
 }
 
 export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModalProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const fetchSubgraph = useIntelligenceStore(s => s.fetchSubgraph);
   const fetchRecordSubgraph = useIntelligenceStore(s => s.fetchRecordSubgraph);
@@ -327,14 +329,12 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
 
   const handle3DUnavailable = useCallback(() => {
     setView3DPersist(false);
-    toast.error('WebGL no disponible — usando la vista 2D');
-  }, [setView3DPersist]);
+    toast.error(t('graph.webglUnavailable'));
+  }, [setView3DPersist, t]);
 
   if (!open) return null;
 
   const isRecords = graphMode === 'records';
-  const modeLabel = isRecords ? 'records' : 'entities';
-
   return (
     <div style={{
       position: 'fixed',
@@ -357,7 +357,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
       }}>
         <Maximize2 size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
         <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-          Knowledge Graph
+          {t('graph.title')}
         </span>
 
         {/* Mode toggle */}
@@ -395,9 +395,12 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
                   color: active ? 'var(--bg)' : 'var(--text-muted)',
                   textTransform: 'capitalize',
                 }}
+                title={t(`graph.mode.${mode}`)}
+                aria-label={t(`graph.mode.${mode}`)}
+                aria-pressed={active}
               >
                 <ModeIcon size={12} />
-                {mode}
+                {t(`graph.mode.${mode}`)}
               </button>
             );
           })}
@@ -412,6 +415,8 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
 
         <button
           onClick={onClose}
+          title={t('graph.close')}
+          aria-label={t('graph.close')}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-dim)', padding: 4, display: 'flex',
@@ -431,7 +436,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               height: '100%', color: 'var(--text-muted)', fontSize: '0.875rem',
             }}>
-              Loading graph...
+              {t('graph.loading')}
             </div>
           ) : nodes.length === 0 ? (
             <div style={{
@@ -440,7 +445,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               color: 'var(--text-muted)', fontSize: '0.875rem',
             }}>
               <Maximize2 size={32} style={{ opacity: 0.3 }} />
-              {isRecords ? 'No connected records found' : 'No entities in graph yet'}
+              {isRecords ? t('graph.empty.records') : t('graph.empty.entities')}
             </div>
           ) : (
             <GraphCanvas
@@ -505,15 +510,15 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         color: 'var(--text-muted)',
         flexShrink: 0,
       }}>
-        <span>{stats.entities} {modeLabel}</span>
-        <span>{stats.edges} connections</span>
-        <span>Showing {nodes.length} of {stats.entities}</span>
-        {colorMode === 'heat' && <span style={{ color: '#f43f5e' }}>Heat map</span>}
-        {colorMode === 'community' && <span style={{ color: '#a78bfa' }}>{communities.length} comunidades</span>}
+        <span>{t(isRecords ? 'graph.stats.records' : 'graph.stats.entities', { count: stats.entities })}</span>
+        <span>{t('graph.stats.connections', { count: stats.edges })}</span>
+        <span>{t('graph.stats.showing', { shown: nodes.length, total: stats.entities })}</span>
+        {colorMode === 'heat' && <span style={{ color: '#f43f5e' }}>{t('graph.stats.heatMap')}</span>}
+        {colorMode === 'community' && <span style={{ color: '#a78bfa' }}>{t('graph.stats.communities', { count: communities.length })}</span>}
 
         {graphMode === 'records' && (
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.625rem' }}>
-            <span>Strength:</span>
+            <span>{t('graph.stats.strength')}</span>
             <input
               type="range"
               min={0}
@@ -521,6 +526,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               step={5}
               value={strengthThreshold * 100}
               onChange={e => setStrengthThreshold(Number(e.target.value) / 100)}
+              aria-label={t('graph.stats.strength')}
               style={{ width: 80, accentColor: 'var(--amber)', cursor: 'pointer' }}
             />
             <span style={{ minWidth: 28, textAlign: 'right' }}>{Math.round(strengthThreshold * 100)}%</span>
@@ -528,9 +534,9 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         )}
 
         <div style={{ marginLeft: graphMode === 'records' ? 8 : 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ marginRight: 4 }}>Limit:</span>
+          <span style={{ marginRight: 4 }}>{t('graph.stats.limit')}</span>
           {[100, 250, 500, 2000].map(n => {
-            const label = n === 2000 ? 'All' : String(n);
+            const label = n === 2000 ? t('graph.limit.all') : String(n);
             const active = nodeLimit === n;
             return (
               <button

@@ -16,6 +16,7 @@ import { api } from '@/services/api';
 import { CryptoLogs } from '../shared/CryptoLogs';
 import { formatBytes, formatDifficulty, formatRelativeTime, formatUptime, formatXmr, formatMoneroVersion, truncateId } from '../shared/crypto-formatters';
 import { UpdateCheck } from '../shared/UpdateCheck';
+import { useI18n } from '@/i18n';
 
 interface MoneroSync {
   height: number;
@@ -80,22 +81,24 @@ interface Props {
   onConfigure: () => void;
 }
 
-function formatFeePerByte(fee: number | null): string {
+function formatFeePerByte(fee: number | null, locale: string): string {
   if (fee == null) return 'N/A';
   // fee is in atomic units (piconero) per byte
   // Convert to nanonero/byte for readability: 1 nanonero = 1000 piconero
   const nano = fee / 1000;
-  if (nano >= 1) return `${nano.toFixed(1)} nano/B`;
+  if (nano >= 1) return `${nano.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nano/B`;
   return `${fee} pico/B`;
 }
 
-function formatPeerTime(seconds: number): string {
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
+function formatPeerTime(seconds: number, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (seconds < 3600) return t('crypto.duration.minutes', { count: Math.floor(seconds / 60) });
+  if (seconds < 86400) return t('crypto.duration.hours', { count: Math.floor(seconds / 3600) });
+  return t('crypto.duration.days', { count: Math.floor(seconds / 86400) });
 }
 
 export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
+  const { t, locale } = useI18n();
+  const formatCount = (value: number) => value.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US');
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
   const phase = svc?.phase ?? 'stopped';
@@ -134,16 +137,16 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
     <div className="crypto-card">
       <div className="crypto-card-header">
         <div className="crypto-card-dot" style={{ background: loading && !svc ? 'var(--text-muted)' : running ? (sync?.synced ? '#22c55e' : '#f59e0b') : installed ? '#f59e0b' : '#ef4444' }} />
-        <span className="crypto-card-title">Monero Node</span>
-        {!loading && <span className="crypto-card-phase">{phase}</span>}
+        <span className="crypto-card-title">{t('crypto.moneroNode')}</span>
+        {!loading && <span className="crypto-card-phase">{phase === 'stopped' ? t('crypto.status.stopped') : phase}</span>}
         <div style={{ flex: 1 }} />
         {!loading && installed && (
-          <button className="crypto-btn-sm" onClick={onConfigure} title="Settings"><Wrench size={12} /></button>
+          <button className="crypto-btn-sm" onClick={onConfigure} title={t('crypto.configure')} aria-label={t('crypto.configure')}><Wrench size={12} /></button>
         )}
         {!loading && installed && (running ? (
-          <button className="crypto-btn-sm" onClick={onStop} title="Stop"><Square size={12} /></button>
+          <button className="crypto-btn-sm" onClick={onStop} title={t('crypto.stop')} aria-label={t('crypto.stop')}><Square size={12} /></button>
         ) : (
-          <button className="crypto-btn-sm" onClick={onStart} title="Start">
+          <button className="crypto-btn-sm" onClick={onStart} title={t('crypto.start')} aria-label={t('crypto.start')}>
             <Play size={12} />
           </button>
         ))}
@@ -152,7 +155,7 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
       {!loading && !installed && (
         <div className="crypto-card-body">
           <button className="crypto-install-btn" onClick={onInstall}>
-            <Download size={14} /> Install Monero Node
+            <Download size={14} /> {t('crypto.installMonero')}
           </button>
         </div>
       )}
@@ -162,7 +165,7 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
           <div className="btc-ibd-banner">
             <div className="btc-ibd-title">
               <Loader2 size={13} className="spin" style={{ color: '#f97316' }} />
-              <span>Syncing blockchain</span>
+              <span>{t('crypto.syncingChain')}</span>
             </div>
             <div className="btc-ibd-pct" style={{ color: '#f97316' }}>{progress}%</div>
           </div>
@@ -170,11 +173,11 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
             <div className="crypto-progress-bar" style={{ width: `${Math.min(progress, 100)}%`, background: '#f97316' }} />
           </div>
           <div className="crypto-card-stats" style={{ marginTop: 10 }}>
-            <div><span className="dim">Height</span> {sync.height.toLocaleString()} / {sync.target_height.toLocaleString()}</div>
-            <div><span className="dim">Peers</span> in: {sync.peers_in} out: {sync.peers_out}</div>
-            <div><span className="dim">Pruned</span> {sync.pruned ? 'Yes' : 'No'}</div>
-            <div><span className="dim">Disk</span> {formatBytes(sync.size_on_disk_bytes)}</div>
-            <div><span className="dim">Up</span> {formatUptime(sync.uptime_seconds ?? svc?.uptime_seconds ?? null)}</div>
+            <div><span className="dim">{t('crypto.height')}</span> {formatCount(sync.height)} / {formatCount(sync.target_height)}</div>
+            <div><span className="dim">{t('crypto.peers')}</span> {t('crypto.inbound')}: {formatCount(sync.peers_in)} · {t('crypto.outbound')}: {formatCount(sync.peers_out)}</div>
+            <div><span className="dim">{t('crypto.prunedStatus')}</span> {sync.pruned ? t('crypto.yes') : t('crypto.no')}</div>
+            <div><span className="dim">{t('crypto.disk')}</span> {formatBytes(sync.size_on_disk_bytes, locale)}</div>
+            <div><span className="dim">{t('crypto.uptime')}</span> {formatUptime(sync.uptime_seconds ?? svc?.uptime_seconds ?? null, locale)}</div>
           </div>
           {svc?.ram_mb != null && (
             <div className="crypto-card-ram">
@@ -188,11 +191,11 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
       {sync && sync.synced && (
         <div className="crypto-card-body">
           <div className="crypto-card-stats">
-            <div><span className="dim">Height</span> {sync.height.toLocaleString()} / {sync.target_height.toLocaleString()}</div>
-            <div><span className="dim">Peers</span> in: {sync.peers_in} out: {sync.peers_out}</div>
-            <div><span className="dim">Pruned</span> {sync.pruned ? 'Yes' : 'No'}</div>
-            <div><span className="dim">Disk</span> {formatBytes(sync.size_on_disk_bytes)}</div>
-            <div><span className="dim">Up</span> {formatUptime(sync.uptime_seconds ?? svc?.uptime_seconds ?? null)}</div>
+            <div><span className="dim">{t('crypto.height')}</span> {formatCount(sync.height)} / {formatCount(sync.target_height)}</div>
+            <div><span className="dim">{t('crypto.peers')}</span> {t('crypto.inbound')}: {formatCount(sync.peers_in)} · {t('crypto.outbound')}: {formatCount(sync.peers_out)}</div>
+            <div><span className="dim">{t('crypto.prunedStatus')}</span> {sync.pruned ? t('crypto.yes') : t('crypto.no')}</div>
+            <div><span className="dim">{t('crypto.disk')}</span> {formatBytes(sync.size_on_disk_bytes, locale)}</div>
+            <div><span className="dim">{t('crypto.uptime')}</span> {formatUptime(sync.uptime_seconds ?? svc?.uptime_seconds ?? null, locale)}</div>
           </div>
           {svc?.ram_mb != null && (
             <div className="crypto-card-ram">
@@ -205,8 +208,8 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
       {/* ─── Extended Stats Summary ─── */}
       {hasExtended && (
         <div className="btc-ext-summary">
-          <span>Mempool: {ext.tx_pool_size} txs</span>
-          {sync?.synced && ext.fee_per_byte != null && <span>Fee: {formatFeePerByte(ext.fee_per_byte)}</span>}
+          <span>{t('crypto.mempool')}: {formatCount(ext.tx_pool_size)} {t('crypto.transactionsShort')}</span>
+          {sync?.synced && ext.fee_per_byte != null && <span>{t('crypto.fee')}: {formatFeePerByte(ext.fee_per_byte, locale === 'es' ? 'es-ES' : 'en-US')}</span>}
         </div>
       )}
 
@@ -215,27 +218,27 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
         <div className="btc-ext-section">
           <button className="btc-ext-toggle" onClick={() => { toggleSection('network'); if (!expandedSections.has('network') && !peers) fetchPeers(); }}>
             {expandedSections.has('network') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <Network size={12} /> Network
+            <Network size={12} /> {t('crypto.network')}
           </button>
           {expandedSections.has('network') && (
             <div className="btc-ext-content">
               <div className="crypto-card-stats">
-                {ext.version ? <div><span className="dim">Version</span> {formatMoneroVersion(ext.version)}</div> : null}
-                <div><span className="dim">In</span> {sync?.peers_in ?? 0}</div>
-                <div><span className="dim">Out</span> {sync?.peers_out ?? 0}</div>
-                {ext.white_peerlist_size > 0 && <div><span className="dim">Known (white)</span> {ext.white_peerlist_size.toLocaleString()}</div>}
-                {ext.grey_peerlist_size > 0 && <div><span className="dim">Known (grey)</span> {ext.grey_peerlist_size.toLocaleString()}</div>}
+                {ext.version ? <div><span className="dim">{t('crypto.version')}</span> {formatMoneroVersion(ext.version)}</div> : null}
+                <div><span className="dim">{t('crypto.inbound')}</span> {formatCount(sync?.peers_in ?? 0)}</div>
+                <div><span className="dim">{t('crypto.outbound')}</span> {formatCount(sync?.peers_out ?? 0)}</div>
+                {ext.white_peerlist_size > 0 && <div><span className="dim">{t('crypto.knownWhite')}</span> {formatCount(ext.white_peerlist_size)}</div>}
+                {ext.grey_peerlist_size > 0 && <div><span className="dim">{t('crypto.knownGrey')}</span> {formatCount(ext.grey_peerlist_size)}</div>}
               </div>
 
               {/* Peer list */}
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Peers {peers ? `(${peers.length})` : ''}
+                  {t('crypto.peers')} {peers ? `(${formatCount(peers.length)})` : ''}
                 </span>
-                <button className="btc-ext-action-btn" onClick={fetchPeers} title="Refresh"><RefreshCw size={11} /></button>
+                <button className="btc-ext-action-btn" onClick={fetchPeers} title={t('crypto.refresh')} aria-label={t('crypto.refresh')}><RefreshCw size={11} /></button>
               </div>
 
-              {peersLoading && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}><Loader2 size={11} className="spin" /> Loading...</div>}
+              {peersLoading && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}><Loader2 size={11} className="spin" /> {t('crypto.loadingEllipsis')}</div>}
 
               {peers && peers.length > 0 && (
                 <div className="btc-peer-list">
@@ -248,15 +251,15 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
                       }}>
                         {p.incoming ? 'in' : 'out'}
                       </span>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>h:{p.height.toLocaleString()}</span>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatPeerTime(p.live_time)}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('crypto.height')}: {formatCount(p.height)}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatPeerTime(p.live_time, t)}</span>
                       <span className="btc-peer-ver">{p.state}</span>
                     </div>
                   ))}
                 </div>
               )}
               {peers && peers.length === 0 && !peersLoading && (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>No peers connected</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t('crypto.noPeers')}</div>
               )}
             </div>
           )}
@@ -268,19 +271,19 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
         <div className="btc-ext-section">
           <button className="btc-ext-toggle" onClick={() => toggleSection('chain')}>
             {expandedSections.has('chain') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <BarChart3 size={12} /> Chain
+            <BarChart3 size={12} /> {t('crypto.chain')}
           </button>
           {expandedSections.has('chain') && (
             <div className="btc-ext-content">
               <div className="crypto-card-stats">
-                <div><span className="dim">Difficulty</span> {formatDifficulty(ext.difficulty)}</div>
-                <div><span className="dim">Total Txs</span> {ext.tx_count.toLocaleString()}</div>
-                <div><span className="dim">Last Block</span> {formatRelativeTime(ext.last_block_time)}</div>
-                <div><span className="dim">Block Txs</span> {ext.last_block_txs.toLocaleString()}</div>
-                <div><span className="dim">Block Size</span> {formatBytes(ext.last_block_size)}</div>
-                <div><span className="dim">Reward</span> {formatXmr(ext.last_block_reward)}</div>
-                {ext.last_block_hash && <div><span className="dim">Block Hash</span> {truncateId(ext.last_block_hash, 8)}</div>}
-                {ext.free_space > 0 && <div><span className="dim">Free Space</span> {formatBytes(ext.free_space)}</div>}
+            <div><span className="dim">{t('crypto.difficulty')}</span> {formatDifficulty(ext.difficulty, locale)}</div>
+                <div><span className="dim">{t('crypto.totalTransactions')}</span> {formatCount(ext.tx_count)}</div>
+                <div><span className="dim">{t('crypto.lastBlock')}</span> {formatRelativeTime(ext.last_block_time, locale)}</div>
+                <div><span className="dim">{t('crypto.blockTransactions')}</span> {formatCount(ext.last_block_txs)}</div>
+                <div><span className="dim">{t('crypto.blockSize')}</span> {formatBytes(ext.last_block_size, locale)}</div>
+                <div><span className="dim">{t('crypto.reward')}</span> {formatXmr(ext.last_block_reward, locale)}</div>
+                {ext.last_block_hash && <div><span className="dim">{t('crypto.blockHash')}</span> {truncateId(ext.last_block_hash, 8)}</div>}
+                {ext.free_space > 0 && <div><span className="dim">{t('crypto.freeSpace')}</span> {formatBytes(ext.free_space, locale)}</div>}
               </div>
             </div>
           )}
@@ -290,7 +293,7 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
       {loading && !svc && (
         <div className="crypto-card-body">
           <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Loader2 size={12} className="spin" /> Checking...
+            <Loader2 size={12} className="spin" /> {t('crypto.checking')}
           </span>
         </div>
       )}
@@ -298,7 +301,7 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
       {!loading && !sync && (running || starting) && (
         <div className="crypto-card-body">
           <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Loader2 size={12} className="spin" /> Starting up...
+            <Loader2 size={12} className="spin" /> {t('crypto.sync.startingUp')}
           </span>
           <CryptoLogs service="monerod" active />
         </div>
@@ -306,7 +309,7 @@ export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInsta
 
       {!loading && !running && !sync && installed && (
         <div className="crypto-card-body">
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Stopped</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('crypto.status.stopped')}</span>
         </div>
       )}
 

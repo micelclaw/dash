@@ -18,6 +18,7 @@ import { useMusicStore } from '@/stores/music.store';
 import { coverUrl } from '@/services/music.service';
 import { TrackList } from '../components/TrackList';
 import { AlbumCard } from '../components/AlbumCard';
+import { useI18n } from '@/i18n';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -31,12 +32,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function SearchResults() {
+  const { t } = useI18n();
   const results = useMusicStore((s) => s.searchResults);
   const loading = useMusicStore((s) => s.loadingSearch);
 
   if (!results) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Searching…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('music.searching')}</div>
     ) : null;
   }
 
@@ -47,8 +49,8 @@ export function SearchResults() {
     return (
       <EmptyState
         icon={SearchX}
-        title="No results"
-        description="Nothing in your library matches that search."
+        title={t('music.noResults')}
+        description={t('music.searchNoResults')}
       />
     );
   }
@@ -56,12 +58,12 @@ export function SearchResults() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 16 }}>
       {results.tracks.length > 0 && (
-        <Section title="Tracks">
+        <Section title={t('music.tracks')}>
           <TrackList tracks={results.tracks} />
         </Section>
       )}
       {results.albums.length > 0 && (
-        <Section title="Albums">
+        <Section title={t('music.albums')}>
           <MediaGrid>
             {results.albums.map((album) => (
               <AlbumCard key={album.id} album={album} />
@@ -70,7 +72,7 @@ export function SearchResults() {
         </Section>
       )}
       {results.artists.length > 0 && (
-        <Section title="Artists">
+        <Section title={t('music.artists')}>
           <MediaGrid>
             {results.artists.map((artist) => (
               <MediaCard

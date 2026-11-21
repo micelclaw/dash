@@ -20,6 +20,7 @@ import type { CatalogModel, ModelTestResult } from '../../types';
 import { PROVIDER_COLORS, isUserManagedProvider } from './constants';
 import type { ProviderEntry } from './types';
 import { CatalogRow } from './CatalogRow';
+import { useI18n } from '@/i18n';
 
 interface ProviderModelsViewProps {
   provider: string;
@@ -68,6 +69,7 @@ export function ProviderModelsView({
   onRemoveModel, queuedRemovals, inflightRemovals, onUndoRemove, onConfigure, onEditOllama, onEditCustomModel, onDeleteFromDisk, onOpenAddOllama,
   modelTests, testingModels, onTestModel,
 }: ProviderModelsViewProps) {
+  const { t } = useI18n();
   const color = PROVIDER_COLORS[provider] ?? 'var(--text-dim)';
   const ProviderIcon = getProviderIcon(provider);
   // Señal de auth del provider — viene del providers-overview vía entry.hasAuth
@@ -158,7 +160,7 @@ export function ProviderModelsView({
       {/* Back + provider header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <Button variant="outline" size="sm" onClick={onBack} className="text-[var(--text-dim)]">
-          <ArrowLeft size={12} /> All providers
+          <ArrowLeft size={12} /> {t('gateway.models.allProviders')}
         </Button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
@@ -176,7 +178,7 @@ export function ProviderModelsView({
               no colisionar con el "Available" de las filas, que desde el
               2026-07-13 significa "el modelo respondió al TEST real". */}
           {hasCredential
-            ? <StatusPill status="available" label="Authenticated" title="This provider has a usable credential" />
+            ? <StatusPill status="available" label={t('gateway.models.authenticated')} title={t('gateway.models.credentialHelp')} />
             : <StatusPill status="no_auth" />
           }
         </div>
@@ -185,7 +187,7 @@ export function ProviderModelsView({
       {/* Model list for selected provider */}
       {showLoading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-          <Loader2 size={14} className="spin" /> Discovering models from {provider}...
+          <Loader2 size={14} className="spin" /> {t('gateway.models.discoveringProvider', { provider })}
         </div>
       ) : showError ? (
         <div style={{
@@ -193,28 +195,28 @@ export function ProviderModelsView({
           borderRadius: 'var(--radius-md)',
         }}>
           <p style={{ color: '#ef4444', fontSize: '0.8125rem', fontWeight: 500, marginBottom: 4 }}>
-            Could not connect to this provider
+            {t('gateway.models.providerConnectionFailed')}
           </p>
           <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: 8 }}>{discoverError}</p>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.6875rem', lineHeight: 1.4 }}>
-            Check that the server is running and the Base URL is correct. You can delete this provider and recreate it with the right URL.
+            {t('gateway.models.providerConnectionHelp')}
           </p>
         </div>
       ) : showEmpty ? (
         <EmptyState
           icon={Cpu}
           title={search
-            ? 'No models match your search'
+            ? t('gateway.models.noSearchMatches')
             : discovering
-              ? 'No models available for this provider'
+              ? t('gateway.models.noProviderModels')
               : isUserManagedProvider(provider)
                 // Local server / custom endpoint: el hint de "carga un modelo /
                 // servidor arrancado" sí aplica.
-                ? 'No models available. For a local server (Ollama/LM Studio/vLLM) make sure at least one model is loaded and the Base URL is correct.'
+                ? t('gateway.models.localModelHelp')
                 // Provider cloud (google/nvidia/groq/…): si tras dar la key no
                 // salen modelos, casi siempre la key es inválida o el provider
                 // no devolvió catálogo.
-                : 'No models found for this provider. Check that the API key is valid — the provider returned no models.'}
+                : t('gateway.models.cloudModelHelp')}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -230,11 +232,11 @@ export function ProviderModelsView({
                 fontFamily: 'var(--font-display)',
                 textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
-                {unifiedList.length} model{unifiedList.length !== 1 ? 's' : ''}
+                {t('gateway.models.countModels', { count: unifiedList.length })}
               </span>
               {addedCount > 0 && (
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                  · {addedCount} added
+                  · {t('gateway.models.countAdded', { count: addedCount })}
                 </span>
               )}
               {discovering && <Loader2 size={11} className="spin" style={{ color: 'var(--text-dim)' }} />}
@@ -243,10 +245,10 @@ export function ProviderModelsView({
                   variant="outline"
                   size="sm"
                   onClick={onOpenAddOllama}
-                  title="Descargar y añadir un modelo local (tag de Ollama o repo GGUF de HuggingFace)"
+                  title={t('gateway.models.downloadLocalTitle')}
                   style={{ marginLeft: 'auto', borderColor: 'var(--amber)' }}
                 >
-                  <Plus size={13} /> Añadir
+                  <Plus size={13} /> {t('gateway.models.addModel')}
                 </Button>
               )}
             </div>

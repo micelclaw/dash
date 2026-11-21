@@ -8,6 +8,7 @@
 // Incluye crear asiento manual con cuadre en vivo, ver un asiento y su contra-asiento.
 
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { BookText, Library, ListTree, Landmark, Plus, ArrowLeftRight, FileText, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs } from '@/components/shared/Tabs';
@@ -23,19 +24,25 @@ interface Posting { id: string; account_id: string; account_code: string | null;
 export interface JournalEntry { id: string; date: string; description: string | null; source: string; document_id: string | null; document_number: string | null; reverses_entry_id: string | null; reversed_by_entry_id: string | null; total_debit: string; total_credit: string; postings: Posting[]; }
 interface Ledger { account: { id: string; code: string | null; name: string; type: string } | null; lines: { entry_id: string; posting_id: string; date: string; description: string | null; memo: string | null; debit: string | null; credit: string | null; running: string }[]; total_debit: string; total_credit: string; balance: string; }
 
-const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', document: 'Invoice', recurring: 'Recurring', reversal: 'Reversal', closing: 'Closing', opening: 'Opening', import: 'Imported', rule: 'Rule' };
-const SUBS = [
-  { id: 'diario', label: 'Journal', icon: BookText },
-  { id: 'mayor', label: 'General ledger', icon: Library },
-  { id: 'plan', label: 'Chart of accounts', icon: ListTree },
-  { id: 'reconcile', label: 'Reconciliation', icon: Landmark },
-];
+const SOURCE_LABEL: Record<string, string> = {
+  manual: 'finance.accounting.source.manual', document: 'finance.accounting.source.document',
+  recurring: 'finance.accounting.source.recurring', reversal: 'finance.accounting.source.reversal',
+  closing: 'finance.accounting.source.closing', opening: 'finance.accounting.source.opening',
+  import: 'finance.accounting.source.import', rule: 'finance.accounting.source.rule',
+};
 
 export function LibroArea({ initialLedgerAccountId, onOpenDocument, onOpenContact }: { initialLedgerAccountId?: string | null; onOpenDocument: (docId: string) => void; onOpenContact: (contactId: string) => void }) {
+  const { t } = useI18n();
   const [sub, setSub] = useState<string>(initialLedgerAccountId ? 'mayor' : 'diario');
+  const subs = [
+    { id: 'diario', label: t('finance.accounting.journal'), icon: BookText },
+    { id: 'mayor', label: t('finance.accounting.ledger'), icon: Library },
+    { id: 'plan', label: t('finance.accounting.chartOfAccounts'), icon: ListTree },
+    { id: 'reconcile', label: t('finance.accounting.reconciliation'), icon: Landmark },
+  ];
   return (
     <div className="flex flex-col gap-4">
-      <Tabs tabs={SUBS} activeTab={sub} onChange={setSub} variant="pills" />
+      <Tabs tabs={subs} activeTab={sub} onChange={setSub} variant="pills" />
       {sub === 'diario' && <DiarioTab onOpenDocument={onOpenDocument} onOpenContact={onOpenContact} />}
       {sub === 'mayor' && <MayorTab initialAccountId={initialLedgerAccountId ?? undefined} onOpenDocument={onOpenDocument} onOpenContact={onOpenContact} />}
       {sub === 'plan' && <PlanCuentasTab />}
@@ -46,6 +53,11 @@ export function LibroArea({ initialLedgerAccountId, onOpenDocument, onOpenContac
 
 // ─── Libro Diario ────────────────────────────────────────────────────────────
 function DiarioTab({ onOpenDocument, onOpenContact }: { onOpenDocument: (docId: string) => void; onOpenContact: (contactId: string) => void }) {
+  const { t } = useI18n();
+  const sourceLabel = (source: string) => {
+    const key = SOURCE_LABEL[source];
+    return key ? t(key) : source;
+  };
   const { range } = useFinancePeriod();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,26 +72,26 @@ function DiarioTab({ onOpenDocument, onOpenContact }: { onOpenDocument: (docId: 
   useEffect(() => { void reload(); }, [range.from, range.to]);
 
   const cols: DataColumn<JournalEntry>[] = [
-    { key: 'date', header: 'Date', sortable: true, width: '110px', render: (e) => <span className="text-[var(--text-dim)] whitespace-nowrap">{e.date}</span> },
-    { key: 'description', header: 'Description', sortable: true, render: (e) => <span>{e.description ?? (e.postings.map((p) => p.account_name).slice(0, 2).join(' · ') || '—')}</span> },
-    { key: 'source', header: 'Source', sortable: true, width: '110px', render: (e) => <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--surface)] text-[var(--text-dim)]">{SOURCE_LABEL[e.source] ?? e.source}</span> },
-    { key: 'doc', header: 'Document', width: '110px', render: (e) => e.document_number ? <span className="font-mono text-xs text-[var(--text-dim)]">{e.document_number}</span> : '—' },
-    { key: 'total_debit', header: 'Amount', align: 'right', sortable: true, sortValue: (e) => Number(e.total_debit), render: (e) => <Money v={e.total_debit} /> },
+    { key: 'date', header: t('finance.accounting.dateLabel'), sortable: true, width: '110px', render: (e) => <span className="text-[var(--text-dim)] whitespace-nowrap">{e.date}</span> },
+    { key: 'description', header: t('finance.accounting.description'), sortable: true, render: (e) => <span>{e.description ?? (e.postings.map((p) => p.account_name).slice(0, 2).join(' · ') || '—')}</span> },
+    { key: 'source', header: t('finance.accounting.source'), sortable: true, width: '110px', render: (e) => <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--surface)] text-[var(--text-dim)]">{sourceLabel(e.source)}</span> },
+    { key: 'doc', header: t('finance.accounting.document'), width: '110px', render: (e) => e.document_number ? <span className="font-mono text-xs text-[var(--text-dim)]">{e.document_number}</span> : '—' },
+    { key: 'total_debit', header: t('finance.amount'), align: 'right', sortable: true, sortValue: (e) => Number(e.total_debit), render: (e) => <Money v={e.total_debit} /> },
   ];
 
   return (
     <>
       <ReportTable
-        title={<>Journal <span className="text-[var(--text-dim)] font-normal">(entries)</span></>}
+        title={<>{t('finance.accounting.journal')} <span className="text-[var(--text-dim)] font-normal">{t('finance.accounting.entries')}</span></>}
         tip="diario"
         columns={cols} rows={entries} getRowKey={(e) => e.id} loading={loading}
         onRowClick={(e) => setDetail(e)} initialSort={{ key: 'date', dir: 'desc' }}
         search={(e) => `${e.date} ${e.description ?? ''} ${e.document_number ?? ''} ${e.postings.map((p) => p.account_name).join(' ')}`}
-        searchPlaceholder="Search entries…"
-        empty="No entries in this period."
-        right={<button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white hover:opacity-90"><Plus size={14} /> New entry</button>}
-        exportName="libro-diario" exportHeaders={['Date', 'Description', 'Source', 'Document', 'Debit', 'Credit']}
-        exportRow={(e) => [e.date, e.description ?? '', SOURCE_LABEL[e.source] ?? e.source, e.document_number ?? '', e.total_debit, e.total_credit]}
+        searchPlaceholder={t('finance.accounting.searchEntries')}
+        empty={t('finance.accounting.noEntries')}
+        right={<button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white hover:opacity-90"><Plus size={14} /> {t('finance.accounting.newEntry')}</button>}
+        exportName="libro-diario" exportHeaders={[t('finance.accounting.dateLabel'), t('finance.accounting.description'), t('finance.accounting.source'), t('finance.accounting.document'), t('finance.accounting.debit'), t('finance.accounting.credit')]}
+        exportRow={(e) => [e.date, e.description ?? '', sourceLabel(e.source), e.document_number ?? '', e.total_debit, e.total_credit]}
         serverReport="journal"
       />
       {detail && <AsientoDetalle entry={detail} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); void reload(); }} onOpenDocument={onOpenDocument} onOpenContact={onOpenContact} />}
@@ -91,26 +103,29 @@ function DiarioTab({ onOpenDocument, onOpenContact }: { onOpenDocument: (docId: 
 // ─── Detalle de un asiento ───────────────────────────────────────────────────
 // Exportado: ContabilidadLens lo abre también por deep-link (?entry=<id>, chips del chat).
 export function AsientoDetalle({ entry, onClose, onChanged, onOpenDocument, onOpenContact }: { entry: JournalEntry; onClose: () => void; onChanged: () => void; onOpenDocument: (docId: string) => void; onOpenContact: (contactId: string) => void }) {
+  const { t } = useI18n();
+  const sourceKey = SOURCE_LABEL[entry.source];
+  const sourceLabel = sourceKey ? t(sourceKey) : entry.source;
   const [busy, setBusy] = useState(false);
   const cuadra = Math.abs(Number(entry.total_debit) - Number(entry.total_credit)) < 0.01;
   // Cierra la cadena → Contacto: primer posting con contacto (la pata AR/AP de cliente/proveedor).
   const contactId = entry.postings.find((p) => p.contact_id)?.contact_id ?? null;
   const reverse = async () => {
-    if (!window.confirm('¿Crear el contra-asiento que anula este asiento? Es la forma correcta de corregir (no se borra el original).')) return;
+    if (!window.confirm(t('finance.accounting.reverseConfirm'))) return;
     setBusy(true);
-    try { await api.post(`/finance/journal-entries/${entry.id}/reverse`, {}); toast.success('Contra-asiento creado'); onChanged(); }
-    catch { toast.error('Couldn\'t create the reversing entry'); } finally { setBusy(false); }
+    try { await api.post(`/finance/journal-entries/${entry.id}/reverse`, {}); toast.success(t('finance.accounting.reverseCreated')); onChanged(); }
+    catch { toast.error(t('finance.accounting.reverseFailed')); } finally { setBusy(false); }
   };
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">Entry <Tip k="asiento" /> <span className="text-[var(--text-dim)] font-normal text-sm">· {entry.date} · {SOURCE_LABEL[entry.source] ?? entry.source}</span></DialogTitle>
+          <DialogTitle className="flex items-center gap-2 text-base">{t('finance.accounting.entry')} <Tip k="asiento" /> <span className="text-[var(--text-dim)] font-normal text-sm">· {entry.date} · {sourceLabel}</span></DialogTitle>
         </DialogHeader>
         <div className="text-sm text-[var(--text)]">{entry.description ?? '—'}</div>
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead><tr className="text-[var(--text-dim)] bg-[var(--surface)]"><th className="text-left font-medium px-3 py-1.5">Account</th><th className="text-right font-medium px-3 py-1.5">Debit</th><th className="text-right font-medium px-3 py-1.5">Credit</th></tr></thead>
+            <thead><tr className="text-[var(--text-dim)] bg-[var(--surface)]"><th className="text-left font-medium px-3 py-1.5">{t('finance.accounting.account')}</th><th className="text-right font-medium px-3 py-1.5">{t('finance.accounting.debit')}</th><th className="text-right font-medium px-3 py-1.5">{t('finance.accounting.credit')}</th></tr></thead>
             <tbody>
               {entry.postings.map((p) => (
                 <tr key={p.id} className="border-t border-[var(--border)]">
@@ -120,17 +135,17 @@ export function AsientoDetalle({ entry, onClose, onChanged, onOpenDocument, onOp
                 </tr>
               ))}
             </tbody>
-            <tfoot><tr className="border-t border-[var(--border)] font-semibold bg-[var(--surface)]"><td className="px-3 py-1.5">Totals · {cuadra ? <span className="text-[var(--green)]">balances ✓</span> : <span className="text-[var(--red)]">out of balance!</span>}</td><td className="px-3 py-1.5 text-right"><Money v={entry.total_debit} /></td><td className="px-3 py-1.5 text-right"><Money v={entry.total_credit} /></td></tr></tfoot>
+            <tfoot><tr className="border-t border-[var(--border)] font-semibold bg-[var(--surface)]"><td className="px-3 py-1.5">{t('finance.accounting.totals')} · {cuadra ? <span className="text-[var(--green)]">{t('finance.accounting.balances')}</span> : <span className="text-[var(--red)]">{t('finance.accounting.outOfBalance')}</span>}</td><td className="px-3 py-1.5 text-right"><Money v={entry.total_debit} /></td><td className="px-3 py-1.5 text-right"><Money v={entry.total_credit} /></td></tr></tfoot>
           </table>
         </div>
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
           <div className="flex gap-2">
-            {entry.document_id && <button type="button" onClick={() => { onOpenDocument(entry.document_id!); onClose(); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><FileText size={13} /> Ver factura {entry.document_number ?? ''}</button>}
-            {contactId && <button type="button" onClick={() => { onOpenContact(contactId); onClose(); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><Users size={13} /> Ver contacto</button>}
-            {entry.reversed_by_entry_id ? <span className="text-xs text-[var(--amber)] self-center">Already reversed</span>
-              : entry.source !== 'reversal' && <button type="button" disabled={busy} onClick={() => void reverse()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><ArrowLeftRight size={13} /> Contra-asiento</button>}
+            {entry.document_id && <button type="button" onClick={() => { onOpenDocument(entry.document_id!); onClose(); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><FileText size={13} /> {t('finance.accounting.viewInvoice', { number: entry.document_number ?? '' })}</button>}
+            {contactId && <button type="button" onClick={() => { onOpenContact(contactId); onClose(); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><Users size={13} /> {t('finance.accounting.viewContact')}</button>}
+            {entry.reversed_by_entry_id ? <span className="text-xs text-[var(--amber)] self-center">{t('finance.accounting.alreadyReversed')}</span>
+              : entry.source !== 'reversal' && <button type="button" disabled={busy} onClick={() => void reverse()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><ArrowLeftRight size={13} /> {t('finance.accounting.reverse')}</button>}
           </div>
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--surface)] text-[var(--text)]">Close</button>
+          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--surface)] text-[var(--text)]">{t('finance.accounting.close')}</button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -142,6 +157,7 @@ interface DraftLine { accountId: string; debit: string; credit: string; memo: st
 const emptyLine = (): DraftLine => ({ accountId: '', debit: '', credit: '', memo: '' });
 
 function NuevoAsientoDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { t } = useI18n();
   const { accounts } = useAccounts(true);
   const [date, setDate] = useState(todayISO());
   const [description, setDescription] = useState('');
@@ -161,26 +177,26 @@ function NuevoAsientoDialog({ onClose, onCreated }: { onClose: () => void; onCre
     try {
       const postings = validLines.map((l) => ({ account_id: l.accountId, ...(num(l.debit) > 0 ? { debit: num(l.debit) } : { credit: num(l.credit) }), memo: l.memo || null }));
       await api.post('/finance/journal-entries', { date, description: description || null, postings });
-      toast.success('Asiento creado'); onCreated();
+      toast.success(t('finance.accounting.entryCreated')); onCreated();
     } catch (e: unknown) {
       const code = (e as { code?: string; error?: { code?: string } })?.error?.code ?? (e as { code?: string })?.code;
-      toast.error(code === 'PERIOD_CLOSED' ? 'The year for that date is closed' : code === 'UNBALANCED' ? 'El asiento no cuadra' : 'Couldn\'t create the entry');
+      toast.error(code === 'PERIOD_CLOSED' ? t('finance.accounting.closedYear') : code === 'UNBALANCED' ? t('finance.accounting.unbalancedEntry') : t('finance.accounting.createEntryFailed'));
     } finally { setBusy(false); }
   };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl">
-        <DialogHeader><DialogTitle className="flex items-center gap-2 text-base">New manual entry <Tip k="cuadre" /></DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="flex items-center gap-2 text-base">{t('finance.accounting.newManualEntry')} <Tip k="cuadre" /></DialogTitle></DialogHeader>
         <div className="flex gap-3 flex-wrap">
-          <label className="text-xs text-[var(--text-dim)] flex flex-col gap-1">Fecha
+          <label className="text-xs text-[var(--text-dim)] flex flex-col gap-1">{t('finance.accounting.dateLabel')}
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="px-2 py-1.5 text-sm rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]" style={{ colorScheme: 'dark' }} /></label>
-          <label className="text-xs text-[var(--text-dim)] flex flex-col gap-1 flex-1">Concepto
-            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Entry description" className="px-2 py-1.5 text-sm rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]" /></label>
+          <label className="text-xs text-[var(--text-dim)] flex flex-col gap-1 flex-1">{t('finance.accounting.concept')}
+            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('finance.accounting.entryDescription')} className="px-2 py-1.5 text-sm rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]" /></label>
         </div>
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] overflow-visible">
           <table className="w-full text-[13px]">
-            <thead><tr className="text-[var(--text-dim)] bg-[var(--surface)]"><th className="text-left font-medium px-2 py-1.5 w-[40%]">Account</th><th className="text-right font-medium px-2 py-1.5">Debit</th><th className="text-right font-medium px-2 py-1.5">Credit</th><th className="text-left font-medium px-2 py-1.5">Description</th><th className="w-8" /></tr></thead>
+            <thead><tr className="text-[var(--text-dim)] bg-[var(--surface)]"><th className="text-left font-medium px-2 py-1.5 w-[40%]">{t('finance.accounting.account')}</th><th className="text-right font-medium px-2 py-1.5">{t('finance.accounting.debit')}</th><th className="text-right font-medium px-2 py-1.5">{t('finance.accounting.credit')}</th><th className="text-left font-medium px-2 py-1.5">{t('finance.accounting.description')}</th><th className="w-8" /></tr></thead>
             <tbody>
               {lines.map((l, i) => (
                 <tr key={i} className="border-t border-[var(--border)]">
@@ -188,23 +204,23 @@ function NuevoAsientoDialog({ onClose, onCreated }: { onClose: () => void; onCre
                   <td className="px-2 py-1.5"><input inputMode="decimal" value={l.debit} onChange={(e) => setLine(i, { debit: e.target.value, credit: '' })} className="w-24 px-2 py-1.5 text-sm text-right rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] font-mono" placeholder="0,00" /></td>
                   <td className="px-2 py-1.5"><input inputMode="decimal" value={l.credit} onChange={(e) => setLine(i, { credit: e.target.value, debit: '' })} className="w-24 px-2 py-1.5 text-sm text-right rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] font-mono" placeholder="0,00" /></td>
                   <td className="px-2 py-1.5"><input value={l.memo} onChange={(e) => setLine(i, { memo: e.target.value })} className="w-full px-2 py-1.5 text-sm rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]" placeholder="(opcional)" /></td>
-                  <td className="px-1 text-center">{lines.length > 2 && <button type="button" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} className="text-[var(--text-dim)] hover:text-[var(--red)]"><Trash2 size={14} /></button>}</td>
+                  <td className="px-1 text-center">{lines.length > 2 && <button type="button" aria-label={t('finance.accounting.removeLine')} title={t('finance.accounting.removeLine')} onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} className="text-[var(--text-dim)] hover:text-[var(--red)]"><Trash2 size={14} /></button>}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-[var(--border)] font-semibold bg-[var(--surface)]">
-                <td className="px-2 py-1.5"><button type="button" onClick={() => setLines((ls) => [...ls, emptyLine()])} className="inline-flex items-center gap-1 text-xs text-[var(--mod-finance)] hover:underline"><Plus size={13} /> Añadir línea</button></td>
+                <td className="px-2 py-1.5"><button type="button" onClick={() => setLines((ls) => [...ls, emptyLine()])} className="inline-flex items-center gap-1 text-xs text-[var(--mod-finance)] hover:underline"><Plus size={13} /> {t('finance.accounting.addAnotherLine')}</button></td>
                 <td className="px-2 py-1.5 text-right font-mono">{fmt(sumD)}</td>
                 <td className="px-2 py-1.5 text-right font-mono">{fmt(sumC)}</td>
-                <td className="px-2 py-1.5 text-xs" colSpan={2} style={{ color: Math.abs(diff) < 0.005 ? 'var(--green)' : 'var(--red)' }}>{Math.abs(diff) < 0.005 ? 'balances ✓' : `descuadre ${fmt(diff)}`}</td>
+                <td className="px-2 py-1.5 text-xs" colSpan={2} style={{ color: Math.abs(diff) < 0.005 ? 'var(--green)' : 'var(--red)' }}>{Math.abs(diff) < 0.005 ? t('finance.accounting.balancedAmount') : t('finance.accounting.unbalancedAmount', { amount: fmt(diff) })}</td>
               </tr>
             </tfoot>
           </table>
         </div>
         <DialogFooter>
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--surface)] text-[var(--text)]">Cancel</button>
-          <button type="button" disabled={!canSave || busy} onClick={() => void save()} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none text-white disabled:opacity-50" style={{ background: !canSave || busy ? 'var(--surface)' : 'var(--mod-finance)', color: !canSave || busy ? 'var(--text-dim)' : '#fff' }}>{busy ? 'Guardando…' : 'Save entry'}</button>
+          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--surface)] text-[var(--text)]">{t('finance.cancel')}</button>
+          <button type="button" disabled={!canSave || busy} onClick={() => void save()} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none text-white disabled:opacity-50" style={{ background: !canSave || busy ? 'var(--surface)' : 'var(--mod-finance)', color: !canSave || busy ? 'var(--text-dim)' : '#fff' }}>{busy ? t('finance.saving') : t('finance.accounting.saveEntry')}</button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -213,6 +229,7 @@ function NuevoAsientoDialog({ onClose, onCreated }: { onClose: () => void; onCre
 
 // ─── Libro Mayor ─────────────────────────────────────────────────────────────
 function MayorTab({ initialAccountId, onOpenDocument, onOpenContact }: { initialAccountId?: string; onOpenDocument: (docId: string) => void; onOpenContact: (contactId: string) => void }) {
+  const { t } = useI18n();
   const { range } = useFinancePeriod();
   const { accounts } = useAccounts(true);
   const [accountId, setAccountId] = useState(initialAccountId ?? '');
@@ -231,30 +248,30 @@ function MayorTab({ initialAccountId, onOpenDocument, onOpenContact }: { initial
   // Mayor → Asiento: clic en un movimiento abre el asiento completo (lo trae por id).
   const openAsiento = async (entryId: string) => {
     try { setDetail((await api.get<{ data: JournalEntry }>(`/finance/journal-entries/${entryId}`)).data); }
-    catch { toast.error('Couldn\'t open the entry'); }
+    catch { toast.error(t('finance.accounting.openEntryFailed')); }
   };
 
   const cols: DataColumn<Ledger['lines'][number]>[] = [
-    { key: 'date', header: 'Date', sortable: true, width: '110px', render: (l) => <span className="text-[var(--text-dim)] whitespace-nowrap">{l.date}</span> },
-    { key: 'description', header: 'Description', render: (l) => <span>{l.description ?? l.memo ?? '—'}</span> },
-    { key: 'debit', header: 'Debit', align: 'right', render: (l) => l.debit != null ? <Money v={l.debit} /> : '' },
-    { key: 'credit', header: 'Credit', align: 'right', render: (l) => l.credit != null ? <Money v={l.credit} /> : '' },
-    { key: 'running', header: 'Balance', align: 'right', render: (l) => <Money v={l.running} color /> },
+    { key: 'date', header: t('finance.accounting.dateLabel'), sortable: true, width: '110px', render: (l) => <span className="text-[var(--text-dim)] whitespace-nowrap">{l.date}</span> },
+    { key: 'description', header: t('finance.accounting.description'), render: (l) => <span>{l.description ?? l.memo ?? '—'}</span> },
+    { key: 'debit', header: t('finance.accounting.debit'), align: 'right', render: (l) => l.debit != null ? <Money v={l.debit} /> : '' },
+    { key: 'credit', header: t('finance.accounting.credit'), align: 'right', render: (l) => l.credit != null ? <Money v={l.credit} /> : '' },
+    { key: 'running', header: t('finance.accounting.balance'), align: 'right', render: (l) => <Money v={l.running} color /> },
   ];
 
   return (
     <>
       <ReportTable
-        title={<>General ledger <span className="text-[var(--text-dim)] font-normal">{ledger?.account ? `· ${ledger.account.code ?? ''} ${ledger.account.name}` : ''}</span></>}
+        title={<>{t('finance.accounting.ledger')} <span className="text-[var(--text-dim)] font-normal">{ledger?.account ? `· ${ledger.account.code ?? ''} ${ledger.account.name}` : ''}</span></>}
         tip="mayor"
         columns={cols} rows={ledger?.lines ?? []} getRowKey={(l) => l.posting_id} loading={loading}
         onRowClick={(l) => void openAsiento(l.entry_id)}
-        empty={accountId ? 'No movements in this period.' : 'Elige una cuenta para ver su Libro Mayor.'}
-        right={<div className="w-64"><AccountSelect accounts={accounts} value={accountId} onChange={setAccountId} placeholder="Pick an account…" /></div>}
-        exportName="libro-mayor" exportHeaders={['Date', 'Description', 'Debit', 'Credit', 'Balance']}
+        empty={accountId ? t('finance.accounting.noMovements') : t('finance.accounting.chooseAccount')}
+        right={<div className="w-64"><AccountSelect accounts={accounts} value={accountId} onChange={setAccountId} placeholder={t('finance.accounting.pickAccount')} /></div>}
+        exportName="libro-mayor" exportHeaders={[t('finance.accounting.dateLabel'), t('finance.accounting.description'), t('finance.accounting.debit'), t('finance.accounting.credit'), t('finance.accounting.balance')]}
         exportRow={(l) => [l.date, l.description ?? l.memo ?? '', l.debit ?? '', l.credit ?? '', l.running]}
         serverReport={accountId ? 'ledger' : undefined} serverExtra={{ accountId }}
-        footer={ledger?.account && <div className="flex items-center justify-between px-3 py-2.5 border-t border-[var(--border)] text-[13px] font-semibold"><span>Account balance</span><Money v={ledger.balance} color /></div>}
+        footer={ledger?.account && <div className="flex items-center justify-between px-3 py-2.5 border-t border-[var(--border)] text-[13px] font-semibold"><span>{t('finance.accounting.accountBalance')}</span><Money v={ledger.balance} color /></div>}
       />
       {detail && <AsientoDetalle entry={detail} onClose={() => setDetail(null)} onChanged={() => setDetail(null)} onOpenDocument={onOpenDocument} onOpenContact={onOpenContact} />}
     </>
@@ -263,39 +280,40 @@ function MayorTab({ initialAccountId, onOpenDocument, onOpenContact }: { initial
 
 // ─── Plan de cuentas (PGC, gestionable) ──────────────────────────────────────
 function PlanCuentasTab() {
+  const { t } = useI18n();
   const { accounts, loading, reload } = useAccounts(true);
   const [edit, setEdit] = useState<Account | null>(null);
   const [creating, setCreating] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState(false);
 
   const cols: DataColumn<Account>[] = [
-    { key: 'code', header: 'Code', sortable: true, width: '90px', render: (a) => <span className="font-mono text-[var(--text-dim)]">{a.code ?? '—'}</span> },
-    { key: 'name', header: 'Name', sortable: true, render: (a) => <span>{a.name}{!a.is_postable && <span className="ml-2 text-[10px] uppercase tracking-wide text-[var(--text-dim)] border border-[var(--border)] rounded px-1">grouping</span>}</span> },
-    { key: 'group_code', header: 'Group', sortable: true, width: '180px', render: (a) => <span className="text-xs text-[var(--text-dim)]">{a.group_code ? PGC_GROUPS[a.group_code]?.replace(/^Grupo \d · /, `${a.group_code} · `) ?? a.group_code : '—'}</span> },
-    { key: 'type', header: 'Type', sortable: true, width: '100px', render: (a) => <span className="text-xs">{ACCOUNT_TYPE_LABEL[a.type] ?? a.type}</span> },
-    { key: 'balance', header: 'Balance', align: 'right', sortable: true, sortValue: (a) => Number(a.balance ?? 0), render: (a) => <Money v={a.balance ?? '0'} color /> },
+    { key: 'code', header: t('finance.accounting.accountCode'), sortable: true, width: '90px', render: (a) => <span className="font-mono text-[var(--text-dim)]">{a.code ?? '—'}</span> },
+    { key: 'name', header: t('finance.accounting.name'), sortable: true, render: (a) => <span>{a.name}{!a.is_postable && <span className="ml-2 text-[10px] uppercase tracking-wide text-[var(--text-dim)] border border-[var(--border)] rounded px-1">{t('finance.accounting.grouping')}</span>}</span> },
+    { key: 'group_code', header: t('finance.accounting.group'), sortable: true, width: '180px', render: (a) => <span className="text-xs text-[var(--text-dim)]">{a.group_code ? t(PGC_GROUPS[a.group_code] ?? a.group_code) : '—'}</span> },
+    { key: 'type', header: t('finance.accounting.type'), sortable: true, width: '100px', render: (a) => <span className="text-xs">{t(ACCOUNT_TYPE_LABEL[a.type] ?? a.type)}</span> },
+    { key: 'balance', header: t('finance.accounting.balance'), align: 'right', sortable: true, sortValue: (a) => Number(a.balance ?? 0), render: (a) => <Money v={a.balance ?? '0'} color /> },
   ];
 
   const loadStandard = async () => {
-    if (!window.confirm('¿Cargar el plan contable estándar (PGC PYMES de España)? Añade las cuentas que falten; no toca las existentes.')) return;
+    if (!window.confirm(t('finance.accounting.loadPlanConfirm'))) return;
     setLoadingPlan(true);
-    try { const r = (await api.post<{ data: { created: number } }>('/finance/accounts/load-standard-plan', {})).data; toast.success(`Plan cargado · ${r.created} cuentas nuevas`); await reload(); }
-    catch { toast.error('Couldn\'t load the chart of accounts'); } finally { setLoadingPlan(false); }
+    try { const r = (await api.post<{ data: { created: number } }>('/finance/accounts/load-standard-plan', {})).data; toast.success(t('finance.accounting.planLoaded', { count: r.created })); await reload(); }
+    catch { toast.error(t('finance.accounting.planLoadFailed')); } finally { setLoadingPlan(false); }
   };
 
   return (
     <>
       <ReportTable
-        title={<>Chart of accounts <span className="text-[var(--text-dim)] font-normal">(PGC)</span></>}
+        title={<>{t('finance.accounting.chartOfAccounts')} <span className="text-[var(--text-dim)] font-normal">(PGC)</span></>}
         tip="postable"
         columns={cols} rows={accounts} getRowKey={(a) => a.id} loading={loading} onRowClick={(a) => setEdit(a)}
-        initialSort={{ key: 'code', dir: 'asc' }} search={(a) => `${a.code ?? ''} ${a.name}`} searchPlaceholder="Search accounts…"
+        initialSort={{ key: 'code', dir: 'asc' }} search={(a) => `${a.code ?? ''} ${a.name}`} searchPlaceholder={t('finance.accounting.searchAccounts')}
         right={<div className="flex gap-2">
-          <button type="button" disabled={loadingPlan} onClick={() => void loadStandard()} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><ListTree size={14} /> Load standard chart</button>
-          <button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white"><Plus size={14} /> Nueva cuenta</button>
+          <button type="button" disabled={loadingPlan} onClick={() => void loadStandard()} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] bg-[var(--card)] text-[var(--text)] hover:bg-[var(--surface)]"><ListTree size={14} /> {t('finance.accounting.loadStandardPlan')}</button>
+          <button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white"><Plus size={14} /> {t('finance.account.new')}</button>
         </div>}
-        exportName="plan-de-cuentas" exportHeaders={['Codigo', 'Name', 'Group', 'Type', 'Postable', 'Balance']}
-        exportRow={(a) => [a.code ?? '', a.name, a.group_code ?? '', ACCOUNT_TYPE_LABEL[a.type] ?? a.type, a.is_postable ? 'Si' : 'No', a.balance ?? '0']}
+        exportName="plan-de-cuentas" exportHeaders={[t('finance.accounting.accountCode'), t('finance.accounting.name'), t('finance.accounting.group'), t('finance.accounting.type'), t('finance.accounting.postable'), t('finance.accounting.balance')]}
+        exportRow={(a) => [a.code ?? '', a.name, a.group_code ?? '', t(ACCOUNT_TYPE_LABEL[a.type] ?? a.type), a.is_postable ? t('finance.accounting.yes') : t('finance.accounting.no'), a.balance ?? '0']}
         serverReport="accounts"
       />
       {(edit || creating) && <CuentaContableDialog account={edit} accounts={accounts} onClose={() => { setEdit(null); setCreating(false); }} onSaved={() => { setEdit(null); setCreating(false); void reload(); }} />}
@@ -304,10 +322,9 @@ function PlanCuentasTab() {
 }
 
 // ─── Diálogo de cuenta COMPLETO (paridad UI↔datos) ───────────────────────────
-const TYPES: { id: string; label: string }[] = [
-  { id: 'asset', label: 'Asset' }, { id: 'liability', label: 'Liability' }, { id: 'equity', label: 'Net worth' }, { id: 'income', label: 'Income' }, { id: 'expense', label: 'Expense' },
-];
+const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'];
 function CuentaContableDialog({ account, accounts, onClose, onSaved }: { account: Account | null; accounts: Account[]; onClose: () => void; onSaved: () => void }) {
+  const { t } = useI18n();
   const editing = !!account;
   const [name, setName] = useState(account?.name ?? '');
   const [code, setCode] = useState(account?.code ?? '');
@@ -321,9 +338,10 @@ function CuentaContableDialog({ account, accounts, onClose, onSaved }: { account
   const [busy, setBusy] = useState(false);
   const plan = useStandardPlan();
   const groupCode = code ? code.slice(0, 1) : '';
+  const groupKey = groupCode ? PGC_GROUPS[groupCode] : undefined;
 
   const save = async () => {
-    if (!name.trim()) { toast.error('El nombre es obligatorio'); return; }
+    if (!name.trim()) { toast.error(t('finance.accounting.accountNameRequired')); return; }
     setBusy(true);
     const body = {
       name: name.trim(), type, subtype: subtype || null, currency, code: code || null, is_postable: isPostable, is_active: isActive,
@@ -332,14 +350,14 @@ function CuentaContableDialog({ account, accounts, onClose, onSaved }: { account
     try {
       if (editing) await api.patch(`/finance/accounts/${account!.id}`, body);
       else await api.post('/finance/accounts', body);
-      toast.success(editing ? 'Account updated' : 'Account created'); onSaved();
-    } catch { toast.error('Couldn\'t save the account'); } finally { setBusy(false); }
+      toast.success(t(editing ? 'finance.accounting.accountUpdated' : 'finance.accounting.accountCreated')); onSaved();
+    } catch { toast.error(t('finance.accounting.accountSaveFailed')); } finally { setBusy(false); }
   };
   const del = async () => {
-    if (!account || !window.confirm('Delete this account? (it\'s hidden, not removed from history)')) return;
+    if (!account || !window.confirm(t('finance.accounting.deleteAccountConfirm'))) return;
     setBusy(true);
-    try { await api.delete(`/finance/accounts/${account.id}`); toast.success('Account deleted'); onSaved(); }
-    catch { toast.error('Couldn\'t delete'); } finally { setBusy(false); }
+    try { await api.delete(`/finance/accounts/${account.id}`); toast.success(t('finance.accounting.accountDeleted')); onSaved(); }
+    catch { toast.error(t('finance.accounting.accountDeleteFailed')); } finally { setBusy(false); }
   };
 
   const fld = 'px-2 py-1.5 text-sm rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] w-full';
@@ -347,32 +365,32 @@ function CuentaContableDialog({ account, accounts, onClose, onSaved }: { account
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle className="text-base">{editing ? 'Editar cuenta' : 'Nueva cuenta contable'}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="text-base">{t(editing ? 'finance.accounting.editAccount' : 'finance.accounting.newAccount')}</DialogTitle></DialogHeader>
         {!editing && (
           <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-3 flex flex-col gap-1.5">
-            <div className="text-xs font-semibold text-[var(--text)]">Start from a standard chart account <span className="font-normal text-[var(--text-dim)]">(opcional)</span></div>
+            <div className="text-xs font-semibold text-[var(--text)]">{t('finance.accounting.startFromPlan')} <span className="font-normal text-[var(--text-dim)]">({t('finance.accounting.optional')})</span></div>
             <StandardAccountPicker plan={plan} onPick={(a) => { setName(a.name); setCode(a.code); setType(a.type); setIsPostable(a.is_postable); }} />
-            <div className="text-[11px] text-[var(--text-dim)]">Elige una de las ~80 cuentas del PGC para rellenar los campos, o créala desde cero abajo. No hace falta tenerlas todas: solo creas las que uses.</div>
+            <div className="text-[11px] text-[var(--text-dim)]">{t('finance.accounting.startFromPlanHelp')}</div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <label className={`${lab} col-span-2`}>Name<input value={name} onChange={(e) => setName(e.target.value)} className={fld} placeholder="Ej. Banco principal" /></label>
-          <label className={lab}>Chart code<input value={code} onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ''))} className={`${fld} font-mono`} placeholder="572" /></label>
-          <label className={lab}>Group<input value={groupCode ? `${groupCode} · ${PGC_GROUPS[groupCode]?.replace(/^Grupo \d · /, '') ?? ''}` : ''} disabled className={`${fld} opacity-60`} placeholder="(derived from the code)" /></label>
-          <label className={lab}>Type<select value={type} onChange={(e) => setType(e.target.value)} className={fld}>{TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
-          <label className={lab}>Subtype<input value={subtype} onChange={(e) => setSubtype(e.target.value)} className={fld} placeholder="bank, cash, receivable…" /></label>
-          <label className={lab}>Currency<input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))} className={`${fld} font-mono`} /></label>
-          <label className={lab}>IBAN / reference<input value={iban} onChange={(e) => setIban(e.target.value)} className={`${fld} font-mono`} placeholder="ES.." /></label>
-          <label className={`${lab} col-span-2`}>Cuenta padre (jerarquía)
-            <AccountSelect accounts={accounts.filter((a) => a.id !== account?.id)} value={parentId} onChange={setParentId} placeholder="(no parent account)" /></label>
-          <label className="flex items-center gap-2 text-sm text-[var(--text)] col-span-2"><input type="checkbox" checked={isPostable} onChange={(e) => setIsPostable(e.target.checked)} /> Admite apuntes directos (postable) <Tip k="postable" /></label>
-          <label className="flex items-center gap-2 text-sm text-[var(--text)] col-span-2"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Activa</label>
+          <label className={`${lab} col-span-2`}>{t('finance.accounting.accountName')}<input value={name} onChange={(e) => setName(e.target.value)} className={fld} placeholder={t('finance.accounting.exampleAccountName')} /></label>
+          <label className={lab}>{t('finance.accounting.accountCode')}<input value={code} onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ''))} className={`${fld} font-mono`} placeholder="572" /></label>
+          <label className={lab}>{t('finance.accounting.group')}<input value={groupKey ? t(groupKey) : ''} disabled className={`${fld} opacity-60`} placeholder={t('finance.accounting.derivedGroup')} /></label>
+          <label className={lab}>{t('finance.accounting.type')}<select value={type} onChange={(e) => setType(e.target.value)} className={fld}>{TYPES.map((id) => <option key={id} value={id}>{t(`finance.accounting.type.${id}`)}</option>)}</select></label>
+          <label className={lab}>{t('finance.accounting.subtype')}<input value={subtype} onChange={(e) => setSubtype(e.target.value)} className={fld} placeholder="bank, cash, receivable…" /></label>
+          <label className={lab}>{t('finance.accounting.currency')}<input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase().slice(0, 3))} className={`${fld} font-mono`} /></label>
+          <label className={lab}>IBAN / {t('finance.accounting.reference')}<input value={iban} onChange={(e) => setIban(e.target.value)} className={`${fld} font-mono`} placeholder="ES.." /></label>
+          <label className={`${lab} col-span-2`}>{t('finance.accounting.parentAccount')}
+            <AccountSelect accounts={accounts.filter((a) => a.id !== account?.id)} value={parentId} onChange={setParentId} placeholder={t('finance.accounting.noParent')} /></label>
+          <label className="flex items-center gap-2 text-sm text-[var(--text)] col-span-2"><input type="checkbox" checked={isPostable} onChange={(e) => setIsPostable(e.target.checked)} /> {t('finance.accounting.postable')} <Tip k="postable" /></label>
+          <label className="flex items-center gap-2 text-sm text-[var(--text)] col-span-2"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> {t('finance.account.active')}</label>
         </div>
         <DialogFooter className="sm:justify-between">
-          {editing ? <button type="button" disabled={busy} onClick={() => void del()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] text-[var(--red)] hover:bg-[var(--surface)]"><Trash2 size={13} /> Eliminar</button> : <span />}
+          {editing ? <button type="button" disabled={busy} onClick={() => void del()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] text-[var(--red)] hover:bg-[var(--surface)]"><Trash2 size={13} /> {t('finance.delete')}</button> : <span />}
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--surface)] text-[var(--text)]">Cancel</button>
-            <button type="button" disabled={busy} onClick={() => void save()} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white disabled:opacity-50">{busy ? 'Guardando…' : 'Save'}</button>
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--surface)] text-[var(--text)]">{t('finance.cancel')}</button>
+            <button type="button" disabled={busy} onClick={() => void save()} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white disabled:opacity-50">{busy ? t('finance.saving') : t('finance.save')}</button>
           </div>
         </DialogFooter>
       </DialogContent>

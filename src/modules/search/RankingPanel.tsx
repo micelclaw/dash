@@ -14,6 +14,7 @@ import { useSearchStore } from '@/stores/search.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { RankingSlider } from './RankingSlider';
 import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
+import { useI18n } from '@/i18n';
 
 type SortBy = 'relevance' | 'fulltext' | 'heat' | 'semantic' | 'graph' | 'recent';
 
@@ -37,6 +38,7 @@ const radioStyle: React.CSSProperties = {
 };
 
 export function RankingPanel() {
+  const { t } = useI18n();
   const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const sortBy = useSearchStore(s => s.sortBy);
   const weights = useSearchStore(s => s.weights);
@@ -62,7 +64,7 @@ export function RankingPanel() {
           letterSpacing: '0.05em',
           marginBottom: 8,
         }}>
-          Sort by
+          {t('search.sortBy')}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {SORT_OPTIONS.map(opt => {
@@ -78,7 +80,7 @@ export function RankingPanel() {
                   disabled={disabled}
                   style={{ accentColor: 'var(--amber)' }}
                 />
-                {opt.label}
+                {t(`search.${opt.value === 'fulltext' ? 'fullText' : opt.value === 'recent' ? 'lastModified' : opt.value}`)}
               </label>
             );
           })}
@@ -95,19 +97,19 @@ export function RankingPanel() {
           letterSpacing: '0.05em',
           marginBottom: 8,
         }}>
-          Advanced weights
+          {t('search.advancedWeights')}
         </div>
         {!isPro ? (
           <ProUpsellPanel
-            feature="Advanced Search"
-            description="Tune ranking weights to customize how results are scored."
+            feature={t('search.advancedSearch')}
+            description={t('search.tuneWeights')}
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <RankingSlider label="Full-text" value={weights.fulltext} onChange={v => setWeights({ fulltext: v })} color="#60a5fa" />
-            <RankingSlider label="Semantic" value={weights.semantic} onChange={v => setWeights({ semantic: v })} color="#a78bfa" />
-            <RankingSlider label="Heat" value={weights.heat} onChange={v => setWeights({ heat: v })} color="#f43f5e" />
-            <RankingSlider label="Graph" value={weights.graph} onChange={v => setWeights({ graph: v })} color="#34d399" />
+            <RankingSlider label={t('search.fullTextLabel')} value={weights.fulltext} onChange={v => setWeights({ fulltext: v })} color="#60a5fa" />
+            <RankingSlider label={t('search.semanticLabel')} value={weights.semantic} onChange={v => setWeights({ semantic: v })} color="#a78bfa" />
+            <RankingSlider label={t('search.heatLabel')} value={weights.heat} onChange={v => setWeights({ heat: v })} color="#f43f5e" />
+            <RankingSlider label={t('search.graphLabel')} value={weights.graph} onChange={v => setWeights({ graph: v })} color="#34d399" />
 
             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
               <button
@@ -123,7 +125,7 @@ export function RankingPanel() {
                   cursor: 'pointer',
                 }}
               >
-                Reset
+                {t('search.reset')}
               </button>
             </div>
           </div>

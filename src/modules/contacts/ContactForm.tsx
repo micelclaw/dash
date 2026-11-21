@@ -14,6 +14,7 @@ import { useState, type FormEvent } from 'react';
 import { ChevronLeft, Plus, X } from 'lucide-react';
 import { TagInput } from '@/components/shared/TagInput';
 import type { Contact, ContactCreateInput, ContactUpdateInput } from './types';
+import { useI18n } from '@/i18n';
 
 interface ContactFormProps {
   contact: Contact | null;
@@ -94,6 +95,7 @@ const removeButtonStyle: React.CSSProperties = {
 };
 
 export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
+  const { t } = useI18n();
   const [firstName, setFirstName] = useState(contact?.first_name || '');
   const [lastName, setLastName] = useState(contact?.last_name || '');
   const [displayName, setDisplayName] = useState(contact?.display_name || '');
@@ -223,7 +225,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
         <h2 style={{
           fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0,
         }}>
-          {isEdit ? 'Edit Contact' : 'New Contact'}
+          {isEdit ? t('contacts.edit') : t('contacts.new')}
         </h2>
       </div>
 
@@ -231,20 +233,20 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
         {/* First name + Last name */}
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <label style={labelStyle}>First name</label>
+            <label style={labelStyle}>{t('contacts.firstName')}</label>
             <input
               value={firstName}
               onChange={e => setFirstName(e.target.value)}
-              placeholder="First name"
+              placeholder={t('contacts.firstName')}
               style={inputStyle}
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Last name</label>
+            <label style={labelStyle}>{t('contacts.lastName')}</label>
             <input
               value={lastName}
               onChange={e => setLastName(e.target.value)}
-              placeholder="Last name"
+              placeholder={t('contacts.lastName')}
               style={inputStyle}
             />
           </div>
@@ -252,16 +254,16 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
 
         {/* Display name */}
         <div>
-          <label style={labelStyle}>Display name</label>
+          <label style={labelStyle}>{t('contacts.displayName')}</label>
           <input
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
-            placeholder={[firstName, lastName].filter(Boolean).join(' ') || 'Display name'}
+            placeholder={[firstName, lastName].filter(Boolean).join(' ') || t('contacts.displayName')}
             style={inputStyle}
           />
           {!displayName && firstName && (
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, display: 'block' }}>
-              Auto: {[firstName, lastName].filter(Boolean).join(' ')}
+              {t('contacts.auto')}: {[firstName, lastName].filter(Boolean).join(' ')}
             </span>
           )}
         </div>
@@ -269,20 +271,20 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
         {/* Company + Job title */}
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Company</label>
+            <label style={labelStyle}>{t('contacts.company')}</label>
             <input
               value={company}
               onChange={e => setCompany(e.target.value)}
-              placeholder="Company"
+              placeholder={t('contacts.company')}
               style={inputStyle}
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Job title</label>
+            <label style={labelStyle}>{t('contacts.jobTitle')}</label>
             <input
               value={jobTitle}
               onChange={e => setJobTitle(e.target.value)}
-              placeholder="Job title"
+              placeholder={t('contacts.jobTitle')}
               style={inputStyle}
             />
           </div>
@@ -290,7 +292,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
 
         {/* Emails */}
         <div>
-          <label style={labelStyle}>Emails</label>
+          <label style={labelStyle}>{t('contacts.emails')}</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {emails.map((email, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -320,7 +322,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
                     onChange={() => updateEmail(i, { primary: true })}
                     style={{ accentColor: 'var(--amber)' }}
                   />
-                  Primary
+                  {t('contacts.primary')}
                 </label>
                 {emails.length > 1 && (
                   <button type="button" onClick={() => removeEmail(i)} style={removeButtonStyle}>
@@ -332,13 +334,13 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
           </div>
           <button type="button" onClick={addEmail} style={{ ...addButtonStyle, marginTop: 6 }}>
             <Plus size={12} />
-            Add email
+            {t('contacts.addEmail')}
           </button>
         </div>
 
         {/* Phones */}
         <div>
-          <label style={labelStyle}>Phones</label>
+          <label style={labelStyle}>{t('contacts.phones')}</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {phones.map((phone, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -368,7 +370,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
                     onChange={() => updatePhone(i, { primary: true })}
                     style={{ accentColor: 'var(--amber)' }}
                   />
-                  Primary
+                  {t('contacts.primary')}
                 </label>
                 {phones.length > 1 && (
                   <button type="button" onClick={() => removePhone(i)} style={removeButtonStyle}>
@@ -380,23 +382,23 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
           </div>
           <button type="button" onClick={addPhone} style={{ ...addButtonStyle, marginTop: 6 }}>
             <Plus size={12} />
-            Add phone
+            {t('contacts.addPhone')}
           </button>
         </div>
 
         {/* Tags */}
         <div>
-          <label style={labelStyle}>Tags</label>
+          <label style={labelStyle}>{t('contacts.tags')}</label>
           <TagInput tags={tags} onChange={setTags} />
         </div>
 
         {/* Notes */}
         <div>
-          <label style={labelStyle}>Notes</label>
+          <label style={labelStyle}>{t('contacts.notes')}</label>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Additional notes..."
+            placeholder={t('contacts.moreNotes')}
             rows={4}
             style={{
               ...inputStyle,
@@ -425,7 +427,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--amber-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'var(--amber)')}
           >
-            {isEdit ? 'Save Changes' : 'Create Contact'}
+            {isEdit ? t('contacts.saveChanges') : t('contacts.createContact')}
           </button>
           <button
             type="button"
@@ -442,7 +444,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
               transition: 'border-color var(--transition-fast)',
             }}
           >
-            Cancel
+            {t('contacts.cancel')}
           </button>
         </div>
       </form>

@@ -26,6 +26,7 @@ import type { Board } from './types';
 import { DataProviderIcon } from '@/config/data-provider-icons';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useI18n } from '@/i18n';
 
 const PROVIDER_LABELS: Record<string, string> = {
   micelclaw: 'Micelclaw',
@@ -150,6 +151,7 @@ function SkeletonCard() {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const boards = useProjectsStore((s) => s.boards);
   const loading = useProjectsStore((s) => s.loading);
   const fetchBoards = useProjectsStore((s) => s.fetchBoards);
@@ -303,7 +305,7 @@ export function Component() {
             }
           />
         ) : (
-          <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13 }}>Cargando la tarea…</div>
+          <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13 }}>{t('projects.loadingTask')}</div>
         )
       ) : (
       <div style={{ padding: 24, overflowY: 'auto' }}>
@@ -362,7 +364,7 @@ export function Component() {
           }}
         >
           <Archive size={40} strokeWidth={1} />
-          <span style={{ fontSize: 14 }}>No boards yet. Create your first board to get started.</span>
+          <span style={{ fontSize: 14 }}>{t('projects.emptyBoards')}</span>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>

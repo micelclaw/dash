@@ -20,10 +20,12 @@ import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
 import { useKeyboardOpen } from '@/hooks/use-media-query';
-import { formatTime, formatDateLong } from '@/lib/date-helpers';
+import { formatDate, formatGridDateTime, formatGridTime } from '@/i18n/format';
 import { getCalendarColor } from '../types';
 import type { CalendarEvent } from '../types';
 import type { LinkedRecord } from '@/types/links';
+import { useI18n } from '@/i18n';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface EventViewDetailsProps {
   event: CalendarEvent;
@@ -39,6 +41,8 @@ export function EventViewDetails({
   linkedRecordsLoading,
   onNavigate,
 }: EventViewDetailsProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const start = new Date(event.start_at);
   const end = event.end_at ? new Date(event.end_at) : null;
   const color = getCalendarColor(event.calendar_name);
@@ -66,7 +70,8 @@ export function EventViewDetails({
           />
           <button
             onClick={() => { setShareInitial(undefined); setShareOpen(true); }}
-            title="Compartir"
+            title={t('calendar.share')}
+            aria-label={t('calendar.share')}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
               background: 'var(--surface)', border: '1px solid var(--border)',
@@ -74,7 +79,7 @@ export function EventViewDetails({
               color: 'var(--text)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
             }}
           >
-            <Share2 size={13} /> Compartir
+            <Share2 size={13} /> {t('calendar.share')}
           </button>
           </div>
         )}
@@ -91,8 +96,8 @@ export function EventViewDetails({
         }}>
           <UserCircle2 size={15} style={{ color: 'var(--info)', flexShrink: 0 }} />
           <span style={{ color: 'var(--text)' }}>
-            Compartido por <strong>{event._shared_by_name || 'otro usuario'}</strong>
-            {event._shared_permission === 'view' ? ' · solo lectura' : event._shared_permission === 'edit' ? ' · puedes editar' : ''}
+            {t('calendar.sharedBy')} <strong>{event._shared_by_name || t('calendar.otherUser')}</strong>
+            {event._shared_permission === 'view' ? t('calendar.readOnly') : event._shared_permission === 'edit' ? t('calendar.canEdit') : ''}
           </span>
         </div>
       )}
@@ -104,8 +109,8 @@ export function EventViewDetails({
         <Calendar size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
         <span style={{ color: 'var(--text)' }}>
           {event.all_day
-            ? formatDateLong(start)
-            : `${formatDateLong(start)}, ${formatTime(start)}${end ? ` – ${formatTime(end)}` : ''}`}
+            ? formatDate(start, locale, general)
+            : `${formatGridDateTime(start, locale, general)}${end ? ` – ${formatGridTime(end, locale, general)}` : ''}`}
         </span>
       </div>
 

@@ -17,15 +17,16 @@ import {
   Settings, Calendar, BarChart3, Share2, Search, X, SlidersHorizontal,
 } from 'lucide-react';
 import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
+import { useI18n } from '@/i18n';
 import { useProjectsStore } from '@/stores/projects.store';
 import type { ViewMode } from '../types';
 
-const VIEW_OPTIONS: { id: ViewMode; icon: typeof LayoutGrid; label: string }[] = [
-  { id: 'board', icon: LayoutGrid, label: 'Board' },
-  { id: 'list', icon: List, label: 'Table' },
-  { id: 'timeline', icon: CalendarRange, label: 'Gantt' },
-  { id: 'calendar', icon: Calendar, label: 'Calendar' },
-  { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
+const VIEW_OPTIONS: { id: ViewMode; icon: typeof LayoutGrid; labelKey: string }[] = [
+  { id: 'board', icon: LayoutGrid, labelKey: 'projects.boardHeader.view.board' },
+  { id: 'list', icon: List, labelKey: 'projects.boardHeader.view.list' },
+  { id: 'timeline', icon: CalendarRange, labelKey: 'projects.boardHeader.view.timeline' },
+  { id: 'calendar', icon: Calendar, labelKey: 'projects.boardHeader.view.calendar' },
+  { id: 'dashboard', icon: BarChart3, labelKey: 'projects.boardHeader.view.dashboard' },
 ];
 
 export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
@@ -33,6 +34,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
   onOpenShare?: () => void;
   onOpenFields?: () => void;
 }) {
+  const { t } = useI18n();
   const title = useProjectsStore((s) => s.activeBoardTitle);
   const activeView = useProjectsStore((s) => s.activeView);
   const setView = useProjectsStore((s) => s.setView);
@@ -71,7 +73,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
       <button
         onClick={() => navigate('/projects')}
         style={iconBtnStyle}
-        title="Back to boards"
+        title={t('projects.boardHeader.back')}
       >
         <ArrowLeft size={16} />
       </button>
@@ -80,6 +82,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
       {editing && canEdit ? (
         <input
           autoFocus
+          aria-label={t('projects.boardHeader.rename', { name: title || t('projects.boardHeader.title') })}
           value={editTitle}
           onChange={(e) => setEditTitle(e.target.value)}
           onBlur={handleSave}
@@ -108,7 +111,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
             cursor: canEdit ? 'default' : 'not-allowed',
           }}
         >
-          {title || 'Board'}
+          {title || t('projects.boardHeader.title')}
         </h2>
       )}
 
@@ -121,7 +124,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
           borderRadius: 3,
           border: '1px solid var(--border)',
         }}>
-          View only
+          {t('projects.boardHeader.viewOnly')}
         </span>
       )}
 
@@ -142,7 +145,8 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
           <input
             autoFocus
             type="text"
-            placeholder="Search cards..."
+            aria-label={t('projects.boardHeader.searchPlaceholder')}
+            placeholder={t('projects.boardHeader.searchPlaceholder')}
             value={filters.search ?? ''}
             onChange={(e) => setFilters({ ...filters, search: e.target.value || undefined })}
             onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setFilters({ ...filters, search: undefined }); } }}
@@ -158,13 +162,14 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
           />
           <button
             onClick={() => { setSearchOpen(false); setFilters({ ...filters, search: undefined }); }}
+            aria-label={t('projects.boardHeader.closeSearch')}
             style={{ ...iconBtnStyle, padding: 2 }}
           >
             <X size={12} />
           </button>
         </div>
       ) : (
-        <button onClick={() => setSearchOpen(true)} style={iconBtnStyle} title="Search (/)">
+        <button onClick={() => setSearchOpen(true)} style={iconBtnStyle} title={t('projects.boardHeader.search')} aria-label={t('projects.boardHeader.search')}>
           <Search size={14} />
         </button>
       )}
@@ -179,11 +184,11 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
           overflow: 'hidden',
         }}
       >
-        {VIEW_OPTIONS.map(({ id, icon: Icon, label }) => (
+        {VIEW_OPTIONS.map(({ id, icon: Icon, labelKey }) => (
           <button
             key={id}
             onClick={() => setView(id)}
-            title={label}
+            title={t(labelKey)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -199,14 +204,14 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
             }}
           >
             <Icon size={13} />
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
 
       {/* Fields */}
       {onOpenFields && canEdit && (
-        <button onClick={onOpenFields} style={iconBtnStyle} title="Custom Fields">
+        <button onClick={onOpenFields} style={iconBtnStyle} title={t('projects.boardHeader.customFields')} aria-label={t('projects.boardHeader.customFields')}>
           <SlidersHorizontal size={14} />
         </button>
       )}
@@ -217,7 +222,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
           {activeBoardId && (
             <SharedWithIndicator entityType="kanban_board" entityId={activeBoardId} onManage={onOpenShare} />
           )}
-          <button onClick={onOpenShare} style={iconBtnStyle} title="Share">
+          <button onClick={onOpenShare} style={iconBtnStyle} title={t('projects.boardHeader.share')} aria-label={t('projects.boardHeader.share')}>
             <Share2 size={14} />
           </button>
         </>
@@ -225,7 +230,7 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
 
       {/* Settings */}
       {onOpenSettings && canEdit && (
-        <button onClick={onOpenSettings} style={iconBtnStyle} title="Settings">
+        <button onClick={onOpenSettings} style={iconBtnStyle} title={t('projects.boardHeader.settings')} aria-label={t('projects.boardHeader.settings')}>
           <Settings size={14} />
         </button>
       )}

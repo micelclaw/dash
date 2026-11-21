@@ -20,6 +20,7 @@ import { ImportCsvDialog } from './ImportCsvDialog';
 import { useSortable, SortableTh } from '@/modules/finance/sortable';
 import { usePersonalNav } from './navigation';
 import { RecurrenceBadge } from './RecurrenceBadge';
+import { useI18n } from '@/i18n';
 
 // ── Helpers de mes ───────────────────────────────────────────────────
 function ymd(d: Date): string {
@@ -30,19 +31,19 @@ function monthRange(anchor: Date): { from: string; to: string } {
   const to = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
   return { from: ymd(from), to: ymd(to) };
 }
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-function monthLabel(anchor: Date): string {
-  return `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+function monthLabel(anchor: Date, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(anchor);
 }
 /** Cabecera de día legible a partir de un ISO `YYYY-MM-DD`. */
-function dayHeader(iso: string): string {
+function dayHeader(iso: string, locale: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
   const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  return dt.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export function MovimientosTab() {
+  const { t, locale } = useI18n();
   const { transactions, accounts, categories, fetchTransactions, txTotal } = useFinancePersonalStore();
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -124,7 +125,7 @@ export function MovimientosTab() {
     const cv = cat ? categoryVisual(cat) : null;
     return (
       <tr key={tx.id} role="button" tabIndex={0}
-        title="Ver movimiento"
+        title={t('finance.movements.view')}
         onClick={() => openMovement(tx)}
         onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
@@ -132,7 +133,7 @@ export function MovimientosTab() {
         <td style={{ ...td, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{tx.date}</td>
         <td style={td}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            {f.glyph} {tx.description || (f.isTransfer ? 'Transfer' : 'Movement')}
+            {f.glyph} {tx.description || t(f.isTransfer ? 'finance.movements.transfer' : 'finance.movements.movement')}
             {tx.recurring_rule_id && <RecurrenceBadge compact />}
           </span>
         </td>
@@ -149,7 +150,7 @@ export function MovimientosTab() {
         </td>
         <td style={td}>
           {f.isTransfer || !cv ? (
-            <span style={{ color: 'var(--text-dim)' }}>{f.isTransfer ? 'Transfer' : '—'}</span>
+            <span style={{ color: 'var(--text-dim)' }}>{f.isTransfer ? t('finance.movements.transfer') : '—'}</span>
           ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px 2px 7px', background: tintBackground(cv.color), borderRadius: 'var(--radius-full, 999px)', fontSize: 12, color: 'var(--text)' }}>
               <span style={{ fontSize: 13, lineHeight: 1 }}>{cv.emoji}</span>{cv.name}
@@ -170,19 +171,19 @@ export function MovimientosTab() {
             type="button"
             style={{ ...navBtn, opacity: monthMode ? 1 : 0.4, cursor: monthMode ? 'pointer' : 'not-allowed' }}
             disabled={!monthMode}
-            title="Mes anterior"
+            title={t('finance.movements.previousMonth')}
             onClick={() => setAnchor((a) => new Date(a.getFullYear(), a.getMonth() - 1, 1))}
           >
             <ChevronLeft size={16} />
           </button>
           <span style={{ minWidth: 130, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--text)', textTransform: 'capitalize' }}>
-            {monthMode ? monthLabel(anchor) : 'Full history'}
+            {monthMode ? monthLabel(anchor, locale) : t('finance.movements.fullHistory')}
           </span>
           <button
             type="button"
             style={{ ...navBtn, opacity: monthMode ? 1 : 0.4, cursor: monthMode ? 'pointer' : 'not-allowed' }}
             disabled={!monthMode}
-            title="Mes siguiente"
+            title={t('finance.movements.nextMonth')}
             onClick={() => setAnchor((a) => new Date(a.getFullYear(), a.getMonth() + 1, 1))}
           >
             <ChevronRight size={16} />
@@ -190,7 +191,7 @@ export function MovimientosTab() {
           <button
             type="button"
             style={{ padding: '6px 10px', background: monthMode ? 'var(--bg)' : 'var(--mod-finance)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: monthMode ? 'var(--text-muted)' : '#fff', fontSize: 12, cursor: 'pointer' }}
-            title={monthMode ? 'See the full history' : 'Back to the current month'}
+            title={t(monthMode ? 'finance.movements.seeFullHistory' : 'finance.movements.backCurrentMonth')}
             onClick={() => {
               if (monthMode) {
                 setMonthMode(false);
@@ -200,7 +201,7 @@ export function MovimientosTab() {
               }
             }}
           >
-            {monthMode ? 'All time' : 'Current month'}
+            {monthMode ? t('finance.movements.allTime') : t('finance.movements.currentMonth')}
           </button>
         </div>
 
@@ -208,10 +209,10 @@ export function MovimientosTab() {
           <button
             type="button"
             onClick={() => setImportOpen(true)}
-            title="Import movements from a CSV"
+            title={t('finance.movements.importTitle')}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 12 }}
           >
-            <Upload size={14} /> Import CSV
+            <Upload size={14} /> {t('finance.import.upload')}
           </button>
           <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
             <Search size={14} style={{ position: 'absolute', left: 8, color: 'var(--text-muted)', pointerEvents: 'none' }} />
@@ -219,7 +220,7 @@ export function MovimientosTab() {
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search descriptions…"
+              placeholder={t('finance.movements.searchPlaceholder')}
               style={{ ...selStyle, paddingLeft: 28, width: 200 }}
             />
           </div>
@@ -229,28 +230,28 @@ export function MovimientosTab() {
       {/* Fila 2: filtros de cuenta/categoría */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={selStyle}>
-          <option value="">All accounts</option>
+          <option value="">{t('finance.table.account')}</option>
           {accounts.filter((a) => a.type === 'asset' || a.type === 'liability').map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={selStyle}>
-          <option value="">All categories</option>
+          <option value="">{t('finance.table.category')}</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>{txTotal} movimiento{txTotal === 1 ? '' : 's'}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>{t('finance.movements.count', { count: txTotal })}</span>
       </div>
 
       {/* Totales del periodo/filtro mostrado */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={totalChip}>
-          <span style={totalLabel}>Income</span>
+          <span style={totalLabel}>{t('finance.movements.income')}</span>
           <span style={{ ...totalValue, color: 'var(--mod-finance)' }}>+{fmtMoney(totals.income)}</span>
         </div>
         <div style={totalChip}>
-          <span style={totalLabel}>Expenses</span>
+          <span style={totalLabel}>{t('finance.movements.expenses')}</span>
           <span style={{ ...totalValue, color: '#ef4444' }}>-{fmtMoney(totals.expense)}</span>
         </div>
         <div style={totalChip}>
-          <span style={totalLabel}>Net</span>
+          <span style={totalLabel}>{t('finance.movements.net')}</span>
           <span style={{ ...totalValue, color: totals.net >= 0 ? 'var(--mod-finance)' : '#ef4444' }}>{totals.net >= 0 ? '+' : '-'}{fmtMoney(Math.abs(totals.net))}</span>
         </div>
       </div>
@@ -259,16 +260,16 @@ export function MovimientosTab() {
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
           <thead>
             <tr>
-              <SortableTh label="Date" col="date" state={sort} />
-              <SortableTh label="Description" col="description" state={sort} />
-              <SortableTh label="Account" col="account" state={sort} />
-              <SortableTh label="Category" col="category" state={sort} />
-              <SortableTh label="Amount" col="amount" state={sort} align="right" />
+              <SortableTh label={t('finance.date')} col="date" state={sort} />
+              <SortableTh label={t('finance.table.description')} col="description" state={sort} />
+              <SortableTh label={t('finance.table.account')} col="account" state={sort} />
+              <SortableTh label={t('finance.table.category')} col="category" state={sort} />
+              <SortableTh label={t('finance.amount')} col="amount" state={sort} align="right" />
             </tr>
           </thead>
           <tbody>
             {transactions.length === 0 && (
-              <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={5}>No movements for this filter.</td></tr>
+              <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={5}>{t('finance.movements.noResults')}</td></tr>
             )}
             {flat
               ? sort.sorted.map(renderRow)
@@ -276,7 +277,7 @@ export function MovimientosTab() {
                 <Fragment key={`g-${g.date}`}>
                   <tr>
                     <td colSpan={5} style={{ padding: '8px 10px 4px', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'capitalize', background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
-                      {dayHeader(g.date)}
+                      {dayHeader(g.date, locale)}
                     </td>
                   </tr>
                   {g.items.map(renderRow)}

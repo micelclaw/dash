@@ -14,12 +14,14 @@ import { useState, useCallback, useRef } from 'react';
 import { TerminalPanel } from './TerminalPanel';
 import { useTerminalStore } from '@/stores/terminal.store';
 import type { TerminalWebSocket } from './terminal-ws';
+import { useI18n } from '@/i18n';
 
 interface SplitViewProps {
   ws: TerminalWebSocket;
 }
 
 export function SplitView({ ws }: SplitViewProps) {
+  const { t } = useI18n();
   const tabs = useTerminalStore((s) => s.tabs);
   const activeTabId = useTerminalStore((s) => s.activeTabId);
   const splitMode = useTerminalStore((s) => s.splitMode);
@@ -64,7 +66,7 @@ export function SplitView({ ws }: SplitViewProps) {
         fontSize: 14,
         background: '#0c0a09',
       }}>
-        No terminal sessions
+        {t('terminal.noSessions')}
       </div>
     );
   }

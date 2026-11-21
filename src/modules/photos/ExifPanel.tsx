@@ -25,8 +25,10 @@ import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import type { Photo } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 function FindSimilarToggle({ photoId }: { photoId: string }) {
+  const { t } = useI18n();
   const similarPanelOpen = usePhotoAiStore((s) => s.similarPanelOpen);
   const fetchSimilar = usePhotoAiStore((s) => s.fetchSimilar);
   const closeSimilarPanel = usePhotoAiStore((s) => s.closeSimilarPanel);
@@ -38,7 +40,7 @@ function FindSimilarToggle({ photoId }: { photoId: string }) {
       closeSimilarPanel();
     } else {
       if (!isPro) {
-        toast.error('Similar Photos is a Pro feature');
+        toast.error(t('photos.extra.similarPro'));
         return;
       }
       fetchSimilar(photoId);
@@ -50,7 +52,8 @@ function FindSimilarToggle({ photoId }: { photoId: string }) {
       onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={similarPanelOpen ? 'Close similar photos' : 'Find similar photos'}
+      title={similarPanelOpen ? t('photos.extra.closeSimilar') : t('photos.extra.findSimilar')}
+      aria-label={similarPanelOpen ? t('photos.extra.closeSimilar') : t('photos.extra.findSimilar')}
       style={{
         background: similarPanelOpen ? 'var(--amber)' : (hovered ? 'var(--surface)' : 'transparent'),
         border: similarPanelOpen ? 'none' : '1px solid var(--border)',
@@ -67,7 +70,7 @@ function FindSimilarToggle({ photoId }: { photoId: string }) {
       }}
     >
       <Search size={12} />
-      Similar
+      {t('photos.extra.similar')}
     </button>
   );
 }
@@ -80,6 +83,7 @@ interface ExifPanelProps {
 }
 
 export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifPanelProps) {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   // Bug 8: en móvil el panel de detalles se cierra con el botón "atrás".
   useBackGuard(!collapsed && !!onToggleCollapse, () => onToggleCollapse?.(), isMobile);
@@ -114,20 +118,20 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
   const handleStarChange = async (value: number) => {
     try {
       await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: value } });
-      toast.success(`Rating set to ${value} star${value !== 1 ? 's' : ''}`);
+      toast.success(value === 1 ? t('photos.extra.ratingSetOne') : t('photos.extra.ratingSet', { count: value }));
       onSaved?.();
     } catch {
-      toast.error('Failed to set rating');
+      toast.error(t('photos.extra.ratingFailed'));
     }
   };
 
   const handleStarReset = async () => {
     try {
       await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } });
-      toast.success('Rating reset to AI score');
+      toast.success(t('photos.extra.ratingReset'));
       onSaved?.();
     } catch {
-      toast.error('Failed to reset rating');
+      toast.error(t('photos.extra.ratingResetFailed'));
     }
   };
 
@@ -141,10 +145,10 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
     setSaving(true);
     try {
       await api.patch(`/files/${photo.id}`, updates);
-      toast.success('Photo updated');
+      toast.success(t('photos.extra.photoUpdated'));
       onSaved?.();
     } catch {
-      toast.error('Failed to update photo');
+      toast.error(t('photos.extra.photoUpdateFailed'));
     }
     setSaving(false);
   };
@@ -195,14 +199,15 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
         borderBottom: '1px solid var(--border)',
       }}>
         <h3 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-          Photo Details
+          {t('photos.extra.photoDetails')}
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
           <FindSimilarToggle photoId={photo.id} />
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
-              title="Collapse details"
+              title={t('photos.extra.collapseDetails')}
+              aria-label={t('photos.extra.collapseDetails')}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -238,7 +243,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
 
         {loading && (
           <div style={{ textAlign: 'center', padding: 12, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            Loading metadata...
+            {t('photos.extra.loadingMetadata')}
           </div>
         )}
 
@@ -249,12 +254,12 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
         )}
 
         {/* Editable fields */}
-        <FieldGroup title="File">
-          <EditableField label="Filename" value={filename} onChange={setFilename} />
-          <ReadonlyField label="Size" value={formatFileSize(photo.size_bytes)} />
-          <ReadonlyField label="Type" value={photo.mime_type} />
+        <FieldGroup title={t('photos.extra.file')}>
+          <EditableField label={t('photos.extra.filename')} value={filename} onChange={setFilename} />
+          <ReadonlyField label={t('photos.extra.size')} value={formatFileSize(photo.size_bytes)} />
+          <ReadonlyField label={t('photos.extra.type')} value={photo.mime_type} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90 }}>Compartido</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90 }}>{t('photos.extra.shared')}</span>
             <SharedWithIndicator
               entityType="photo"
               entityId={photo.id}
@@ -267,25 +272,25 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
 
         {/* Image dimensions */}
         {exif && (
-          <FieldGroup title="Image">
-            <ReadonlyField label="Dimensions" value={
+          <FieldGroup title={t('photos.extra.image')}>
+            <ReadonlyField label={t('photos.extra.dimensions')} value={
               exif.image.width && exif.image.height
                 ? `${exif.image.width} × ${exif.image.height}`
                 : '—'
             } />
-            <ReadonlyField label="Format" value={exif.image.format ?? '—'} />
-            <ReadonlyField label="Color space" value={exif.image.space ?? '—'} />
+            <ReadonlyField label={t('photos.extra.format')} value={exif.image.format ?? '—'} />
+            <ReadonlyField label={t('photos.extra.colorSpace')} value={exif.image.space ?? '—'} />
           </FieldGroup>
         )}
 
         {/* Camera info */}
         {(camera || iso || aperture) && (
-          <FieldGroup title="Camera">
-            {camera && <ReadonlyField label="Camera" value={camera} />}
+          <FieldGroup title={t('photos.extra.camera')}>
+            {camera && <ReadonlyField label={t('photos.extra.camera')} value={camera} />}
             {iso && <ReadonlyField label="ISO" value={String(iso)} />}
-            {aperture && <ReadonlyField label="Aperture" value={`f/${aperture}`} />}
-            {focalLength && <ReadonlyField label="Focal length" value={`${focalLength}mm`} />}
-            {exposureTime && <ReadonlyField label="Exposure" value={
+            {aperture && <ReadonlyField label={t('photos.extra.aperture')} value={`f/${aperture}`} />}
+            {focalLength && <ReadonlyField label={t('photos.extra.focalLength')} value={`${focalLength}mm`} />}
+            {exposureTime && <ReadonlyField label={t('photos.extra.exposure')} value={
               typeof exposureTime === 'number' && exposureTime < 1
                 ? `1/${Math.round(1 / exposureTime)}s`
                 : `${exposureTime}s`
@@ -295,17 +300,17 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
 
         {/* Location */}
         {photo.metadata?.gps && (
-          <FieldGroup title="Location">
-            <ReadonlyField label="Latitude" value={String(photo.metadata.gps.latitude)} />
-            <ReadonlyField label="Longitude" value={String(photo.metadata.gps.longitude)} />
+          <FieldGroup title={t('photos.extra.location')}>
+            <ReadonlyField label={t('photos.extra.latitude')} value={String(photo.metadata.gps.latitude)} />
+            <ReadonlyField label={t('photos.extra.longitude')} value={String(photo.metadata.gps.longitude)} />
           </FieldGroup>
         )}
 
         {/* AI analysis */}
         {(hasAiData || hasOverride) && (
-          <FieldGroup title="AI">
+          <FieldGroup title={t('photos.extra.ai')}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90 }}>Rating</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90 }}>{t('photos.extra.rating')}</span>
               <StarRating
                 value={aestheticStars}
                 onChange={handleStarChange}
@@ -315,7 +320,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
               />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90, paddingTop: 2 }}>Description</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90, paddingTop: 2 }}>{t('photos.extra.description')}</span>
               <p style={{
                 margin: 0, fontSize: '0.8125rem',
                 color: photo.metadata?.ai_description ? 'var(--text)' : 'var(--text-muted)',
@@ -325,7 +330,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
                 {photo.metadata?.ai_description ? String(photo.metadata.ai_description) : '—'}
               </p>
             </div>
-            <ReadonlyField label="Faces" value={String(faceCount)} />
+            <ReadonlyField label={t('photos.extra.faces')} value={String(faceCount)} />
           </FieldGroup>
         )}
       </div>
@@ -356,7 +361,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
             }}
           >
             <Save size={14} />
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('photos.extra.saving') : t('photos.extra.save')}
           </button>
         </div>
       )}

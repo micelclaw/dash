@@ -11,6 +11,7 @@
  */
 
 import { LayoutGrid, List } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface ViewToggleProps {
   view: 'grid' | 'list';
@@ -18,10 +19,11 @@ interface ViewToggleProps {
 }
 
 export function ViewToggle({ view, onChange }: ViewToggleProps) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', borderRadius: 'var(--radius-sm)', padding: 2 }}>
-      <ToggleBtn active={view === 'grid'} onClick={() => onChange('grid')} icon={LayoutGrid} title="Grid view" />
-      <ToggleBtn active={view === 'list'} onClick={() => onChange('list')} icon={List} title="List view" />
+      <ToggleBtn active={view === 'grid'} onClick={() => onChange('grid')} icon={LayoutGrid} title={t('shared.view.grid')} />
+      <ToggleBtn active={view === 'list'} onClick={() => onChange('list')} icon={List} title={t('shared.view.list')} />
     </div>
   );
 }
@@ -32,6 +34,7 @@ function ToggleBtn({ active, onClick, icon: Icon, title }: { active: boolean; on
       onClick={onClick}
       title={title}
       aria-label={title}
+      aria-pressed={active}
       style={{
         display: 'flex',
         alignItems: 'center',

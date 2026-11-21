@@ -20,6 +20,7 @@ import { type OriginEntity } from '@/types/origins';
 import { EntitySource } from '@/components/shared/SourceBadge';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { ENTITY_REF_MAP } from '@/config/entity-refs';
+import { hasMessage, useI18n } from '@/i18n';
 
 export interface MentionItem extends OriginEntity {
   domain: string;
@@ -39,6 +40,7 @@ export interface MentionDropdownHandle {
 
 export const MentionDropdown = forwardRef<MentionDropdownHandle, MentionDropdownProps>(
   function MentionDropdown({ items, command }, ref) {
+    const { t } = useI18n();
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     useEffect(() => setSelectedIndex(0), [items]);
@@ -70,7 +72,7 @@ export const MentionDropdown = forwardRef<MentionDropdownHandle, MentionDropdown
       return (
         <div style={panelStyle}>
           <div style={{ padding: '6px 10px', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Sin resultados…
+            {t('notes.mentions.none')}
           </div>
         </div>
       );
@@ -80,6 +82,7 @@ export const MentionDropdown = forwardRef<MentionDropdownHandle, MentionDropdown
       <div style={panelStyle}>
         {items.map((item, i) => {
           const def = ENTITY_REF_MAP[item.domain];
+          const domainKey = `notes.domain.${item.domain}`;
           const Icon = def?.Icon;
           const color = def?.color ?? 'var(--text-dim)';
           return (
@@ -100,7 +103,7 @@ export const MentionDropdown = forwardRef<MentionDropdownHandle, MentionDropdown
                 {item.label}
               </span>
               <span style={{ marginLeft: 'auto', fontSize: '0.625rem', color, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {def?.label ?? item.domain}
+                {hasMessage(domainKey) ? t(domainKey) : def?.label ?? item.domain}
               </span>
             </button>
           );

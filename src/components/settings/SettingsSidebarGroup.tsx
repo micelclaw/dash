@@ -45,6 +45,7 @@ export function SettingsSidebarGroup({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={expanded}
         style={{
           display: 'flex',
           alignItems: 'center',

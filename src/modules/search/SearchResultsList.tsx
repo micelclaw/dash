@@ -25,6 +25,7 @@ import { useSearchSelection, toKey } from './use-search-selection';
 import { deleteEntity, canDelete } from './delete-entity';
 import { getTitle } from './result-helpers';
 import type { SearchResult } from '@/types/search';
+import { useI18n } from '@/i18n';
 
 /** Resolve the best file ID for preview URLs — prefer record.id (matches photos module) over record_id */
 function getFileId(r: SearchResult): string {
@@ -60,6 +61,7 @@ function PhotoThumb({ fileId }: { fileId: string }) {
 }
 
 export function SearchResultsList() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const rawResults = useSearchStore(s => s.results);
   const sortBy = useSearchStore(s => s.sortBy);
@@ -112,7 +114,7 @@ export function SearchResultsList() {
     const link = res.route;
 
     items.push({
-      label: `Open ${res.label}`,
+      label: t('search.openItem', { label: res.label }),
       icon: ExternalLink,
       onClick: () => { if (link) navigate(link); },
       disabled: !link,
@@ -126,7 +128,7 @@ export function SearchResultsList() {
       const deletableCount = targets.filter(t => canDelete(t.domain)).length;
       items.push({ label: '', onClick: () => {}, separator: true });
       items.push({
-        label: `Delete ${deletableCount} selected`,
+        label: t('search.deleteSelected', { count: deletableCount }),
         icon: Trash2,
         variant: 'danger',
         disabled: deletableCount === 0,
@@ -138,7 +140,7 @@ export function SearchResultsList() {
     } else {
       items.push({ label: '', onClick: () => {}, separator: true });
       items.push({
-        label: 'Delete',
+        label: t('search.delete'),
         icon: Trash2,
         variant: 'danger',
         disabled: !canDelete(r.domain),
@@ -170,10 +172,10 @@ export function SearchResultsList() {
     clearSelection();
 
     if (failed === 0 && skipped === 0) {
-      toast.success(`Deleted ${succeeded} item${succeeded !== 1 ? 's' : ''}`);
+      toast.success(t(succeeded === 1 ? 'search.deletedOne' : 'search.deletedMany', { count: succeeded }));
     } else {
-      if (failed > 0) toast.error(`${failed} deletion${failed !== 1 ? 's' : ''} failed`);
-      if (skipped > 0) toast(`${skipped} item${skipped !== 1 ? 's' : ''} skipped (not deletable)`);
+      if (failed > 0) toast.error(t(failed === 1 ? 'search.failedOne' : 'search.failedMany', { count: failed }));
+      if (skipped > 0) toast(t(skipped === 1 ? 'search.skippedOne' : 'search.skippedMany', { count: skipped }));
     }
 
     setConfirmDelete(null);
@@ -202,8 +204,8 @@ export function SearchResultsList() {
         fontSize: '0.6875rem', color: 'var(--text-muted)',
         fontFamily: 'var(--font-sans)', padding: '4px 0 8px',
       }}>
-        <span>{total} result{total !== 1 ? 's' : ''}</span>
-        {queryTimeMs != null && <span>in {queryTimeMs}ms</span>}
+        <span>{t(total === 1 ? 'search.resultOne' : 'search.resultMany', { count: total })}</span>
+        {queryTimeMs != null && <span>{t('search.time', { time: queryTimeMs })}</span>}
         {searchType && <span style={{ fontFamily: 'var(--font-mono)' }}>({searchType})</span>}
       </div>
 
@@ -219,7 +221,7 @@ export function SearchResultsList() {
           fontFamily: 'var(--font-sans)',
         }}>
           <span style={{ color: 'var(--amber)', fontWeight: 600 }}>
-            {checkedIds.size} selected
+            {t('search.selected', { count: checkedIds.size })}
           </span>
           <button
             onClick={() => {
@@ -244,7 +246,7 @@ export function SearchResultsList() {
             }}
           >
             <Trash2 size={12} />
-            Delete selected
+            {t('search.deleteSelectedAction')}
           </button>
           <button
             onClick={clearSelection}
@@ -262,7 +264,7 @@ export function SearchResultsList() {
             }}
           >
             <X size={12} />
-            Clear
+            {t('search.clearSelection')}
           </button>
         </div>
       )}
@@ -308,6 +310,9 @@ export function SearchResultsList() {
                     {/* Checkbox */}
                     <span
                       onClick={(e) => { e.stopPropagation(); toggleCheck(r, e.shiftKey); }}
+                      role="checkbox"
+                      aria-checked={checked}
+                      aria-label={t(checked ? 'search.deselect' : 'search.select')}
                       style={{
                         flexShrink: 0,
                         cursor: 'pointer',
@@ -380,7 +385,7 @@ export function SearchResultsList() {
                           cursor: res.route ? 'pointer' : 'not-allowed',
                         }}
                       >
-                        Open {res.label}
+                        {t('search.openItem', { label: res.label })}
                       </button>
                     </div>
                   )}
@@ -397,13 +402,13 @@ export function SearchResultsList() {
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
         onConfirm={handleConfirmDelete}
-        title={confirmDelete?.targets.length === 1 ? 'Delete item?' : `Delete ${confirmDelete?.targets.length} items?`}
+        title={confirmDelete?.targets.length === 1 ? t('search.deleteItem') : t('search.deleteItems', { count: confirmDelete?.targets.length ?? 0 })}
         description={
           confirmDelete?.targets.length === 1
-            ? `"${confirmDelete.label}" will be permanently deleted.`
-            : `This will permanently delete ${confirmDelete?.label}. This cannot be undone.`
+            ? t('search.permanentDelete', { label: confirmDelete.label })
+            : t('search.permanentDeleteMany', { label: confirmDelete?.label ?? '' })
         }
-        confirmLabel="Delete"
+        confirmLabel={t('search.delete')}
         variant="danger"
       />
     </div>

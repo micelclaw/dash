@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/services/api';
 import type { VFSMount, VFSNode } from './hooks/use-vfs';
+import { useI18n } from '@/i18n';
 
 interface CrossSourcePickerProps {
   open: boolean;
@@ -43,6 +44,7 @@ interface DirNode {
 export function CrossSourcePicker({
   open, action, sourcePaths, onConfirm, onCancel,
 }: CrossSourcePickerProps) {
+  const { t } = useI18n();
   const [mountNodes, setMountNodes] = useState<MountTreeNode[]>([]);
   const [loadingMounts, setLoadingMounts] = useState(true);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -121,8 +123,8 @@ export function CrossSourcePicker({
   const isSourcePath = (path: string) => sourcePaths.some(sp => sp === path || path.startsWith(sp + '/'));
 
   const canConfirm = selectedPath && !isSourcePath(selectedPath);
-  const actionLabel = action === 'copy' ? 'Copy here' : 'Move here';
-  const title = action === 'copy' ? 'Copy to...' : 'Move to...';
+  const actionLabel = t(action === 'copy' ? 'explorer.cross.copyHere' : 'explorer.cross.moveHere');
+  const title = t(action === 'copy' ? 'explorer.cross.copyTitle' : 'explorer.cross.moveTitle');
 
   if (!open) return null;
 
@@ -158,6 +160,8 @@ export function CrossSourcePicker({
           </h3>
           <button
             onClick={onCancel}
+            title={t('explorer.cross.close')}
+            aria-label={t('explorer.cross.close')}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2, display: 'flex' }}
           >
             <X size={16} />
@@ -167,9 +171,9 @@ export function CrossSourcePicker({
         {/* Tree */}
         <div style={{ flex: 1, overflow: 'auto', padding: '8px 12px', minHeight: 200 }}>
           {loadingMounts ? (
-            <div style={{ padding: 12, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading sources...</div>
+            <div role="status" style={{ padding: 12, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('explorer.cross.loading')}</div>
           ) : mountNodes.length === 0 ? (
-            <div style={{ padding: 12, fontSize: '0.8125rem', color: 'var(--text-muted)' }}>No storage sources found.</div>
+            <div style={{ padding: 12, fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{t('explorer.cross.none')}</div>
           ) : (
             mountNodes.map(mNode => {
               const isRO = mNode.mount.read_only;
@@ -216,7 +220,7 @@ export function CrossSourcePicker({
               cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('explorer.cross.cancel')}
           </button>
           <button
             onClick={() => canConfirm && onConfirm(selectedPath!)}
@@ -253,12 +257,18 @@ function MountRow({ mount, selected, disabled, expanded, loading, onSelect, onTo
   onSelect: () => void;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const icon = getMountIcon(mount.provider_type);
 
   return (
     <div
       onClick={disabled ? undefined : onSelect}
+      onKeyDown={e => { if (!disabled && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSelect(); } }}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-pressed={selected}
+      aria-disabled={disabled}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -273,6 +283,9 @@ function MountRow({ mount, selected, disabled, expanded, loading, onSelect, onTo
     >
       <button
         onClick={e => { e.stopPropagation(); onToggle(); }}
+        title={t(expanded ? 'explorer.cross.collapseMount' : 'explorer.cross.expandMount', { name: mount.name })}
+        aria-label={t(expanded ? 'explorer.cross.collapseMount' : 'explorer.cross.expandMount', { name: mount.name })}
+        aria-expanded={expanded}
         style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
           padding: 0, display: 'flex', alignItems: 'center',
@@ -304,6 +317,7 @@ function DirTreeNode({ dNode, depth, selectedPath, isReadOnly, onSelect, onToggl
   onSelect: (path: string) => void;
   onToggle: (node: DirNode) => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const selected = selectedPath === dNode.node.path;
   const hasChildren = dNode.children === null || dNode.children.length > 0;
@@ -314,6 +328,11 @@ function DirTreeNode({ dNode, depth, selectedPath, isReadOnly, onSelect, onToggl
     <>
       <div
         onClick={isReadOnly ? undefined : () => onSelect(dNode.node.path)}
+        onKeyDown={e => { if (!isReadOnly && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSelect(dNode.node.path); } }}
+        role="button"
+        tabIndex={isReadOnly ? -1 : 0}
+        aria-pressed={selected}
+        aria-disabled={isReadOnly}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -330,6 +349,9 @@ function DirTreeNode({ dNode, depth, selectedPath, isReadOnly, onSelect, onToggl
       >
         <button
           onClick={e => { e.stopPropagation(); onToggle(dNode); }}
+          title={t(dNode.expanded ? 'explorer.cross.collapseFolder' : 'explorer.cross.expandFolder', { name: dNode.node.name })}
+          aria-label={t(dNode.expanded ? 'explorer.cross.collapseFolder' : 'explorer.cross.expandFolder', { name: dNode.node.name })}
+          aria-expanded={dNode.expanded}
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             padding: 0, display: 'flex', alignItems: 'center',

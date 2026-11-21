@@ -11,6 +11,7 @@
  */
 
 import { useMemo } from 'react';
+import { useI18n } from '@/i18n';
 import {
   X, PanelRightClose, PanelRightOpen, Info, Star, Tags, FolderInput, Trash2,
   Files as FilesIcon,
@@ -65,6 +66,7 @@ const PANEL_WIDTH = 360;
  * selection.
  */
 export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onToggleStar, bulk }: DriveInspectorProps) {
+  const { t } = useI18n();
   const inspectorOpen = useDriveStore(s => s.inspectorOpen);
   const setInspectorOpen = useDriveStore(s => s.setInspectorOpen);
   const inspectorTab = useDriveStore(s => s.inspectorTab);
@@ -78,12 +80,12 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
   const tabs = useMemo(() => {
     if (!single) return [];
     const base = [
-      { id: 'details', label: 'Details' },
-      { id: 'activity', label: 'Activity' },
+      { id: 'details', label: t('drive.inspector.tab.details') },
+      { id: 'activity', label: t('drive.inspector.tab.activity') },
     ];
-    if (!single.is_directory) base.push({ id: 'versions', label: 'Versions' });
+    if (!single.is_directory) base.push({ id: 'versions', label: t('drive.inspector.tab.versions') });
     return base;
-  }, [single]);
+  }, [single, t]);
 
   // A folder can't show Versions — clamp the persisted tab.
   const effectiveTab: DriveInspectorTab =
@@ -110,7 +112,8 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
       >
         <button
           onClick={() => setInspectorOpen(true)}
-          title="Open inspector"
+          title={t('drive.inspector.open')}
+          aria-label={t('drive.inspector.open')}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--mod-drive)', padding: 4, display: 'flex',
@@ -174,7 +177,7 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
             fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)',
           }}>
             <FilesIcon size={14} style={{ color: 'var(--mod-drive)' }} />
-            {files.length} items selected
+            {t('drive.inspector.selectedItems', { count: files.length })}
           </div>
         ) : (
           <div style={{
@@ -182,12 +185,13 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
             fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)',
           }}>
             <Info size={14} style={{ color: 'var(--mod-drive)' }} />
-            Details
+            {t('drive.inspector.tab.details')}
           </div>
         )}
         <button
           onClick={() => setInspectorOpen(false)}
-          title="Collapse inspector"
+          title={t('drive.inspector.collapse')}
+          aria-label={t('drive.inspector.collapse')}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0,
@@ -198,7 +202,8 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
         {hasSelection && (
           <button
             onClick={onClose}
-            title="Close (clear selection)"
+            title={t('drive.inspector.closeSelection')}
+            aria-label={t('drive.inspector.closeSelection')}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0,
@@ -259,6 +264,7 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
 // ─── Multi-select aggregate summary ────────────────────────
 
 function MultiSummary({ files, bulk }: { files: FileRecord[]; bulk?: InspectorBulkActions }) {
+  const { t } = useI18n();
   const totalSize = files.reduce((acc, f) => acc + (f.is_directory ? 0 : f.size_bytes), 0);
   const folders = files.filter(f => f.is_directory).length;
   const allStarred = files.length > 0 && files.every(f => f.starred);
@@ -310,14 +316,14 @@ function MultiSummary({ files, bulk }: { files: FileRecord[]; bulk?: InspectorBu
           {bulk.onStar && (
             <QuickBtn
               icon={Star}
-              label={allStarred ? 'Unstar' : 'Star'}
+              label={t(allStarred ? 'drive.inspector.bulk.unstar' : 'drive.inspector.bulk.star')}
               onClick={() => bulk.onStar!(files, !allStarred)}
             />
           )}
-          {bulk.onTags && <QuickBtn icon={Tags} label="Tags" onClick={() => bulk.onTags!(files)} />}
-          {bulk.onMove && <QuickBtn icon={FolderInput} label="Move" onClick={() => bulk.onMove!(files)} />}
+          {bulk.onTags && <QuickBtn icon={Tags} label={t('drive.inspector.bulk.tags')} onClick={() => bulk.onTags!(files)} />}
+          {bulk.onMove && <QuickBtn icon={FolderInput} label={t('drive.inspector.bulk.move')} onClick={() => bulk.onMove!(files)} />}
           {bulk.onDelete && (
-            <QuickBtn icon={Trash2} label="Delete" variant="danger" onClick={() => bulk.onDelete!(files)} />
+            <QuickBtn icon={Trash2} label={t('drive.inspector.bulk.delete')} variant="danger" onClick={() => bulk.onDelete!(files)} />
           )}
         </div>
       )}

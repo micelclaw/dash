@@ -12,6 +12,7 @@
 
 import { Library } from 'lucide-react';
 import { MultimediaEmbed } from '@/modules/multimedia/MultimediaEmbed';
+import { useI18n } from '@/i18n';
 
 /**
  * Manage tab (admin only): embedded Calibre-web for library curation.
@@ -19,12 +20,13 @@ import { MultimediaEmbed } from '@/modules/multimedia/MultimediaEmbed';
  * MultimediaEmbed positions itself absolutely, hence the relative wrapper.
  */
 export function ManageView() {
+  const { t } = useI18n();
   return (
     <div style={{ position: 'relative', height: '100%', minHeight: 0 }}>
       <MultimediaEmbed
         serviceName="calibreweb"
         displayName="Calibre-Web Automated"
-        description="eBook library manager · upload + auto-ingest"
+        description={t('books.manageDescription')}
         port={8083}
         icon={Library}
         color="#8b5cf6"

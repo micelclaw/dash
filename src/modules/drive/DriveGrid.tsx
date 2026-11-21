@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { Image, Folder, Star } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { FileThumbnail } from '@/components/shared/FileThumbnail';
 import { ContextMenu } from '@/components/shared/ContextMenu';
@@ -50,6 +51,7 @@ export function DriveGrid({
   getContextMenuItems, onToggleStar, onDragToFolder, cutIds,
   isMobile, onEmptyUpload, onEmptyNewFolder,
 }: DriveGridProps) {
+  const { t } = useI18n();
   // D6 — density toggle (persisted in drive.store): compact tightens cells.
   const density = useDriveStore(s => s.density);
   const compact = density === 'compact';
@@ -63,11 +65,11 @@ export function DriveGrid({
     return (
       <EmptyState
         icon={Folder}
-        title="This folder is empty"
-        description="Drop files here or use the upload button"
+        title={t('driveGrid.empty.title')}
+        description={t('driveGrid.empty.description')}
         actions={[
-          ...(onEmptyUpload ? [{ label: 'Upload files', onClick: onEmptyUpload, variant: 'primary' as const }] : []),
-          ...(onEmptyNewFolder ? [{ label: 'New folder', onClick: onEmptyNewFolder, variant: 'secondary' as const }] : []),
+          ...(onEmptyUpload ? [{ label: t('driveGrid.empty.upload'), onClick: onEmptyUpload, variant: 'primary' as const }] : []),
+          ...(onEmptyNewFolder ? [{ label: t('driveGrid.empty.newFolder'), onClick: onEmptyNewFolder, variant: 'secondary' as const }] : []),
         ]}
       />
     );
@@ -77,7 +79,7 @@ export function DriveGrid({
     <div
       role="listbox"
       aria-multiselectable="true"
-      aria-label="Files"
+      aria-label={t('driveGrid.files')}
       style={{
         display: 'grid',
         gridTemplateColumns: isMobile
@@ -143,6 +145,7 @@ function GridItem({
   starred?: boolean;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const isImage = isImageMime(file.mime_type);
@@ -253,6 +256,7 @@ function GridItem({
         {showCb && (
           <input
             type="checkbox"
+            aria-label={t('driveGrid.selectFile', { filename: file.filename })}
             checked={checked}
             onClick={(e) => { e.stopPropagation(); onToggleSelect(e.shiftKey); }}
             onChange={() => {}}
@@ -273,7 +277,8 @@ function GridItem({
         {onToggleStar && (starred || hovered) && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
-            title={starred ? 'Unstar' : 'Star'}
+            aria-label={t(starred ? 'driveGrid.unstar' : 'driveGrid.star')}
+            title={t(starred ? 'driveGrid.unstar' : 'driveGrid.star')}
             style={{
               position: 'absolute',
               top: 4,

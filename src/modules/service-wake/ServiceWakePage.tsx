@@ -22,6 +22,7 @@ import { Power, Loader2, AlertTriangle, CheckCircle2, LogIn } from 'lucide-react
 import { useAuthStore } from '@/stores/auth.store';
 import { useServicesStore } from '@/stores/services.store';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 type Phase = 'needs-auth' | 'loading' | 'stopped' | 'starting' | 'ready' | 'error';
 
@@ -30,6 +31,7 @@ function prettySlug(slug: string): string {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const [params] = useSearchParams();
   const slug = params.get('service') ?? '';
   const returnUrl = params.get('return') ?? '';
@@ -71,7 +73,7 @@ export function Component() {
 
     const evaluate = async () => {
       const s = useServicesStore.getState().services.find((x) => x.name === slug);
-      if (!s) { setPhase('error'); setErrMsg('Servicio desconocido.'); return; }
+      if (!s) { setPhase('error'); setErrMsg(t('serviceWake.unknown')); return; }
       if (s.state === 'running') {
         const ok = await checkReachable();
         if (cancelled) return;
@@ -80,7 +82,7 @@ export function Component() {
       } else if (s.state === 'starting' || s.state === 'draining') {
         setPhase('starting');
       } else if (s.state === 'failed') {
-        setPhase('error'); setErrMsg(s.error ?? 'El servicio no pudo arrancar.');
+        setPhase('error'); setErrMsg(s.error ?? t('serviceWake.startError'));
       } else {
         setPhase(startedRef.current ? 'starting' : 'stopped');
       }
@@ -92,7 +94,7 @@ export function Component() {
       if (!cancelled && phaseRef.current !== 'ready' && phaseRef.current !== 'error') void tick();
     }, 2_500);
     return () => { cancelled = true; clearInterval(id); };
-  }, [isAuthenticated, slug, fetchServices, checkReachable, goToService]);
+  }, [isAuthenticated, slug, fetchServices, checkReachable, goToService, t]);
 
   const handleActivate = async () => {
     startedRef.current = true;
@@ -102,7 +104,7 @@ export function Component() {
       await startService(slug);
     } catch (e: any) {
       setPhase('error');
-      setErrMsg(e?.message ?? 'No se pudo arrancar el servicio.');
+      setErrMsg(e?.message ?? t('serviceWake.startError'));
     }
   };
 
@@ -112,26 +114,26 @@ export function Component() {
         {phase === 'needs-auth' && (
           <>
             <Power size={40} style={{ color: 'var(--amber)' }} />
-            <h2 style={h2}>{displayName} está detenido</h2>
-            <p style={dim}>Inicia sesión en el panel para activarlo.</p>
-            <a href={`/login`} style={primaryBtn}><LogIn size={16} /> Iniciar sesión</a>
+            <h2 style={h2}>{t('serviceWake.stopped', { service: displayName })}</h2>
+            <p style={dim}>{t('serviceWake.loginHint')}</p>
+            <a href={`/login`} style={primaryBtn}><LogIn size={16} /> {t('serviceWake.signIn')}</a>
           </>
         )}
 
         {phase === 'loading' && (
           <>
             <Loader2 size={36} className="animate-spin" style={{ color: 'var(--text-dim)' }} />
-            <p style={dim}>Comprobando {displayName}…</p>
+            <p style={dim}>{t('serviceWake.checking', { service: displayName })}</p>
           </>
         )}
 
         {phase === 'stopped' && (
           <>
             <Power size={40} style={{ color: 'var(--amber)' }} />
-            <h2 style={h2}>{displayName} está detenido</h2>
-            <p style={dim}>Este servicio no está activo ahora mismo. Actívalo para abrirlo.</p>
+            <h2 style={h2}>{t('serviceWake.stopped', { service: displayName })}</h2>
+            <p style={dim}>{t('serviceWake.inactive')}</p>
             <button onClick={() => void handleActivate()} style={primaryBtn}>
-              <Power size={16} /> Activar {displayName}
+              <Power size={16} /> {t('serviceWake.activate', { service: displayName })}
             </button>
           </>
         )}
@@ -139,10 +141,9 @@ export function Component() {
         {phase === 'starting' && (
           <>
             <Loader2 size={36} className="animate-spin" style={{ color: 'var(--amber)' }} />
-            <h2 style={h2}>Arrancando {displayName}…</h2>
+            <h2 style={h2}>{t('serviceWake.starting', { service: displayName })}</h2>
             <p style={dim}>
-              Puede tardar unos {estSeconds >= 60 ? `${Math.round(estSeconds / 60)} min` : `${estSeconds} s`}.
-              Te llevaré allí en cuanto esté listo.
+              {t('serviceWake.waitTime', { duration: estSeconds >= 60 ? `${Math.round(estSeconds / 60)} min` : `${estSeconds} s` })}
             </p>
           </>
         )}
@@ -150,18 +151,18 @@ export function Component() {
         {phase === 'ready' && (
           <>
             <CheckCircle2 size={40} style={{ color: 'var(--success)' }} />
-            <h2 style={h2}>{displayName} listo</h2>
-            <p style={dim}>Redirigiendo…</p>
+            <h2 style={h2}>{t('serviceWake.ready', { service: displayName })}</h2>
+            <p style={dim}>{t('serviceWake.redirecting')}</p>
           </>
         )}
 
         {phase === 'error' && (
           <>
             <AlertTriangle size={40} style={{ color: 'var(--error)' }} />
-            <h2 style={h2}>No se pudo activar</h2>
+            <h2 style={h2}>{t('serviceWake.activateError')}</h2>
             <p style={dim}>{errMsg}</p>
             <button onClick={() => void handleActivate()} style={primaryBtn}>
-              <Power size={16} /> Reintentar
+              <Power size={16} /> {t('serviceWake.retry')}
             </button>
           </>
         )}

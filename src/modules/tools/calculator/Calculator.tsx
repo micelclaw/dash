@@ -12,12 +12,14 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { evaluate } from 'mathjs';
+import { useI18n } from '@/i18n';
 
 type AngleMode = 'deg' | 'rad';
 
 const HISTORY_MAX = 50;
 
 export function Calculator() {
+  const { t } = useI18n();
   const [expression, setExpression] = useState('');
   const [display, setDisplay] = useState('0');
   const [angleMode, setAngleMode] = useState<AngleMode>('deg');
@@ -140,23 +142,26 @@ export function Calculator() {
           fontFamily: 'var(--font-mono)', color: 'var(--text)',
           textAlign: 'right', wordBreak: 'break-all',
         }}>
-          {display}
+          {display === 'Error' ? t('calculator.error') : display}
         </div>
       </div>
 
       {/* Top controls */}
       <div style={{ display: 'flex', gap: 4 }}>
         <button
+          aria-label={t(angleMode === 'deg' ? 'calculator.angleDegrees' : 'calculator.angleRadians')}
           style={{ ...btnStyle(angleMode === 'deg' ? 'var(--amber)' : 'var(--text-dim)'), flex: 1, fontSize: '0.6875rem' }}
           onClick={() => setAngleMode(m => m === 'deg' ? 'rad' : 'deg')}
         >
           {angleMode === 'deg' ? 'DEG' : 'RAD'}
         </button>
         <button
+          aria-label={t('calculator.history')}
+          aria-expanded={showHistory}
           style={{ ...btnStyle('var(--text-dim)'), flex: 1, fontSize: '0.6875rem', position: 'relative' }}
           onClick={() => setShowHistory(!showHistory)}
         >
-          History ▾
+          {t('calculator.history')} ▾
         </button>
       </div>
 
@@ -168,7 +173,7 @@ export function Calculator() {
           maxHeight: 120, overflowY: 'auto', fontSize: '0.6875rem',
         }}>
           {history.length === 0 ? (
-            <div style={{ color: 'var(--text-dim)', textAlign: 'center', padding: 8 }}>No history</div>
+            <div style={{ color: 'var(--text-dim)', textAlign: 'center', padding: 8 }}>{t('calculator.noHistory')}</div>
           ) : history.map((h, i) => (
             <div
               key={i}
@@ -206,36 +211,36 @@ export function Calculator() {
         <button style={btnStyle()} onClick={() => append('(')}>(</button>
         <button style={btnStyle()} onClick={() => append(')')}>)</button>
         <button style={btnStyle()} onClick={() => append('%')}>%</button>
-        <button style={btnStyle('#ef4444')} onClick={clear}>C</button>
-        <button style={btnStyle()} onClick={backspace}>⌫</button>
+        <button aria-label={t('calculator.clear')} style={btnStyle('#ef4444')} onClick={clear}>C</button>
+        <button aria-label={t('calculator.backspace')} style={btnStyle()} onClick={backspace}>⌫</button>
 
         {/* Numeric grid row 1 */}
         <button style={btnStyle()} onClick={() => append('7')}>7</button>
         <button style={btnStyle()} onClick={() => append('8')}>8</button>
         <button style={btnStyle()} onClick={() => append('9')}>9</button>
         <button style={btnStyle('var(--amber)')} onClick={() => append(' / ')}>÷</button>
-        <button style={btnStyle('var(--text-dim)', 'transparent')} onClick={memoryAdd}>M+</button>
+        <button aria-label={t('calculator.memoryAdd')} style={btnStyle('var(--text-dim)', 'transparent')} onClick={memoryAdd}>M+</button>
 
         {/* Numeric grid row 2 */}
         <button style={btnStyle()} onClick={() => append('4')}>4</button>
         <button style={btnStyle()} onClick={() => append('5')}>5</button>
         <button style={btnStyle()} onClick={() => append('6')}>6</button>
         <button style={btnStyle('var(--amber)')} onClick={() => append(' * ')}>×</button>
-        <button style={btnStyle('var(--text-dim)', 'transparent')} onClick={memorySub}>M−</button>
+        <button aria-label={t('calculator.memorySubtract')} style={btnStyle('var(--text-dim)', 'transparent')} onClick={memorySub}>M−</button>
 
         {/* Numeric grid row 3 */}
         <button style={btnStyle()} onClick={() => append('1')}>1</button>
         <button style={btnStyle()} onClick={() => append('2')}>2</button>
         <button style={btnStyle()} onClick={() => append('3')}>3</button>
         <button style={btnStyle('var(--amber)')} onClick={() => append(' - ')}>−</button>
-        <button style={btnStyle('var(--text-dim)', 'transparent')} onClick={memoryRecall}>MR</button>
+        <button aria-label={t('calculator.memoryRecall')} style={btnStyle('var(--text-dim)', 'transparent')} onClick={memoryRecall}>MR</button>
 
         {/* Numeric grid row 4 */}
         <button style={btnStyle()} onClick={() => append('0')}>0</button>
         <button style={btnStyle()} onClick={() => append('.')}>.</button>
         <button style={btnStyle()} onClick={() => append('e')}>EXP</button>
         <button style={btnStyle('var(--amber)')} onClick={() => append(' + ')}>+</button>
-        <button style={btnStyle('#000', 'var(--amber)')} onClick={calc}>=</button>
+        <button aria-label={t('calculator.calculate')} style={btnStyle('#000', 'var(--amber)')} onClick={calc}>=</button>
       </div>
     </div>
   );

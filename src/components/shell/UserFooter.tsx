@@ -12,6 +12,7 @@
 
 import { useNavigate } from 'react-router';
 import { Settings, LogOut } from 'lucide-react';
+import { useSignOut } from '@/hooks/use-sign-out';
 import { useAuthStore } from '@/stores/auth.store';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,7 @@ interface UserFooterProps {
 
 export function UserFooter({ collapsed }: UserFooterProps) {
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const { signOut, revoking } = useSignOut();
   const navigate = useNavigate();
 
   if (!user) return null;
@@ -84,7 +85,8 @@ export function UserFooter({ collapsed }: UserFooterProps) {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => { logout(); navigate('/login', { replace: true }); }}
+          disabled={revoking}
+          onClick={() => { void signOut(); }}
           style={{ color: 'var(--error)' }}
         >
           <LogOut size={14} />

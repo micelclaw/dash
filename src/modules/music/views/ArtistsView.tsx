@@ -17,8 +17,10 @@ import { MediaGrid, MediaCard } from '@/components/media';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useMusicStore } from '@/stores/music.store';
 import { coverUrl } from '@/services/music.service';
+import { useI18n } from '@/i18n';
 
 export function ArtistsView() {
+  const { t } = useI18n();
   const artists = useMusicStore((s) => s.artists);
   const loading = useMusicStore((s) => s.loadingArtists);
 
@@ -28,12 +30,12 @@ export function ArtistsView() {
 
   if (artists === null) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('music.loading')}</div>
     ) : null;
   }
 
   if (artists.length === 0) {
-    return <EmptyState icon={MicVocal} title="No artists" description="Your music library has no artists yet." />;
+    return <EmptyState icon={MicVocal} title={t('music.noArtists')} description={t('music.noArtistsLibrary')} />;
   }
 
   return (
@@ -48,7 +50,7 @@ export function ArtistsView() {
             badge={<EntitySource entity={artist} domain="music" native />}
             subtitle={
               artist.album_count !== undefined
-                ? `${artist.album_count} album${artist.album_count === 1 ? '' : 's'}`
+                ? t(artist.album_count === 1 ? 'music.albumCountOne' : 'music.albumCountMany', { count: artist.album_count })
                 : undefined
             }
             rounded="circle"

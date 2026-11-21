@@ -1,6 +1,7 @@
 import { Extension, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { randomUuid } from '@/lib/random-uuid';
 
 /** Invisible provenance for the existing editor, not a separate editing surface. */
 export const NativeNoteIdentity = Extension.create({
@@ -60,7 +61,7 @@ export const NativeNoteIdentity = Extension.create({
         node.descendants(child => { if (child.attrs.nativeIndex !== null && child.attrs.nativeIndex !== undefined) knownChild = true; });
         if (knownChild) return;
         if (!node.attrs.nativeDraftId) {
-          transaction.setNodeMarkup(position, undefined, { ...node.attrs, nativeDraftId: crypto.randomUUID() }); changed = true;
+          transaction.setNodeMarkup(position, undefined, { ...node.attrs, nativeDraftId: randomUuid() }); changed = true;
         }
         return false;
       });

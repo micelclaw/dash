@@ -14,11 +14,15 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Circle, Pause, Square, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 import { Waveform } from './Waveform';
 
 type RecorderStatus = 'idle' | 'recording' | 'paused' | 'stopped';
 
 export function VoiceRecorder() {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -61,8 +65,8 @@ export function VoiceRecorder() {
     // landing in the generic "access denied" catch — which misleads the user
     // into checking mic permissions. Detect it up front and be explicit.
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      toast.error('Microphone needs a secure connection (https)', {
-        description: "You're connected over http. Open the app at https://<your-domain>.claw to record.",
+      toast.error(tRef.current('voiceRecorder.error.secureConnection'), {
+        description: tRef.current('voiceRecorder.error.secureConnectionDescription', { url: 'https://<your-domain>.claw' }),
         duration: 8000,
       });
       return;
@@ -106,7 +110,7 @@ export function VoiceRecorder() {
       setElapsed(0);
       startTimer();
     } catch {
-      toast.error('Microphone access denied');
+      toast.error(tRef.current('voiceRecorder.error.microphoneAccess'));
     }
   }, [audioUrl, startTimer, stopTimer]);
 
@@ -151,9 +155,9 @@ export function VoiceRecorder() {
       formData.append('file', file);
       formData.append('parent_folder', '/Tools/Recordings');
       await api.upload('/files/upload', formData);
-      toast.success(`Saved: ${filename}`);
+      toast.success(tRef.current('voiceRecorder.toast.saved', { filename }));
     } catch {
-      toast.error('Failed to save recording');
+      toast.error(tRef.current('voiceRecorder.error.save'));
     } finally {
       setSaving(false);
     }
@@ -178,7 +182,7 @@ export function VoiceRecorder() {
       />
 
       {/* Timer */}
-      <div style={{
+      <div aria-live="polite" style={{
         textAlign: 'center', fontSize: '2rem', fontWeight: 600,
         fontFamily: 'var(--font-mono)', color: status === 'recording' ? '#ef4444' : 'var(--text)',
         letterSpacing: '0.05em',
@@ -191,36 +195,36 @@ export function VoiceRecorder() {
         textAlign: 'center', fontSize: '0.6875rem', color: 'var(--text-dim)',
         textTransform: 'uppercase', letterSpacing: '0.05em',
       }}>
-        {status === 'idle' && 'Ready'}
-        {status === 'recording' && 'Recording'}
-        {status === 'paused' && 'Paused'}
-        {status === 'stopped' && 'Recorded'}
+        {status === 'idle' && t('voiceRecorder.status.ready')}
+        {status === 'recording' && t('voiceRecorder.status.recording')}
+        {status === 'paused' && t('voiceRecorder.status.paused')}
+        {status === 'stopped' && t('voiceRecorder.status.recorded')}
       </div>
 
       {/* Controls */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 'auto' }}>
         {status === 'idle' && (
-          <ControlButton icon={<Circle size={18} />} label="Record" color="#ef4444" onClick={handleRecord} />
+          <ControlButton icon={<Circle size={18} />} label={t('voiceRecorder.action.record')} color="#ef4444" onClick={handleRecord} />
         )}
 
         {status === 'recording' && (
           <>
-            <ControlButton icon={<Pause size={18} />} label="Pause" onClick={handlePause} />
-            <ControlButton icon={<Square size={16} />} label="Stop" color="#ef4444" onClick={handleStop} />
+            <ControlButton icon={<Pause size={18} />} label={t('voiceRecorder.action.pause')} onClick={handlePause} />
+            <ControlButton icon={<Square size={16} />} label={t('voiceRecorder.action.stop')} color="#ef4444" onClick={handleStop} />
           </>
         )}
 
         {status === 'paused' && (
           <>
-            <ControlButton icon={<Circle size={18} />} label="Resume" color="#ef4444" onClick={handleResume} />
-            <ControlButton icon={<Square size={16} />} label="Stop" onClick={handleStop} />
+            <ControlButton icon={<Circle size={18} />} label={t('voiceRecorder.action.resume')} color="#ef4444" onClick={handleResume} />
+            <ControlButton icon={<Square size={16} />} label={t('voiceRecorder.action.stop')} onClick={handleStop} />
           </>
         )}
 
         {status === 'stopped' && (
           <>
-            <ControlButton icon={<Circle size={18} />} label="New" color="#ef4444" onClick={handleNewRecording} />
-            <ControlButton icon={<Save size={16} />} label={saving ? 'Saving...' : 'Save'} color="var(--amber)" onClick={handleSave} disabled={saving} />
+            <ControlButton icon={<Circle size={18} />} label={t('voiceRecorder.action.new')} color="#ef4444" onClick={handleNewRecording} />
+            <ControlButton icon={<Save size={16} />} label={saving ? t('voiceRecorder.action.saving') : t('voiceRecorder.action.save')} color="var(--amber)" onClick={handleSave} disabled={saving} />
           </>
         )}
       </div>
@@ -253,6 +257,7 @@ function ControlButton({
     <button
       onClick={onClick}
       disabled={disabled}
+      aria-label={label}
       title={label}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,

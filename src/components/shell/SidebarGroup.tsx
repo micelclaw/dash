@@ -10,13 +10,19 @@
  * https://micelclaw.com
  */
 
+import { useI18n } from '@/i18n';
+import { moduleGroupLabel } from '@/i18n/module-labels';
+import type { ModuleConfig } from '@/types/modules';
+
 interface SidebarGroupProps {
   label: string;
   collapsed: boolean;
+  modules: ModuleConfig[];
   children: React.ReactNode;
 }
 
-export function SidebarGroup({ label, collapsed, children }: SidebarGroupProps) {
+export function SidebarGroup({ label, collapsed, modules, children }: SidebarGroupProps) {
+  const { locale } = useI18n();
   return (
     <div style={{ paddingTop: 16 }}>
       {!collapsed && (
@@ -39,7 +45,7 @@ export function SidebarGroup({ label, collapsed, children }: SidebarGroupProps) 
               marginBottom: 4,
             }}
           >
-            {label}
+            {moduleGroupLabel(label, locale, modules)}
           </div>
         </>
       )}

@@ -10,8 +10,9 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import type { Album } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 interface EditAlbumDialogProps {
   open: boolean;
@@ -21,6 +22,9 @@ interface EditAlbumDialogProps {
 }
 
 export function EditAlbumDialog({ open, album, onClose, onConfirm }: EditAlbumDialogProps) {
+  const { t } = useI18n();
+  const nameId = useId();
+  const descriptionId = useId();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
@@ -72,29 +76,31 @@ export function EditAlbumDialog({ open, album, onClose, onConfirm }: EditAlbumDi
         }}
       >
         <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>
-          Edit Album
+          {t('photos.editAlbum')}
         </h3>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
           <div>
-            <label style={labelStyle}>Title *</label>
+            <label htmlFor={nameId} style={labelStyle}>{t('photos.albumTitle')}</label>
             <input
+              id={nameId}
               ref={inputRef}
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-              placeholder="Album name"
+              placeholder={t('photos.albumName')}
               style={inputStyle}
             />
           </div>
 
           <div>
-            <label style={labelStyle}>Description</label>
+            <label htmlFor={descriptionId} style={labelStyle}>{t('photos.description')}</label>
             <input
+              id={descriptionId}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-              placeholder="Place, occasion..."
+              placeholder={t('photos.descriptionPlaceholder')}
               style={inputStyle}
             />
           </div>
@@ -114,7 +120,7 @@ export function EditAlbumDialog({ open, album, onClose, onConfirm }: EditAlbumDi
               color: 'var(--text-dim)',
             }}
           >
-            Cancel
+            {t('photos.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -134,7 +140,7 @@ export function EditAlbumDialog({ open, album, onClose, onConfirm }: EditAlbumDi
               opacity: hoveredBtn === 'save' && name.trim() ? 0.9 : 1,
             }}
           >
-            Save
+            {t('photos.save')}
           </button>
         </div>
       </div>

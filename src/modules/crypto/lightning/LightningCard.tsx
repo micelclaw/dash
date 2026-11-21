@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import { Play, Square, Zap, Cpu, Loader2, Wrench, Download, ChevronDown, ChevronRight, Network, Users, Layers, Plus, X, Copy, RefreshCw } from 'lucide-react';
 import { api } from '@/services/api';
 import { CryptoLogs } from '../shared/CryptoLogs';
@@ -90,6 +91,7 @@ const STATE_COLORS: Record<string, string> = {
 };
 
 export function LightningCard({ svc, info, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
+  const { t } = useI18n();
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
 
@@ -260,7 +262,7 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
       {!loading && !installed && (
         <div className="crypto-card-body">
           <button className="crypto-install-btn" onClick={onInstall}>
-            <Download size={14} /> Install Core Lightning
+            <Download size={14} /> {t('crypto.lightning.installCore')}
           </button>
         </div>
       )}
@@ -268,13 +270,13 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
       {info && (
         <div className="crypto-card-body">
           <div className="crypto-card-stats">
-            <div><span className="dim">Node ID</span> {truncateId(info.id)}</div>
-            {info.alias && <div><span className="dim">Alias</span> {info.alias}</div>}
-            <div><span className="dim">Channels</span> {info.num_active_channels}/{info.num_channels}</div>
-            <div><span className="dim">Peers</span> {info.num_peers}</div>
-            <div><span className="dim">Capacity</span> {info.total_capacity_sat.toLocaleString()} sat</div>
-            <div><span className="dim">Synced</span> {info.synced_to_chain ? 'Yes' : 'No'}</div>
-            {svc?.uptime_seconds != null && <div><span className="dim">Up</span> {formatUptime(svc.uptime_seconds)}</div>}
+            <div><span className="dim">{t('crypto.lightning.nodeId')}</span> {truncateId(info.id)}</div>
+            {info.alias && <div><span className="dim">{t('crypto.lightning.alias')}</span> {info.alias}</div>}
+            <div><span className="dim">{t('crypto.lightning.channels')}</span> {info.num_active_channels}/{info.num_channels}</div>
+            <div><span className="dim">{t('crypto.peers')}</span> {info.num_peers}</div>
+            <div><span className="dim">{t('crypto.lightning.capacity')}</span> {info.total_capacity_sat.toLocaleString()} sat</div>
+            <div><span className="dim">{t('crypto.lightning.synced')}</span> {info.synced_to_chain ? t('crypto.yes') : t('crypto.no')}</div>
+            {svc?.uptime_seconds != null && <div><span className="dim">{t('crypto.lightning.up')}</span> {formatUptime(svc.uptime_seconds)}</div>}
           </div>
           {svc?.ram_mb != null && (
             <div className="crypto-card-ram">
@@ -288,8 +290,8 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
       {/* ─── Extended: Forwarding summary ─── */}
       {hasExtended && ext.total_forwards > 0 && (
         <div className="btc-ext-summary">
-          <span>Forwarded: {ext.successful_forwards}/{ext.total_forwards}</span>
-          <span>Earned: {formatMsat(ext.total_fees_earned_msat)}</span>
+          <span>{t('crypto.lightning.forwarded', { successful: ext.successful_forwards, total: ext.total_forwards })}</span>
+          <span>{t('crypto.lightning.earned', { amount: formatMsat(ext.total_fees_earned_msat) })}</span>
         </div>
       )}
 
@@ -298,16 +300,16 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
         <div className="btc-ext-section">
           <button className="btc-ext-toggle" onClick={() => toggleSection('network')}>
             {expandedSections.has('network') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <Network size={12} /> Network
+            <Network size={12} /> {t('crypto.network')}
           </button>
           {expandedSections.has('network') && (
             <div className="btc-ext-content">
               <div className="crypto-card-stats">
-                <div><span className="dim">Known Nodes</span> {ext.known_nodes.toLocaleString()}</div>
-                <div><span className="dim">Known Channels</span> {ext.known_channels.toLocaleString()}</div>
-                {ext.feerate_perkw_opening != null && <div><span className="dim">Opening Fee</span> {ext.feerate_perkw_opening} perkw</div>}
-                {ext.feerate_perkw_mutual_close != null && <div><span className="dim">Mutual Close</span> {ext.feerate_perkw_mutual_close} perkw</div>}
-                {ext.feerate_perkw_unilateral_close != null && <div><span className="dim">Unilateral</span> {ext.feerate_perkw_unilateral_close} perkw</div>}
+                <div><span className="dim">{t('crypto.lightning.knownNodes')}</span> {ext.known_nodes.toLocaleString()}</div>
+                <div><span className="dim">{t('crypto.lightning.knownChannels')}</span> {ext.known_channels.toLocaleString()}</div>
+                {ext.feerate_perkw_opening != null && <div><span className="dim">{t('crypto.lightning.openingFee')}</span> {ext.feerate_perkw_opening} perkw</div>}
+                {ext.feerate_perkw_mutual_close != null && <div><span className="dim">{t('crypto.lightning.mutualClose')}</span> {ext.feerate_perkw_mutual_close} perkw</div>}
+                {ext.feerate_perkw_unilateral_close != null && <div><span className="dim">{t('crypto.lightning.unilateral')}</span> {ext.feerate_perkw_unilateral_close} perkw</div>}
               </div>
             </div>
           )}
@@ -438,11 +440,11 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
           <div className="ln-dialog" onClick={e => e.stopPropagation()}>
             <div className="ln-dialog-header">
               <span className="ln-dialog-title">
-                {dialog === 'connect-peer' && 'Connect Peer'}
-                {dialog === 'open-channel' && 'Open Channel'}
-                {dialog === 'new-address' && 'New Deposit Address'}
-                {dialog === 'withdraw' && 'Withdraw On-Chain'}
-                {dialog === 'set-fees' && 'Set Channel Fees'}
+                {dialog === 'connect-peer' && t('crypto.lightning.connectPeer')}
+                {dialog === 'open-channel' && t('crypto.lightning.openChannel')}
+                {dialog === 'new-address' && t('crypto.lightning.newDepositAddress')}
+                {dialog === 'withdraw' && t('crypto.lightning.withdrawOnChain')}
+                {dialog === 'set-fees' && t('crypto.lightning.setChannelFees')}
               </span>
               <button className="btc-peer-ban" onClick={closeDialog}><X size={12} /></button>
             </div>
@@ -450,24 +452,24 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
             <div className="ln-dialog-body">
               {dialog === 'connect-peer' && (
                 <>
-                  <label className="ln-dialog-label">Peer ID (pubkey@host:port)</label>
+                  <label className="ln-dialog-label">{t('crypto.lightning.peerId')} (pubkey@host:port)</label>
                   <input className="ln-dialog-input" value={connectInput} onChange={e => setConnectInput(e.target.value)} placeholder="03abc...@1.2.3.4:9735" />
                   <button className="ln-dialog-btn" onClick={handleConnectPeer} disabled={dialogLoading}>
-                    {dialogLoading ? <Loader2 size={12} className="spin" /> : 'Connect'}
+                    {dialogLoading ? <Loader2 size={12} className="spin" /> : t('crypto.lightning.connectPeer')}
                   </button>
                 </>
               )}
 
               {dialog === 'open-channel' && (
                 <>
-                  <label className="ln-dialog-label">Peer ID</label>
+                  <label className="ln-dialog-label">{t('crypto.lightning.peerId')}</label>
                   <input className="ln-dialog-input" value={openPeerId} onChange={e => setOpenPeerId(e.target.value)} placeholder="03abc..." />
-                  <label className="ln-dialog-label">Amount (sats)</label>
+                  <label className="ln-dialog-label">{t('crypto.lightning.amountSats')}</label>
                   <input className="ln-dialog-input" value={openAmount} onChange={e => setOpenAmount(e.target.value)} placeholder="100000" type="number" />
                   <label className="ln-dialog-label">Fee Rate (optional)</label>
                   <input className="ln-dialog-input" value={openFeeRate} onChange={e => setOpenFeeRate(e.target.value)} placeholder="normal / slow / urgent" />
                   <button className="ln-dialog-btn" onClick={handleOpenChannel} disabled={dialogLoading}>
-                    {dialogLoading ? <Loader2 size={12} className="spin" /> : 'Open Channel'}
+                    {dialogLoading ? <Loader2 size={12} className="spin" /> : t('crypto.lightning.openChannel')}
                   </button>
                 </>
               )}
@@ -476,7 +478,7 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
                 <>
                   {!dialogResult && (
                     <button className="ln-dialog-btn" onClick={handleNewAddress} disabled={dialogLoading}>
-                      {dialogLoading ? <Loader2 size={12} className="spin" /> : 'Generate Address'}
+                      {dialogLoading ? <Loader2 size={12} className="spin" /> : t('crypto.lightning.generateAddress')}
                     </button>
                   )}
                   {dialogResult && (
@@ -490,19 +492,19 @@ export function LightningCard({ svc, info, extended, loading, starting, onInstal
 
               {dialog === 'withdraw' && (
                 <>
-                  <label className="ln-dialog-label">Destination Address</label>
+                  <label className="ln-dialog-label">{t('crypto.lightning.destinationAddress')}</label>
                   <input className="ln-dialog-input" value={withdrawAddr} onChange={e => setWithdrawAddr(e.target.value)} placeholder="bc1q..." />
-                  <label className="ln-dialog-label">Amount (sats, or "all")</label>
+                  <label className="ln-dialog-label">{t('crypto.lightning.amountSats')} ("all" = todo)</label>
                   <input className="ln-dialog-input" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="50000" />
                   <button className="ln-dialog-btn" onClick={handleWithdraw} disabled={dialogLoading}>
-                    {dialogLoading ? <Loader2 size={12} className="spin" /> : 'Withdraw'}
+                    {dialogLoading ? <Loader2 size={12} className="spin" /> : t('crypto.lightning.withdraw')}
                   </button>
                 </>
               )}
 
               {dialog === 'set-fees' && (
                 <>
-                  <label className="ln-dialog-label">Channel</label>
+                  <label className="ln-dialog-label">{t('crypto.lightning.channels')}</label>
                   <input className="ln-dialog-input" value={feesChannelId} onChange={e => setFeesChannelId(e.target.value)} placeholder="short_channel_id" />
                   <label className="ln-dialog-label">Fee Base (msat)</label>
                   <input className="ln-dialog-input" value={feesBase} onChange={e => setFeesBase(e.target.value)} placeholder="1000" type="number" />

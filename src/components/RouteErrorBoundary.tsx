@@ -12,18 +12,20 @@
 
 import { useRouteError, isRouteErrorResponse, useNavigate } from 'react-router';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export function RouteErrorBoundary() {
   const error = useRouteError();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
-  let title = 'Something went wrong';
-  let message = 'An unexpected error occurred.';
+  let title = t('routeError.title');
+  let message = t('routeError.unexpected');
   let isChunkError = false;
 
   if (isRouteErrorResponse(error)) {
     title = `${error.status} — ${error.statusText}`;
-    message = error.data?.message || 'The requested page could not be loaded.';
+    message = error.data?.message || t('routeError.requested');
   } else if (error instanceof Error) {
     // Detect Vite dynamic import / chunk load failures
     if (
@@ -31,8 +33,8 @@ export function RouteErrorBoundary() {
       error.message.includes('Failed to load module script') ||
       error.message.includes('Loading chunk')
     ) {
-      title = 'Page failed to load';
-      message = 'The module could not be loaded. This usually happens after an update. Try reloading.';
+      title = t('routeError.chunkTitle');
+      message = t('routeError.chunkMessage');
       isChunkError = true;
     } else {
       message = error.message;
@@ -96,7 +98,7 @@ export function RouteErrorBoundary() {
             }}
           >
             <RefreshCw size={14} />
-            {isChunkError ? 'Reload page' : 'Retry'}
+            {isChunkError ? t('routeError.reload') : t('routeError.retry')}
           </button>
 
           <button
@@ -117,7 +119,7 @@ export function RouteErrorBoundary() {
             }}
           >
             <Home size={14} />
-            Go home
+            {t('notFound.home')}
           </button>
         </div>
       </div>

@@ -15,12 +15,14 @@ import { Check, Play } from 'lucide-react';
 import { imageUrl, type VideoItem } from '@/services/video.service';
 import { useVideoStore } from '@/stores/video.store';
 import { formatTotalDuration } from '@/modules/music/lib/format';
+import { useI18n } from '@/i18n';
 
 /**
  * Episode row inside a season: 16:9 thumbnail with hover play + progress bar,
  * episode number/title, runtime and a green checkmark when played.
  */
 export function EpisodeRow({ episode }: { episode: VideoItem }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -183,7 +185,7 @@ export function EpisodeRow({ episode }: { episode: VideoItem }) {
         {episode.runtime_seconds !== undefined && episode.runtime_seconds > 0 && (
           <span>{formatTotalDuration(episode.runtime_seconds)}</span>
         )}
-        {ud.played && <Check size={16} style={{ color: '#22c55e' }} aria-label="Played" />}
+        {ud.played && <Check size={16} style={{ color: '#22c55e' }} aria-label={t('video.played')} />}
       </div>
     </div>
   );

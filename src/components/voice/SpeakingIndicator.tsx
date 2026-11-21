@@ -14,14 +14,17 @@
 // Shows when TTS is playing back with animated speaker waves.
 
 import { Volume2, Square } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface SpeakingIndicatorProps {
   onStop: () => void;
 }
 
 export function SpeakingIndicator({ onStop }: SpeakingIndicatorProps) {
+  const { t } = useI18n();
   return (
     <div
+      aria-live="polite"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -36,9 +39,11 @@ export function SpeakingIndicator({ onStop }: SpeakingIndicatorProps) {
       }}
     >
       <Volume2 size={14} style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
-      Speaking...
+      {t('voice.speaking')}
       <button
         onClick={onStop}
+        title={t('voice.stopSpeaking')}
+        aria-label={t('voice.stopSpeaking')}
         style={{
           background: 'none',
           border: 'none',

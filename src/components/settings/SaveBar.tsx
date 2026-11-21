@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useI18n } from '@/i18n';
+
 interface SaveBarProps {
   visible: boolean;
   saving: boolean;
@@ -18,6 +20,7 @@ interface SaveBarProps {
 }
 
 export function SaveBar({ visible, saving, onSave, onDiscard }: SaveBarProps) {
+  const { t } = useI18n();
   if (!visible) return null;
 
   return (
@@ -40,7 +43,7 @@ export function SaveBar({ visible, saving, onSave, onDiscard }: SaveBarProps) {
       }}
     >
       <span style={{ fontSize: '0.8125rem', color: 'var(--amber)', fontWeight: 500 }}>
-        Unsaved changes
+        {t('settings.saveBar.unsaved')}
       </span>
       <div style={{ display: 'flex', gap: 8 }}>
         <button
@@ -58,7 +61,7 @@ export function SaveBar({ visible, saving, onSave, onDiscard }: SaveBarProps) {
             cursor: saving ? 'not-allowed' : 'pointer',
           }}
         >
-          Discard
+          {t('settings.saveBar.discard')}
         </button>
         <button
           onClick={onSave}
@@ -76,7 +79,7 @@ export function SaveBar({ visible, saving, onSave, onDiscard }: SaveBarProps) {
             cursor: saving ? 'not-allowed' : 'pointer',
           }}
         >
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? t('settings.saveBar.saving') : t('settings.saveBar.save')}
         </button>
       </div>
     </div>

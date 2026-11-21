@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 // ─── Subdirectory imports ─────────────────────────────────────
 import { StackSetupGuide } from './setup/StackSetupGuide';
@@ -43,6 +44,7 @@ interface MoneroWalletData {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const [stack, setStack] = useState<StackStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export function Component() {
       });
       return res.data;
     }).catch((err: any) => {
-      setError(err instanceof Error ? err.message : 'Failed to fetch crypto stack status');
+      setError(err instanceof Error ? err.message : t('crypto.error.status'));
       setLoading(false);
       return null;
     });
@@ -126,7 +128,7 @@ export function Component() {
         fiatPrice: priceRes?.data?.usd ?? null,
       });
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     refresh();
@@ -143,7 +145,7 @@ export function Component() {
       await api.post(`/crypto/${service}/${action}`);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action} ${service}`);
+      setError(err instanceof Error ? err.message : t('crypto.error.start', { action: t(`crypto.${action}`), service }));
     }
   };
 
@@ -160,7 +162,7 @@ export function Component() {
       <div className="crypto-center">
         <AlertTriangle size={28} style={{ color: 'var(--error)' }} />
         <span>{error}</span>
-        <button className="crypto-btn" onClick={refresh}>Retry</button>
+        <button className="crypto-btn" onClick={refresh}>{t('crypto.retry')}</button>
       </div>
     );
   }
@@ -176,8 +178,8 @@ export function Component() {
   return (
     <div className="crypto-page">
       <div className="crypto-header">
-        <h2>Crypto Stack</h2>
-        <button className="crypto-btn-icon" onClick={refresh} title="Refresh">
+        <h2>{t('crypto.title')}</h2>
+        <button className="crypto-btn-icon" onClick={refresh} title={t('crypto.refresh')} aria-label={t('crypto.refresh')}>
           <RefreshCw size={14} />
         </button>
       </div>
@@ -196,7 +198,7 @@ export function Component() {
       />
 
       {/* ─── Nodes ─── */}
-      <SectionHeader title="Nodes" />
+      <SectionHeader title={t('crypto.nodes')} />
       <div className="crypto-grid-nodes">
         <BtcStatusCard
           svc={btcSvc ?? null}
@@ -236,7 +238,7 @@ export function Component() {
       </div>
 
       {/* ─── Wallets ─── */}
-      <SectionHeader title="Wallets" />
+      <SectionHeader title={t('crypto.wallets')} />
       <div className="crypto-grid-wallets">
         <BtcPayCard
           svc={btcpaySvc ?? null}
@@ -258,7 +260,7 @@ export function Component() {
       </div>
 
       {/* ─── Portfolio ─── */}
-      <SectionHeader title="Portfolio" />
+      <SectionHeader title={t('crypto.portfolio')} />
       <div className="crypto-grid-portfolio">
         <RotkiCard />
       </div>

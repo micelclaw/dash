@@ -23,18 +23,11 @@ import { resolveEntity } from '@/config/entity-registry';
 import type { SearchResult } from '@/types/search';
 import type { EntityLink } from '@/types/links';
 import type { ApiListResponse } from '@/types/api';
+import { useI18n } from '@/i18n';
 
-const TABS: { id: string; label: string }[] = [
-  { id: 'all', label: 'Todo' },
-  { id: 'note', label: 'Notas' },
-  { id: 'event', label: 'Eventos' },
-  { id: 'contact', label: 'Contactos' },
-  { id: 'email', label: 'Emails' },
-  { id: 'diary', label: 'Diario' },
-  { id: 'file', label: 'Archivos' },
-  { id: 'inventory', label: 'Inventario' },
-  { id: 'finance_document', label: 'Facturas' },
-  { id: 'finance_journal_entry', label: 'Movimientos' },
+const TABS: { id: string }[] = [
+  { id: 'all' }, { id: 'note' }, { id: 'event' }, { id: 'contact' }, { id: 'email' },
+  { id: 'diary' }, { id: 'file' }, { id: 'inventory' }, { id: 'finance_document' }, { id: 'finance_journal_entry' },
 ];
 
 // El dominio que devuelve /search → el slug que acepta entity_links/validTypes.
@@ -47,6 +40,7 @@ function resultTitle(r: SearchResult): string {
 }
 
 export function RelateEntityModal({ sourceType, sourceId, onClose }: { sourceType: string; sourceId: string; onClose: () => void }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -95,7 +89,7 @@ export function RelateEntityModal({ sourceType, sourceId, onClose }: { sourceTyp
         setLinkedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
         setLinkIdMap(prev => { const n = new Map(prev); n.delete(id); return n; });
         window.dispatchEvent(new CustomEvent('links-changed'));
-      } catch { toast.error('No se pudo quitar la relación'); }
+      } catch { toast.error(t('shared.relateEntity.removeError')); }
     } else {
       try {
         const res = await api.post<{ data: { id: string } }>('/links', {
@@ -106,10 +100,10 @@ export function RelateEntityModal({ sourceType, sourceId, onClose }: { sourceTyp
         setLinkedIds(prev => new Set(prev).add(id));
         setLinkIdMap(prev => new Map(prev).set(id, res.data.id));
         window.dispatchEvent(new CustomEvent('links-changed'));
-        toast.success('Entidad relacionada');
-      } catch { toast.error('No se pudo relacionar (¿tipo no permitido?)'); }
+        toast.success(t('shared.relateEntity.linked'));
+      } catch { toast.error(t('shared.relateEntity.linkError')); }
     }
-  }, [linkedIds, linkIdMap, sourceType, sourceId]);
+  }, [linkedIds, linkIdMap, sourceType, sourceId, t]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -117,32 +111,32 @@ export function RelateEntityModal({ sourceType, sourceId, onClose }: { sourceTyp
       <div style={{ position: 'relative', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, width: '100%', maxWidth: 520, maxHeight: '72vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>
-            <LinkIcon size={14} /> Relacionar entidad
+            <LinkIcon size={14} /> {t('shared.relateEntity.title')}
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={16} /></button>
+          <button onClick={onClose} title={t('shared.action.close')} aria-label={t('shared.action.close')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={16} /></button>
         </div>
 
         <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px' }}>
             <Search size={14} style={{ color: 'var(--text-muted)' }} />
-            <input autoFocus placeholder="Buscar cualquier entidad…" value={search} onChange={(e) => setSearch(e.target.value)}
+            <input autoFocus aria-label={t('shared.relateEntity.search')} placeholder={t('shared.relateEntity.search')} value={search} onChange={(e) => setSearch(e.target.value)}
               style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-sans)' }} />
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 2, padding: '6px 16px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-          {TABS.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ padding: '3px 8px', borderRadius: 4, border: 'none', background: tab === t.id ? 'var(--amber-dim)' : 'transparent', color: tab === t.id ? 'var(--amber)' : 'var(--text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap' }}>
-              {t.label}
+          {TABS.map((item) => (
+            <button key={item.id} onClick={() => setTab(item.id)} aria-pressed={tab === item.id}
+              style={{ padding: '3px 8px', borderRadius: 4, border: 'none', background: tab === item.id ? 'var(--amber-dim)' : 'transparent', color: tab === item.id ? 'var(--amber)' : 'var(--text-dim)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap' }}>
+              {t(`shared.domain.${item.id}`)}
             </button>
           ))}
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}>
-          {loading && <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Buscando…</div>}
-          {!loading && search.trim().length < 2 && <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Escribe al menos 2 caracteres.</div>}
-          {!loading && search.trim().length >= 2 && results.length === 0 && <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Sin resultados.</div>}
+          {loading && <div role="status" style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{t('shared.relateEntity.searching')}</div>}
+          {!loading && search.trim().length < 2 && <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{t('shared.relateEntity.minChars')}</div>}
+          {!loading && search.trim().length >= 2 && results.length === 0 && <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{t('shared.relateEntity.noResults')}</div>}
           {results.map((r) => {
             const { Icon, color } = resolveEntity(r.domain, undefined, r.record as Record<string, unknown> | null);
             const linked = linkedIds.has(r.record_id);

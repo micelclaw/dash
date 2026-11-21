@@ -17,8 +17,10 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useMusicStore } from '@/stores/music.store';
 import { TrackList } from '../components/TrackList';
 import { AlbumCard } from '../components/AlbumCard';
+import { useI18n } from '@/i18n';
 
 export function FavoritesView() {
+  const { t } = useI18n();
   const starred = useMusicStore((s) => s.starred);
   const loading = useMusicStore((s) => s.loadingStarred);
 
@@ -29,7 +31,7 @@ export function FavoritesView() {
 
   if (!starred) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('music.loading')}</div>
     ) : null;
   }
 
@@ -37,8 +39,8 @@ export function FavoritesView() {
     return (
       <EmptyState
         icon={Heart}
-        title="No favorites yet"
-        description="Star tracks and albums to find them here."
+        title={t('music.noFavorites')}
+        description={t('music.favoriteHint')}
       />
     );
   }
@@ -48,7 +50,7 @@ export function FavoritesView() {
       {starred.tracks.length > 0 && (
         <section>
           <h3 style={{ margin: '0 0 8px', fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            Tracks
+            {t('music.tracks')}
           </h3>
           <TrackList tracks={starred.tracks} />
         </section>
@@ -56,7 +58,7 @@ export function FavoritesView() {
       {starred.albums.length > 0 && (
         <section>
           <h3 style={{ margin: '0 0 12px', fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            Albums
+            {t('music.albums')}
           </h3>
           <MediaGrid>
             {starred.albums.map((album) => (

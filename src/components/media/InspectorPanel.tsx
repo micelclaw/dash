@@ -12,6 +12,7 @@
 
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface InspectorPanelProps {
   title: string;
@@ -24,6 +25,7 @@ interface InspectorPanelProps {
  * + close button, scrollable body.
  */
 export function InspectorPanel({ title, onClose, children }: InspectorPanelProps) {
+  const { t } = useI18n();
   return (
     <div
       style={{
@@ -59,7 +61,8 @@ export function InspectorPanel({ title, onClose, children }: InspectorPanelProps
         </span>
         <button
           onClick={onClose}
-          title="Close"
+          title={t('media.close')}
+          aria-label={t('media.close')}
           style={{
             display: 'flex',
             background: 'none',

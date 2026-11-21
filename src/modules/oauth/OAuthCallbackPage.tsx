@@ -28,18 +28,7 @@ export function Component() {
     const state = params.get('state');
     const error = params.get('error');
 
-    if (error) {
-      setStatus('error');
-      setErrorMsg(error === 'access_denied' ? 'Authorization was denied.' : `OAuth error: ${error}`);
-      return;
-    }
-
-    if (!code || !state) {
-      setStatus('error');
-      setErrorMsg('Missing code or state parameter.');
-      return;
-    }
-
+    if ((!code && !error) || !state) {setStatus('error');setErrorMsg('Falta el estado o resultado de la autorización.');return;}
     // El proveedor NO se adivina aquí.
     //
     // Esta página se carga en la dirección de retorno registrada en el
@@ -52,26 +41,19 @@ export function Component() {
     //
     // Quién es lo dice el `state`, que va cifrado y lo abre el servidor. Esto se
     // manda solo como pista y el servidor lo ignora.
-    let provider: string | null = null;
-    try {
-      const stored = localStorage.getItem('claw_oauth_pending');
-      if (stored) provider = JSON.parse(stored).provider ?? null;
-    } catch { /* pista opcional: si no está, el servidor lo resuelve igual */ }
-
-    // Send code+state back to opener — the opener will do the API call
-    if (window.opener) {
-      window.opener.postMessage({
-        type: 'oauth_callback',
-        provider,
-        code,
-        state,
-      }, '*');
-      setStatus('success');
-      setTimeout(() => window.close(), 1000);
-    } else {
-      setStatus('error');
-      setErrorMsg('No opener window found. Please try again from Settings.');
-    }
+    const controller=new AbortController();
+    void (async()=>{
+      try{
+        if(!window.opener)throw Error('No hay ventana original. Reintenta desde Micelclaw.');
+        const response=await fetch('/api/v1/sync/oauth/return-target',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({state}),signal:controller.signal});
+        if(!response.ok)throw Error('No se pudo verificar el destino de esta autorización. Reintenta.');
+        const value=await response.json() as {data:{return_origin:string}};const target=new URL(value.data.return_origin);
+        if(!['http:','https:'].includes(target.protocol)||target.origin!==value.data.return_origin)throw Error('Destino de retorno no válido');
+        window.opener.postMessage({type:'oauth_callback',code,state,...(error?{error:error==='access_denied'?'access_denied':'provider_error'}:{})},target.origin);
+        setStatus(error?'error':'success');if(error)setErrorMsg(error==='access_denied'?'Autorización denegada.':'El proveedor no completó la autorización.');
+      }catch(error){if(!controller.signal.aborted){setStatus('error');setErrorMsg(error instanceof Error?error.message:'No se pudo devolver la autorización');}}
+    })();
+    return ()=>controller.abort();
   }, []);
 
   return (
@@ -87,10 +69,10 @@ export function Component() {
         {status === 'success' && (
           <>
             <div style={{ fontSize: '1.25rem', marginBottom: 8, color: 'var(--success)' }}>
-              Connected!
+              Autorización recibida
             </div>
             <div style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              You can close this window.
+              La ventana original debe confirmar la conexión y la selección de colecciones.
             </div>
           </>
         )}

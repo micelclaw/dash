@@ -29,6 +29,7 @@ import { useTouchDragSelect } from './hooks/use-touch-drag-select';
 import { groupPhotos } from './PhotosTimeline';
 import type { Album, Photo } from '@/types/files';
 import type { PhotoSortField } from './types';
+import { useI18n } from '@/i18n';
 
 interface AlbumDetailProps {
   album: Album;
@@ -80,6 +81,7 @@ function AlbumPhotoThumbnail({
   showCheckbox?: boolean;
   onToggleSelect?: (shiftKey: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -92,26 +94,26 @@ function AlbumPhotoThumbnail({
     <EntityContextMenu
       entityType="photo"
       entityId={photo.id}
-      entityTitle={photo.filename || 'Photo'}
+      entityTitle={photo.filename || t('photos.extra.photo')}
       onDelete={() => onDelete(photo.id)}
       extraItems={[
-        { label: 'Remove from album', icon: FolderMinus, onClick: onRemove },
-        { label: 'View details', icon: Info, onClick: () => onViewExif(photo) },
-        { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
-        { label: 'Process with AI', icon: Cpu, onClick: () => onProcessPhoto(photo) },
-        { label: 'Set as cover', icon: ImageIcon, onClick: () => onSetAsCover(photo.id) },
+        { label: t('photos.extra.removeFromAlbum'), icon: FolderMinus, onClick: onRemove },
+        { label: t('photos.extra.viewDetails'), icon: Info, onClick: () => onViewExif(photo) },
+        { label: t('photos.extra.download'), icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
+        { label: t('photos.extra.processWithAi'), icon: Cpu, onClick: () => onProcessPhoto(photo) },
+        { label: t('photos.extra.setAsCover'), icon: ImageIcon, onClick: () => onSetAsCover(photo.id) },
         {
-          label: 'Assign stars',
+          label: t('photos.extra.assignStars'),
           icon: Star,
           onClick: () => {},
           subItems: [
-            { label: '★★★★★  5 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 5 } }); toast.success('5 stars'); } catch { toast.error('Failed'); } } },
-            { label: '★★★★☆  4 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 4 } }); toast.success('4 stars'); } catch { toast.error('Failed'); } } },
-            { label: '★★★☆☆  3 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 3 } }); toast.success('3 stars'); } catch { toast.error('Failed'); } } },
-            { label: '★★☆☆☆  2 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 2 } }); toast.success('2 stars'); } catch { toast.error('Failed'); } } },
-            { label: '★☆☆☆☆  1 star',  onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 1 } }); toast.success('1 star'); } catch { toast.error('Failed'); } } },
-            { label: '☆☆☆☆☆  0 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 0 } }); toast.success('0 stars'); } catch { toast.error('Failed'); } } },
-            { label: '🤖  Auto (AI)',    onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } }); toast.success('Reset to AI score'); } catch { toast.error('Failed'); } } },
+            { label: `★★★★★  ${t('photos.extra.stars', { count: 5 })}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 5 } }); toast.success(t('photos.extra.stars', { count: 5 })); } catch { toast.error(t('photos.extra.failed')); } } },
+            { label: `★★★★☆  ${t('photos.extra.stars', { count: 4 })}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 4 } }); toast.success(t('photos.extra.stars', { count: 4 })); } catch { toast.error(t('photos.extra.failed')); } } },
+            { label: `★★★☆☆  ${t('photos.extra.stars', { count: 3 })}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 3 } }); toast.success(t('photos.extra.stars', { count: 3 })); } catch { toast.error(t('photos.extra.failed')); } } },
+            { label: `★★☆☆☆  ${t('photos.extra.stars', { count: 2 })}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 2 } }); toast.success(t('photos.extra.stars', { count: 2 })); } catch { toast.error(t('photos.extra.failed')); } } },
+            { label: `★☆☆☆☆  ${t('photos.extra.star')}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 1 } }); toast.success(t('photos.extra.star')); } catch { toast.error(t('photos.extra.failed')); } } },
+            { label: `☆☆☆☆☆  ${t('photos.extra.stars', { count: 0 })}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 0 } }); toast.success(t('photos.extra.stars', { count: 0 })); } catch { toast.error(t('photos.extra.failed')); } } },
+            { label: `🤖  ${t('photos.extra.autoAi')}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } }); toast.success(t('photos.extra.resetToAi')); } catch { toast.error(t('photos.extra.failed')); } } },
           ],
         },
       ]}
@@ -247,6 +249,7 @@ export function AlbumDetail({
   onSetSelection,
   onApplyDelta,
 }: AlbumDetailProps) {
+  const { t } = useI18n();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [coverImgLoaded, setCoverImgLoaded] = useState(false);
@@ -321,7 +324,7 @@ export function AlbumDetail({
           }}
         >
           <ChevronLeft size={16} />
-          Back to Albums
+          {t('photos.extra.backToAlbums')}
         </button>
 
         {/* Album info row — el título va con ellipsis (nunca pinta encima de
@@ -379,7 +382,7 @@ export function AlbumDetail({
               marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)',
             }}>
-              {dateStr && <>{dateStr} · </>}{album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}
+              {dateStr && <>{dateStr} · </>}{album.photo_count === 1 ? t('photos.extra.photosCountOne') : t('photos.extra.photosCount', { count: album.photo_count })}
             </div>
           </div>
 
@@ -391,10 +394,10 @@ export function AlbumDetail({
             {hasSelection ? (
               <>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
-                  {selectedIds.size} selected
+                  {t('photos.extra.selected', { count: selectedIds.size })}
                 </span>
-                {onBatchRemove && <BatchButton icon={FolderMinus} label="Remove" onClick={onBatchRemove} />}
-                {onBatchDelete && <BatchButton icon={Trash2} label="Delete" onClick={onBatchDelete} variant="danger" />}
+                {onBatchRemove && <BatchButton icon={FolderMinus} label={t('photos.extra.remove')} onClick={onBatchRemove} />}
+                {onBatchDelete && <BatchButton icon={Trash2} label={t('photos.extra.delete')} onClick={onBatchDelete} variant="danger" />}
                 {onClearSelection && (
                   <button
                     onClick={onClearSelection}
@@ -406,7 +409,7 @@ export function AlbumDetail({
                     }}
                   >
                     <X size={13} />
-                    Clear
+                    {t('photos.extra.clear')}
                   </button>
                 )}
               </>
@@ -419,7 +422,7 @@ export function AlbumDetail({
                   style={actionBtnStyle('share')}
                 >
                   <Share2 size={12} />
-                  Share
+                  {t('photos.extra.share')}
                 </button>
                 <button
                   onClick={onEditAlbum}
@@ -428,7 +431,7 @@ export function AlbumDetail({
                   style={actionBtnStyle('edit')}
                 >
                   <Pencil size={12} />
-                  Edit
+                  {t('photos.extra.edit')}
                 </button>
                 <button
                   onClick={() => setConfirmOpen(true)}
@@ -441,7 +444,7 @@ export function AlbumDetail({
                   }}
                 >
                   <Trash2 size={12} />
-                  Delete
+                  {t('photos.extra.delete')}
                 </button>
               </>
             )}
@@ -456,11 +459,11 @@ export function AlbumDetail({
       >
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            Loading...
+            {t('photos.extra.loading')}
           </div>
         ) : photos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-            This album is empty.
+            {t('photos.extra.albumEmpty')}
           </div>
         ) : (
           groups.map((group) => (
@@ -529,9 +532,9 @@ export function AlbumDetail({
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={() => onDelete(album.id)}
-        title="Delete album?"
-        description={`"${album.name}" will be permanently deleted. Photos inside will not be removed.`}
-        confirmLabel="Delete"
+        title={t('photos.extra.deleteAlbumTitle')}
+        description={t('photos.extra.deleteAlbumConfirm', { name: album.name })}
+        confirmLabel={t('photos.extra.delete')}
         variant="danger"
       />
     </div>

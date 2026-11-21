@@ -13,13 +13,13 @@
 // ─── SkillTestChat — attach a Studio project to a real agent ────────
 //
 // Phase 9 ships an in-dash control that injects a project's sandbox
-// catalog (URL + bearer + route table) into a real agent's TOOLS.md.
+// catalog (URL + bearer + route table) into a real agent's AGENTS.md.
 // While attached, the user can chat with that agent and have it call
 // the generated API via its existing curl/exec skills.
 //
 // The control is rendered as an inline panel inside the
 // ImplementationPhase toolbar. Picking an agent and clicking attach
-// rewrites their TOOLS.md (server-side); detach strips it back out.
+// rewrites their AGENTS.md (server-side); detach strips it back out.
 
 import { useEffect, useRef, useState } from 'react';
 import { Beaker, Loader2, Link as LinkIcon, X, MessageSquare, AlertCircle } from 'lucide-react';
@@ -155,7 +155,7 @@ export function SkillTestChat({ projectId, compact }: Props) {
       </div>
 
       <p style={{ margin: '0 0 8px', fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Injects this project's route catalogue into an agent's TOOLS.md.
+        Injects this project's route catalogue into an agent's AGENTS.md.
         While attached, you can chat with the agent and ask it to test the app.
       </p>
 

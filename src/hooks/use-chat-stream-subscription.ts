@@ -1,3 +1,5 @@
+import { useChatWorkspaceStore } from '@/stores/chat-workspace.store';
+import { useAuthStore } from '@/stores/auth.store';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -39,6 +41,7 @@ interface SmoothStream {
 }
 
 const smoothStreams = new Map<string, SmoothStream>();
+const retiredRuns = new Map<string, Set<string>>();
 
 function splitCatchupText(text: string): string[] {
   const target = Math.max(12, Math.ceil(text.length / 60));
@@ -75,10 +78,13 @@ function appendTokenWithFinalFallback(conversationId: string, token: string, run
     return;
   }
 
+  const generation = useAuthStore.getState().sessionGeneration;
+  const epoch = useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0;
   const stream: SmoothStream = {
     runId,
     chunks: splitCatchupText(token),
     timer: setInterval(() => {
+      if (smoothStreams.get(conversationId) !== stream || useAuthStore.getState().sessionGeneration !== generation || (useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0) !== epoch || useChatWorkspaceStore.getState().byConversation[conversationId]?.revoked) { clearInterval(stream.timer); if (smoothStreams.get(conversationId) === stream) smoothStreams.delete(conversationId); return; }
       const chunk = stream.chunks.shift();
       if (chunk) useChatStore.getState().appendStreamToken(conversationId, chunk, 'text', runId);
       if (stream.chunks.length === 0) {
@@ -98,7 +104,21 @@ function cancelSmoothStream(conversationId: string): void {
   smoothStreams.delete(conversationId);
 }
 
+/** Retire only the local presentation of a removed history/run, without cancelling the agent task. */
+export function retireChatStreamPresentation(conversationId: string): void {
+  const retired = retiredRuns.get(conversationId) ?? new Set<string>();
+  const active = useChatStore.getState().streamingMessage;
+  if (active?.conversationId === conversationId && active.runId) retired.add(active.runId);
+  const pending = smoothStreams.get(conversationId);
+  if (pending?.runId) retired.add(pending.runId);
+  while (retired.size > 32) retired.delete(retired.values().next().value!);
+  retiredRuns.set(conversationId, retired);
+  while (retiredRuns.size > 100) retiredRuns.delete(retiredRuns.keys().next().value!);
+  cancelSmoothStream(conversationId);
+}
+
 export function useChatStreamSubscription(): void {
+  const generation = useAuthStore(s => s.sessionGeneration);
   const client = useWebSocketStore((s) => s.client);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
 
@@ -110,9 +130,11 @@ export function useChatStreamSubscription(): void {
   useEffect(() => {
     if (!client) return;
     const unsubscribe = client.on('chat.stream.*', (streamEvent: WsEvent) => {
+      if (useAuthStore.getState().sessionGeneration !== generation) return;
       const data = streamEvent.data;
       const convId = data.conversation_id as string;
       const runId = typeof data.run_id === 'string' ? data.run_id : undefined;
+      if (useChatWorkspaceStore.getState().byConversation[convId]?.revoked || runId && retiredRuns.get(convId)?.has(runId)) return;
       // Acciones estables de Zustand → getState evita re-suscripción por deps.
       const s = useChatStore.getState();
       const isBackground = s.backgroundRuns.has(convId)
@@ -174,6 +196,7 @@ export function useChatStreamSubscription(): void {
           );
           break;
         case 'chat.stream.cleared':
+          retireChatStreamPresentation(convId);
           s.clearConversationMessages(convId);
           break;
         case 'chat.stream.new_session':
@@ -232,5 +255,11 @@ export function useChatStreamSubscription(): void {
       for (const stream of smoothStreams.values()) clearInterval(stream.timer);
       smoothStreams.clear();
     };
-  }, [client]);
+  }, [client, generation]);
 }
+
+useAuthStore.subscribe((s, previous) => {
+  if (s.sessionGeneration === previous.sessionGeneration && s.user?.id === previous.user?.id) return;
+  for (const stream of smoothStreams.values()) clearInterval(stream.timer);
+  smoothStreams.clear(); retiredRuns.clear();
+});

@@ -12,6 +12,7 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
+import { officeFileTarget } from '@/modules/office/office-file-target';
 import { Clock, Flame } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileIcon } from '@/components/shared/FileIcon';
@@ -77,6 +78,8 @@ export function RecentView() {
   }, [earlier.files, hotFiles]);
 
   const openInMyDrive = useCallback((file: FileRecord) => {
+    const office = officeFileTarget(file);
+    if (office) { navigate(office); return; }
     navigate(`/drive?tab=my-drive&id=${file.id}`);
   }, [navigate]);
 

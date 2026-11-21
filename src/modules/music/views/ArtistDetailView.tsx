@@ -17,8 +17,10 @@ import { useMusicStore } from '@/stores/music.store';
 import { coverUrl } from '@/services/music.service';
 import { AlbumCard } from '../components/AlbumCard';
 import { BackButton } from '../components/detail-chrome';
+import { useI18n } from '@/i18n';
 
 export function ArtistDetailView() {
+  const { t } = useI18n();
   const detail = useMusicStore((s) => s.selectedArtist);
   const closeDetail = useMusicStore((s) => s.closeDetail);
 
@@ -32,9 +34,9 @@ export function ArtistDetailView() {
       <MediaHero
         image={artist.cover_art ? coverUrl(artist.cover_art, 600) : null}
         fallbackIcon={MicVocal}
-        kicker="Artist"
+        kicker={t('music.artist')}
         title={artist.name}
-        meta={`${albums.length} album${albums.length === 1 ? '' : 's'}`}
+        meta={t(albums.length === 1 ? 'music.albumCountOne' : 'music.albumCountMany', { count: albums.length })}
         rounded="circle"
       />
       <MediaGrid>

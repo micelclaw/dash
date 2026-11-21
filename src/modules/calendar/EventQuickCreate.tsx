@@ -11,8 +11,10 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { formatTime, formatDateLong } from '@/lib/date-helpers';
+import { formatDate, formatGridTime } from '@/i18n/format';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
+import { useSettingsStore } from '@/stores/settings.store';
 import type { EventCreateInput } from './types';
 
 interface EventQuickCreateProps {
@@ -26,6 +28,8 @@ export function EventQuickCreate({ date, onClose, onCreate }: EventQuickCreatePr
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
 
   // Auto-focus on mount
   useEffect(() => {
@@ -105,7 +109,8 @@ export function EventQuickCreate({ date, onClose, onCreate }: EventQuickCreatePr
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Event title"
+          placeholder={t('calendar.quickTitle')}
+          aria-label={t('calendar.quickTitle')}
           style={{
             width: '100%',
             padding: '8px 10px',
@@ -130,9 +135,9 @@ export function EventQuickCreate({ date, onClose, onCreate }: EventQuickCreatePr
             gap: 2,
           }}
         >
-          <span>{formatDateLong(date)}</span>
+          <span>{formatDate(date, locale, general, Intl.DateTimeFormat().resolvedOptions().timeZone)}</span>
           <span style={{ fontFamily: 'var(--font-mono)' }}>
-            {formatTime(date)} - {formatTime(endDate)} (1 hr)
+            {formatGridTime(date, locale, general)} - {formatGridTime(endDate, locale, general)} ({t('calendar.quickDuration')})
           </span>
         </div>
 
@@ -151,7 +156,7 @@ export function EventQuickCreate({ date, onClose, onCreate }: EventQuickCreatePr
               fontSize: '0.8125rem',
             }}
           >
-            Cancel
+            {t('calendar.cancel')}
           </button>
           <button
             onClick={handleCreate}
@@ -169,7 +174,7 @@ export function EventQuickCreate({ date, onClose, onCreate }: EventQuickCreatePr
               opacity: submitting ? 0.6 : 1,
             }}
           >
-            {submitting ? 'Creating...' : 'Create'}
+            {submitting ? t('calendar.quickCreating') : t('calendar.create')}
           </button>
         </div>
       </div>

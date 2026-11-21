@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Radio, RotateCw, Play, Square,
   Cable, MessageSquare, Bot,
@@ -25,17 +26,30 @@ import { StatusPill } from '../components/StatusPill';
 import { MetricCard } from '../components/MetricCard';
 import { HealthCheckList } from '../components/HealthCheckList';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+
+const safeUncertainOperationErrors = new Set([
+  'No se puede guardar el seguimiento en esta pestaña. No se ha enviado ninguna acción.',
+  'No se puede leer el seguimiento de Gateway en esta pestaña. No se enviará ninguna acción.',
+  'No se puede actualizar el seguimiento en esta pestaña.',
+  'La respuesta no corresponde a la operación pendiente. No se repetirá la solicitud.',
+  'Otra operación de Gateway está en curso. Comprueba su resultado antes de iniciar otra.',
+  'Otra operación de Gateway sigue sin confirmar. Comprueba de nuevo o contacta con un administrador.',
+  'No se puede comprobar cuál era la operación anterior. Contacta con un administrador.',
+]);
 
 export function OverviewTab() {
   const isMobile = useIsMobile();
   const {
-    status, health, usage, models,
-    fetchSnapshot, fetchUsage,
-    gatewayStart, gatewayStop, gatewayRestart,
+    status, health, usage, models, channels, sessions, channelsCheckedAt, sessionsCheckedAt, modelsCheckedAt, modelsLoading, modelsError, statusLoading, statusError,
+    gatewayOperation, pendingGatewayRequestId, operationUncertain, operationError,
+    fetchSnapshot, fetchUsage, fetchModels, fetchChannels, fetchSessions, checkGatewayOperation,
+    gatewayStart, gatewayStop, gatewayRestart, gatewayRecover,
   } = useGatewayStore();
 
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [refreshHover, setRefreshHover] = useState(false);
+  const [restartConfirmationOpen, setRestartConfirmationOpen] = useState(false);
   const [doctorOutput, setDoctorOutput] = useState<string | null>(null);
   const [doctorLoading, setDoctorLoading] = useState(false);
   const [doctorHasFixes, setDoctorHasFixes] = useState(false);
@@ -52,28 +66,46 @@ export function OverviewTab() {
 
   // Fetch usage on mount
   useEffect(() => {
-    fetchUsage();
-  }, [fetchUsage]);
+    void fetchUsage();
+    const current = useGatewayStore.getState();
+    // Inventories load independently, and a remount does not duplicate an
+    // outstanding read or present a prior list as a current availability check.
+    if (!current.modelsLoading && !current.modelsCheckedAt) void fetchModels();
+    if (!current.channelsLoading && !current.channelsCheckedAt) void fetchChannels();
+    if (!current.sessionsLoading && !current.sessionsCheckedAt) void fetchSessions();
+  }, [fetchUsage, fetchModels, fetchChannels, fetchSessions]);
 
-  const handleAction = async (action: 'start' | 'stop' | 'restart') => {
-    setActionLoading(action);
-    try {
-      if (action === 'start') await gatewayStart();
-      else if (action === 'stop') await gatewayStop();
-      else await gatewayRestart();
-
-      toast.success(`Gateway ${action === 'restart' ? 'restarted' : action === 'start' ? 'started' : 'stopped'}`);
-      // Wait a moment then refresh status
-      setTimeout(() => fetchSnapshot(), 2000);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to ${action} gateway`);
-    } finally {
-      setActionLoading(null);
-    }
+  const handleAction = async (action: 'start' | 'recover' | 'stop' | 'restart') => {
+    const operation = action === 'start' ? await gatewayStart() : action === 'recover' ? await gatewayRecover()
+      : action === 'stop' ? await gatewayStop() : await gatewayRestart();
+    if (operation?.state === 'succeeded') toast.success(operation.message);
+    // An accepted/in-progress request is shown below; it is never a success toast.
   };
-
-  const isRunning = status?.running ?? false;
-  const runtimeLoading = status?.running === undefined;
+  const checkAgain = async () => {
+    if (pendingGatewayRequestId || gatewayOperation?.state === 'running' || operationUncertain) await checkGatewayOperation();
+    await fetchSnapshot();
+  };
+  const availability = status?.availability === 'available' && status.stale ? 'unknown' : status?.availability ?? 'unknown';
+  const isRunning = status?.running === true;
+  const operational = availability === 'available';
+  const busy = !!pendingGatewayRequestId || gatewayOperation?.state === 'running' || operationUncertain;
+  const needsAction = ['configuration_required', 'pairing_required', 'auth_required'].includes(availability);
+  const canRequestRestart = isRunning && !status?.stale && (operational || availability === 'disconnected') && !busy;
+  const safeUncertainError = operationError && safeUncertainOperationErrors.has(operationError) && operationError !== gatewayOperation?.message ? operationError : null;
+  const stateLabel = gatewayOperation?.state === 'running' ? 'Recuperación en curso'
+    : availability === 'available' ? 'Disponible'
+    : availability === 'stopped' ? 'Detenido'
+    : availability === 'disconnected' ? 'Sin conexión'
+    : needsAction ? 'Requiere acción'
+    : statusLoading ? 'Comprobando' : 'Sin comprobar';
+  const explanation = status?.message ?? (availability === 'available'
+    ? 'Gateway responde a una consulta autenticada. La disponibilidad de los modelos se comprueba por separado.'
+    : availability === 'stopped' ? 'El servicio está detenido. Puedes iniciarlo desde aquí.'
+    : availability === 'disconnected' ? 'El proceso está iniciado, pero Core no ha confirmado la conexión. Puedes volver a conectarlo.'
+    : availability === 'pairing_required' ? 'La identidad interna de Core necesita revisión. Revisa el dispositivo antes de autorizarlo.'
+    : availability === 'auth_required' ? 'Gateway necesita autorización. Revisa su configuración; reconectar no cambia los permisos.'
+    : availability === 'configuration_required' ? 'La configuración no es válida o todavía no está preparada. Puedes revisarla en Settings.'
+    : 'Todavía no se ha podido comprobar el servicio. Esto no demuestra que esté detenido o sin configurar.');
 
   // Default Model card: `agents.defaults.model.primary` may point to a
   // model that's no longer in `agents.defaults.models` (e.g. user
@@ -81,14 +113,17 @@ export function OverviewTab() {
   // gap instead of showing a dangling string.
   const defaultModelId = status?.default_model;
   const configuredCount = status?.models_configured ?? 0;
+  const modelInventoryCurrent = modelsCheckedAt !== null && !modelsLoading && !modelsError;
   const defaultIsConfigured = !!defaultModelId &&
     models.some(m => m.id === defaultModelId || m.model === defaultModelId);
   const defaultModelValue = !defaultModelId
     ? 'None'
-    : defaultIsConfigured
+    : !modelInventoryCurrent
+      ? defaultModelId
+      : defaultIsConfigured
       ? defaultModelId
       : `${defaultModelId} (invalid)`;
-  const defaultModelSubtitle = !defaultModelId
+  const defaultModelSubtitle = !modelInventoryCurrent ? (modelsCheckedAt ? `Último inventario: ${new Date(modelsCheckedAt).toLocaleString()}` : 'Inventario sin comprobar') : !defaultModelId
     ? `${configuredCount} configured`
     : defaultIsConfigured
       ? `${configuredCount} configured`
@@ -123,12 +158,12 @@ export function OverviewTab() {
                 width: 48,
                 height: 48,
                 borderRadius: 'var(--radius-md)',
-                background: isRunning ? '#10b98115' : '#6b728015',
+                background: operational ? '#10b98115' : '#6b728015',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <Radio size={24} style={{ color: isRunning ? '#10b981' : '#6b7280' }} />
+                <Radio size={24} style={{ color: operational ? '#10b981' : '#6b7280' }} />
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
@@ -140,7 +175,7 @@ export function OverviewTab() {
                   }}>
                     OpenClaw Gateway
                   </span>
-                  <StatusPill status={runtimeLoading ? 'loading' : isRunning ? 'running' : 'stopped'} size="md" />
+                  <StatusPill status={operational ? 'available' : needsAction ? 'warn' : availability === 'unknown' ? 'unknown' : availability} label={stateLabel} size="md" />
                 </div>
                 <div style={{
                   display: 'flex',
@@ -161,7 +196,9 @@ export function OverviewTab() {
             {/* Right: action buttons */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button
-                onClick={() => fetchSnapshot()}
+                onClick={() => void checkAgain()}
+                disabled={statusLoading}
+                aria-label="Comprobar de nuevo"
                 onMouseEnter={() => setRefreshHover(true)}
                 onMouseLeave={() => setRefreshHover(false)}
                 style={{
@@ -175,39 +212,50 @@ export function OverviewTab() {
                   display: 'flex',
                   alignItems: 'center',
                 }}
-                title="Refresh"
+                title="Comprobar de nuevo"
               >
                 <RefreshCw size={14} />
               </button>
 
-              {isRunning ? (
-                <>
-                  <ActionButton
-                    icon={RotateCw}
-                    label="Restart"
-                    onClick={() => handleAction('restart')}
-                    loading={actionLoading === 'restart'}
-                    color="var(--warning)"
-                  />
-                  <ActionButton
-                    icon={Square}
-                    label="Stop"
-                    onClick={() => handleAction('stop')}
-                    loading={actionLoading === 'stop'}
-                    color="var(--error)"
-                  />
-                </>
-              ) : (
-                <ActionButton
-                  icon={Play}
-                  label="Start"
-                  onClick={() => handleAction('start')}
-                  loading={actionLoading === 'start'}
-                  color="var(--success)"
-                />
+              {availability === 'stopped' && (
+                <ActionButton icon={Play} label="Iniciar" onClick={() => void handleAction('start')} loading={busy} color="var(--success)" />
+              )}
+              {availability === 'disconnected' && (
+                <ActionButton icon={Cable} label="Reconectar" onClick={() => void handleAction('recover')} loading={busy} color="var(--amber)" />
+              )}
+              {needsAction && (
+                <ActionButton icon={ShieldCheck} label="Resolver el problema" onClick={() => { void navigate(availability === 'pairing_required' ? '/gateway?tab=devices' : '/settings?group=connectivity&section=gateway-auth'); }} loading={false} color="var(--warning)" />
+              )}
+              {(operational || availability === 'disconnected') && isRunning && !status?.stale && (
+                <ActionButton icon={RotateCw} label="Reiniciar" onClick={() => setRestartConfirmationOpen(true)} loading={busy} color="var(--warning)" />
+              )}
+              {operational && isRunning && (
+                <ActionButton icon={Square} label="Stop" onClick={() => void handleAction('stop')} loading={busy} color="var(--error)" />
               )}
             </div>
           </div>
+          <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>{explanation}</p>
+          {status?.checked_at && <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{status.stale ? 'Última comprobación' : 'Comprobado'}: {new Date(status.checked_at).toLocaleString()}</p>}
+          {status?.stale && status.last_known && <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Último dato válido: {new Date(status.last_known.checked_at).toLocaleString()} · {status.last_known.reachable ? 'respondía' : status.last_known.running ? 'proceso iniciado' : 'detenido'}</p>}
+          {statusError && <p role="alert" style={{ color: 'var(--warning)', fontSize: 13 }}>No se pudo actualizar el estado. Comprueba de nuevo; los datos anteriores no son una comprobación actual.</p>}
+          {(gatewayOperation || operationError || operationUncertain) && (
+            <div role={gatewayOperation?.state === 'failed' || operationError ? 'alert' : 'status'} style={{ marginTop: 12, fontSize: 13, color: gatewayOperation?.state === 'succeeded' ? 'var(--success)' : 'var(--text-dim)' }}>
+              {gatewayOperation?.message}
+              {operationUncertain ? <>{safeUncertainError !== 'No se puede guardar el seguimiento en esta pestaña. No se ha enviado ninguna acción.' && <p>El resultado todavía no se ha confirmado. Usa Comprobar de nuevo; no se repetirá la operación automáticamente.</p>}{safeUncertainError && <p>{safeUncertainError}</p>}</> : operationError && <p>{operationError}</p>}
+            </div>
+          )}
+          <Dialog open={restartConfirmationOpen} onOpenChange={setRestartConfirmationOpen}>
+            <DialogContent style={{ width: 'min(90vw, 440px)' }}>
+              <DialogTitle>¿Reiniciar Gateway?</DialogTitle>
+              <DialogDescription>
+                La conexión se interrumpirá brevemente. Antes de continuar, comprueba que no haya cambios pendientes o de resultado desconocido; Micelclaw no puede verificarlos todos. El reinicio no vuelve a enviar esos cambios.
+              </DialogDescription>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+                <button style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', cursor: 'pointer' }} onClick={() => setRestartConfirmationOpen(false)}>Cancelar</button>
+                <button style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: 0, background: 'var(--warning)', color: 'var(--card)', cursor: canRequestRestart ? 'pointer' : 'not-allowed', opacity: canRequestRestart ? 1 : 0.6 }} disabled={!canRequestRestart} onClick={() => { if (!canRequestRestart) return; setRestartConfirmationOpen(false); void handleAction('restart'); }}>Confirmar reinicio</button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* ─── Metrics Grid ────────────────────────────────── */}
@@ -221,15 +269,15 @@ export function OverviewTab() {
           <MetricCard
             icon={Cable}
             label="Channels"
-            value={status?.channels_connected ?? 0}
-            subtitle="connected"
+            value={channelsCheckedAt ? channels.filter(channel => channel.status === 'connected').length : '—'}
+            subtitle={channelsCheckedAt ? `Conectados · lista ${new Date(channelsCheckedAt).toLocaleTimeString()}` : 'Inventario sin comprobar'}
             accentColor="#06b6d4"
           />
           <MetricCard
             icon={MessageSquare}
-            label="Sessions"
-            value={status?.sessions_active ?? 0}
-            subtitle="active"
+            label="Sesiones recientes"
+            value={sessionsCheckedAt ? sessions.length : '—'}
+            subtitle={sessionsCheckedAt ? `Lista ${new Date(sessionsCheckedAt).toLocaleTimeString()}` : 'Inventario sin comprobar'}
             accentColor="#8b5cf6"
           />
           <MetricCard
@@ -237,7 +285,7 @@ export function OverviewTab() {
             label="Default Model"
             value={defaultModelValue}
             subtitle={defaultModelSubtitle}
-            accentColor={defaultModelId && !defaultIsConfigured ? '#f43f5e' : '#f59e0b'}
+            accentColor={modelInventoryCurrent && defaultModelId && !defaultIsConfigured ? '#f43f5e' : '#f59e0b'}
           />
           <MetricCard
             icon={DollarSign}

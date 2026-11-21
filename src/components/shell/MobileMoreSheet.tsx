@@ -10,8 +10,11 @@ import { useNavigate } from 'react-router';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useVisibleModules } from '@/hooks/use-visible-modules';
 import type { ModuleConfig } from '@/types/modules';
+import { useI18n } from '@/i18n';
+import { moduleGroupLabel, moduleLabel } from '@/i18n/module-labels';
 
 export function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const { ungrouped, groups } = useVisibleModules();
 
@@ -29,7 +32,7 @@ export function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenC
               color: 'var(--text)', cursor: 'pointer', minWidth: 0,
             }}>
             <Icon size={22} style={{ color: m.color }} />
-            <span style={{ fontSize: '0.7rem', textAlign: 'center', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{m.label}</span>
+            <span style={{ fontSize: '0.7rem', textAlign: 'center', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{moduleLabel(m, locale)}</span>
           </button>
         );
       })}
@@ -39,12 +42,12 @@ export function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenC
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" style={{ maxHeight: '86dvh', overflowY: 'auto', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }} data-testid="more-sheet">
-        <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 4 }}>Más</div>
+        <div style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 4 }}>{t('shell.nav.more')}</div>
         <div style={{ marginTop: 12 }}>
           {ungrouped.length > 0 && <Grid modules={ungrouped} />}
           {groups.map((g) => (
             <div key={g.name}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '2px 0 8px' }}>{g.name}</div>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '2px 0 8px' }}>{g.name ? moduleGroupLabel(g.name, locale, g.modules) : g.name}</div>
               <Grid modules={g.modules} />
             </div>
           ))}

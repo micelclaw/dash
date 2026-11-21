@@ -27,6 +27,7 @@ import { useTouchDragSelect } from './hooks/use-touch-drag-select';
 import type { Photo, Album } from '@/types/files';
 import type { PhotoGroup, PhotoSortField } from './types';
 import { AlbumPickerDropdown } from './AlbumPickerDropdown';
+import { useI18n, type Locale } from '@/i18n';
 
 interface PhotosTimelineProps {
   photos: Photo[];
@@ -56,7 +57,7 @@ interface PhotosTimelineProps {
  * Agrupación por DÍA (estilo galería del móvil: "8 Aug 2025") cuando se ordena
  * por fecha; con name/size el orden no es cronológico → un solo grupo plano.
  */
-export function groupPhotos(photos: Photo[], sortField: PhotoSortField): PhotoGroup[] {
+export function groupPhotos(photos: Photo[], sortField: PhotoSortField, locale: Locale = 'en'): PhotoGroup[] {
   if (sortField !== 'date') {
     return photos.length ? [{ key: 'all', label: '', photos }] : [];
   }
@@ -71,7 +72,7 @@ export function groupPhotos(photos: Photo[], sortField: PhotoSortField): PhotoGr
   const groups: PhotoGroup[] = [];
   for (const [key, groupPhotos] of map) {
     const d = new Date(groupPhotos[0]!.taken_at || groupPhotos[0]!.created_at);
-    const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    const label = d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     groups.push({ key, label, photos: groupPhotos });
   }
   // El orden lo trae el servidor — se respeta el orden de aparición de los grupos.
@@ -105,6 +106,7 @@ function PhotoThumbnail({
   showCheckbox?: boolean;
   onToggleSelect?: (shiftKey: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -126,31 +128,29 @@ function PhotoThumbnail({
         onDelete={() => onDelete(photo.id)}
         extraItems={[
           {
-            label: 'Add to album',
+            label: t('photos.addAlbum'),
             icon: FolderPlus,
             onClick: () => {
               setAlbumPicker({ mode: 'add', pos: { x: window.innerWidth / 2, y: window.innerHeight / 3 } });
             },
           },
-          { label: 'View details', icon: Info, onClick: () => onViewExif(photo) },
-          { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
-          { label: 'Process with AI', icon: Cpu, onClick: () => onProcessPhoto(photo) },
+          { label: t('photos.viewDetails'), icon: Info, onClick: () => onViewExif(photo) },
+          { label: t('photos.download'), icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
+          { label: t('photos.processAi'), icon: Cpu, onClick: () => onProcessPhoto(photo) },
           {
-            label: 'Assign stars',
+            label: t('photos.assignStars'),
             icon: Star,
             onClick: () => {},
             subItems: [
-              { label: '★★★★★  5 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 5 } }); toast.success('5 stars'); } catch { toast.error('Failed'); } } },
-              { label: '★★★★☆  4 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 4 } }); toast.success('4 stars'); } catch { toast.error('Failed'); } } },
-              { label: '★★★☆☆  3 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 3 } }); toast.success('3 stars'); } catch { toast.error('Failed'); } } },
-              { label: '★★☆☆☆  2 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 2 } }); toast.success('2 stars'); } catch { toast.error('Failed'); } } },
-              { label: '★☆☆☆☆  1 star',  onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 1 } }); toast.success('1 star'); } catch { toast.error('Failed'); } } },
-              { label: '☆☆☆☆☆  0 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 0 } }); toast.success('0 stars'); } catch { toast.error('Failed'); } } },
-              { label: '🤖  Auto (AI)',    onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } }); toast.success('Reset to AI score'); } catch { toast.error('Failed'); } } },
+              ...[5, 4, 3, 2, 1, 0].map((value) => ({
+                label: `${'★'.repeat(value)}${'☆'.repeat(5 - value)}  ${t(value === 1 ? 'photos.starOne' : 'photos.starMany', { count: value })}`,
+                onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: value } }); toast.success(t(value === 1 ? 'photos.starOne' : 'photos.starMany', { count: value })); } catch { toast.error(t('photos.operationFailed')); } },
+              })),
+              { label: `🤖  ${t('photos.autoAi')}`, onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } }); toast.success(t('photos.resetAi')); } catch { toast.error(t('photos.operationFailed')); } } },
             ],
           },
           {
-            label: 'Set as cover',
+            label: t('photos.setCover'),
             icon: ImageIcon,
             onClick: () => {
               setAlbumPicker({ mode: 'cover', pos: { x: window.innerWidth / 2, y: window.innerHeight / 3 } });
@@ -405,7 +405,7 @@ function PhotoThumbnail({
           open
           anchorPos={albumPicker.pos}
           albums={albums}
-          title={albumPicker.mode === 'add' ? 'Add to album' : 'Set as cover'}
+          title={t(albumPicker.mode === 'add' ? 'photos.addAlbum' : 'photos.setCover')}
           onSelect={(albumId) => {
             if (albumPicker.mode === 'add') {
               onAddToAlbum(photo.id, albumId);
@@ -442,6 +442,7 @@ export function PhotosTimeline({
   onApplyDelta,
   sortField,
 }: PhotosTimelineProps) {
+  const { t, locale } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   // Elemento real del scroll para Selecto (montado tras el primer render).
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -488,15 +489,15 @@ export function PhotosTimeline({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [hasMore, loading, onLoadMore]);
 
-  const groups = groupPhotos(photos, sortField);
+  const groups = groupPhotos(photos, sortField, locale);
 
   if (!loading && photos.length === 0) {
     return (
       <DropZone onFilesDropped={onFilesDropped}>
         <EmptyState
           icon={Image}
-          title="No photos yet"
-          description="Upload photos or sync from your devices to see them here."
+          title={t('photos.noPhotos')}
+          description={t('photos.noPhotosHelp')}
         />
       </DropZone>
     );
@@ -579,7 +580,7 @@ export function PhotosTimeline({
               fontSize: '0.75rem',
             }}
           >
-            Loading...
+            {t('photos.loading')}
           </div>
         )}
 

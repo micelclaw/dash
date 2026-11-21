@@ -33,6 +33,7 @@ import { MailReadingPane } from './MailReadingPane';
 import { MailComposer } from './MailComposer';
 import { MailSnoozeMenu } from './MailSnoozeMenu';
 import type { ComposeData } from './types';
+import { useI18n } from '@/i18n';
 
 function useIsTablet() {
   const [isTablet, setIsTablet] = useState(window.innerWidth <= 1024);
@@ -46,6 +47,7 @@ function useIsTablet() {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const isMobile = useIsMobile();
   const isTablet = useIsTablet();
@@ -103,25 +105,25 @@ export function Component() {
   const handleUnsyncAccount = useCallback(async (id: string) => {
     const acc = accounts.find(a => a.id === id);
     if (!acc) return;
-    if (!window.confirm(`Unsync "${acc.name}"? The account will be removed from Mail.`)) return;
+    if (!window.confirm(t('mail.unsyncConfirm', { name: acc.name }))) return;
     try {
       await api.delete(`/email-accounts/${id}`);
-      toast.success(`"${acc.name}" removed`);
+      toast.success(t('mail.accountRemoved', { name: acc.name }));
       if (activeAccount === id) setActiveAccount(null);
       refetchAccounts();
     } catch {
-      toast.error('Failed to unsync account');
+      toast.error(t('mail.unsyncFailed'));
     }
-  }, [accounts, activeAccount, setActiveAccount, refetchAccounts]);
+  }, [accounts, activeAccount, setActiveAccount, refetchAccounts, t]);
 
   const handleChangeAccountColor = useCallback(async (id: string, color: string) => {
     try {
       await api.patch(`/email-accounts/${id}`, { color });
       refetchAccounts();
     } catch (err: any) {
-      toast.error(`Failed to change color: ${err?.message || 'unknown error'}`);
+      toast.error(t('mail.accountColorChangeFailed', { error: err?.message || t('mail.unknownError') }));
     }
-  }, [refetchAccounts]);
+  }, [refetchAccounts, t]);
 
   // Export
   const handleExport = useCallback(async (accountId: string | null, folders: string[]) => {
@@ -141,7 +143,7 @@ export function Component() {
           },
           body: JSON.stringify({ account_id: accountId, folders }),
         });
-        if (!res.ok) throw new Error('Export failed');
+        if (!res.ok) throw new Error(t('mail.exportFailed'));
 
         const blob = await res.blob();
         const disposition = res.headers.get('Content-Disposition') || '';
@@ -154,7 +156,7 @@ export function Component() {
         a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
-        toast.success(`Downloaded ${filename}`);
+        toast.success(t('mail.downloadedFile', { filename }));
       } else {
         // Save to Drive on server
         const res = await api.post<{ data: { saved_to: string; email_count: number } }>('/emails/export/csv', {
@@ -162,12 +164,12 @@ export function Component() {
           folders,
           save_to_drive: true,
         });
-        toast.success(`Saved ${res.data.saved_to} (${res.data.email_count} emails)`);
+        toast.success(t('mail.exportSaved', { path: res.data.saved_to, count: res.data.email_count }));
       }
     } catch {
-      toast.error('Export failed');
+      toast.error(t('mail.exportFailed'));
     }
-  }, []);
+  }, [t]);
 
   // Sync
   const [syncing, setSyncing] = useState(false);
@@ -195,13 +197,13 @@ export function Component() {
     const cid = syncError.data?.connector_id as string | undefined;
     if (cid && pendingSyncsRef.current.has(cid)) {
       pendingSyncsRef.current.delete(cid);
-      toast.error(`Sync error: ${syncError.data?.error ?? 'unknown'}`);
+      toast.error(t('mail.syncError', { error: String(syncError.data?.error ?? t('mail.unknownError')) }));
       if (pendingSyncsRef.current.size === 0) {
         clearTimeout(syncFallbackRef.current);
         setSyncing(false);
       }
     }
-  }, [syncError]);
+  }, [syncError, t]);
 
   useEffect(() => {
     return () => clearTimeout(syncFallbackRef.current);
@@ -214,7 +216,7 @@ export function Component() {
       const res = await api.get<{ data: Array<{ id: string; connector_type: string; status: string; domains: string[] }> }>('/sync/connectors');
       const connectors = res.data.filter(c => (c.domains ?? []).includes('emails') && c.status !== 'disconnected');
       if (connectors.length === 0) {
-        toast.error('No email connectors configured');
+        toast.error(t('mail.noConnectors'));
         setSyncing(false);
         return;
       }
@@ -222,7 +224,7 @@ export function Component() {
       for (const c of connectors) {
         await api.post(`/sync/connectors/${c.id}/run`);
       }
-      toast.success('Sync started');
+      toast.success(t('mail.syncStarted'));
       // Fallback: if WS never fires, reset after 120s
       clearTimeout(syncFallbackRef.current);
       syncFallbackRef.current = setTimeout(() => {
@@ -231,10 +233,10 @@ export function Component() {
         fetchEmails();
       }, 120_000);
     } catch {
-      toast.error('Sync failed');
+      toast.error(t('mail.syncFailed'));
       setSyncing(false);
     }
-  }, [fetchEmails]);
+  }, [fetchEmails, t]);
 
   // Collapsible list
   const [listCollapsed, setListCollapsed] = useState(false);
@@ -460,7 +462,7 @@ export function Component() {
           <button
             type="button"
             onClick={() => setMobileNav(true)}
-            aria-label="Cuentas y carpetas"
+            aria-label={t('mail.accountsFolders')}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 34, height: 34, flexShrink: 0,
@@ -474,7 +476,7 @@ export function Component() {
           <button
             type="button"
             onClick={handleCompose}
-            aria-label="Nuevo email"
+            aria-label={t('mail.newEmail')}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               height: 34, padding: '0 12px', flexShrink: 0,
@@ -484,7 +486,7 @@ export function Component() {
             }}
           >
             <Pencil size={16} />
-            New
+            {t('mail.newEmail')}
           </button>
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -586,7 +588,8 @@ export function Component() {
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          title={listCollapsed ? 'Show email list' : 'Hide email list'}
+          title={t(listCollapsed ? 'mail.showEmailList' : 'mail.hideEmailList')}
+          aria-label={t(listCollapsed ? 'mail.showEmailList' : 'mail.hideEmailList')}
         >
           {listCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
         </button>
@@ -606,8 +609,8 @@ export function Component() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
             <EmptyState
               icon={Mail}
-              title="Select an email"
-              description="Choose an email from the list to read"
+              title={t('mail.selectEmail')}
+              description={t('mail.chooseEmail')}
             />
           </div>
         )}

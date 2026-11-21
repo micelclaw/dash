@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Copy, Search } from 'lucide-react';
 import { useTerminalStore, type SavedSnippet } from '@/stores/terminal.store';
+import { useI18n } from '@/i18n';
 
 interface SnippetPanelProps {
   open: boolean;
@@ -21,6 +22,7 @@ interface SnippetPanelProps {
 }
 
 export function SnippetPanel({ open, onClose, onPaste }: SnippetPanelProps) {
+  const { t } = useI18n();
   const snippets = useTerminalStore((s) => s.snippets);
   const fetchSnippets = useTerminalStore((s) => s.fetchSnippets);
   const createSnippet = useTerminalStore((s) => s.createSnippet);
@@ -78,11 +80,11 @@ export function SnippetPanel({ open, onClose, onPaste }: SnippetPanelProps) {
         gap: 8,
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flex: 1 }}>Snippets</span>
-        <button onClick={() => setAdding(true)} style={iconBtnStyle} title="Add snippet">
+        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flex: 1 }}>{t('terminal.snippets')}</span>
+        <button onClick={() => setAdding(true)} style={iconBtnStyle} title={t('terminal.addSnippet')} aria-label={t('terminal.addSnippet')}>
           <Plus size={13} />
         </button>
-        <button onClick={onClose} style={iconBtnStyle} title="Close">
+        <button onClick={onClose} style={iconBtnStyle} title={t('terminal.close')} aria-label={t('terminal.close')}>
           <X size={13} />
         </button>
       </div>
@@ -94,7 +96,8 @@ export function SnippetPanel({ open, onClose, onPaste }: SnippetPanelProps) {
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Search snippets..."
+            placeholder={t('terminal.searchSnippets')}
+            aria-label={t('terminal.searchSnippets')}
             style={{
               flex: 1,
               background: 'transparent',
@@ -114,28 +117,31 @@ export function SnippetPanel({ open, onClose, onPaste }: SnippetPanelProps) {
           <input
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Label"
+            placeholder={t('terminal.snippetLabel')}
+            aria-label={t('terminal.snippetLabel')}
             style={fieldStyle}
             autoFocus
           />
           <input
             value={newCommand}
             onChange={(e) => setNewCommand(e.target.value)}
-            placeholder="Command"
+            placeholder={t('terminal.command')}
+            aria-label={t('terminal.command')}
             style={{ ...fieldStyle, fontFamily: 'var(--font-mono)' }}
           />
           <input
             value={newTags}
             onChange={(e) => setNewTags(e.target.value)}
-            placeholder="Tags (comma-separated)"
+            placeholder={t('terminal.tags')}
+            aria-label={t('terminal.tags')}
             style={fieldStyle}
           />
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={handleAdd} style={{ ...smallBtnStyle, background: 'var(--amber)', color: '#06060a', fontWeight: 600, border: 'none' }}>
-              Save
+              {t('terminal.save')}
             </button>
             <button onClick={() => setAdding(false)} style={smallBtnStyle}>
-              Cancel
+              {t('terminal.cancel')}
             </button>
           </div>
         </div>
@@ -145,7 +151,7 @@ export function SnippetPanel({ open, onClose, onPaste }: SnippetPanelProps) {
       <div style={{ flex: 1, overflowY: 'auto', padding: 4 }}>
         {filtered.length === 0 && (
           <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            {snippets.length === 0 ? 'No snippets saved yet' : 'No matches'}
+            {snippets.length === 0 ? t('terminal.noSnippets') : t('terminal.noMatches')}
           </div>
         )}
         {filtered.map((snippet) => (
@@ -166,6 +172,7 @@ function SnippetItem({ snippet, onPaste, onDelete }: {
   onPaste: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div
       onClick={onPaste}
@@ -185,14 +192,16 @@ function SnippetItem({ snippet, onPaste, onDelete }: {
         <button
           onClick={(e) => { e.stopPropagation(); onPaste(); }}
           style={iconBtnStyle}
-          title="Paste into terminal"
+          title={t('terminal.paste')}
+          aria-label={t('terminal.paste')}
         >
           <Copy size={11} />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           style={iconBtnStyle}
-          title="Delete"
+          title={t('terminal.delete')}
+          aria-label={t('terminal.delete')}
         >
           <Trash2 size={11} />
         </button>

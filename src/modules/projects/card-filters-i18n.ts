@@ -1,0 +1,26 @@
+export const projectsCardFiltersMessages = {
+  en: {
+    'projects.cardFilters.open': 'Filter cards',
+    'projects.cardFilters.openCount': 'Filter cards ({count} active)',
+    'projects.cardFilters.search': 'Search cards...',
+    'projects.cardFilters.priority': 'Priority',
+    'projects.cardFilters.priority.urgent': 'Urgent',
+    'projects.cardFilters.priority.high': 'High',
+    'projects.cardFilters.priority.medium': 'Medium',
+    'projects.cardFilters.priority.low': 'Low',
+    'projects.cardFilters.priority.none': 'None',
+    'projects.cardFilters.clearAll': 'Clear all filters',
+  },
+  es: {
+    'projects.cardFilters.open': 'Filtrar tarjetas',
+    'projects.cardFilters.openCount': 'Filtrar tarjetas ({count} activos)',
+    'projects.cardFilters.search': 'Buscar tarjetas...',
+    'projects.cardFilters.priority': 'Prioridad',
+    'projects.cardFilters.priority.urgent': 'Urgente',
+    'projects.cardFilters.priority.high': 'Alta',
+    'projects.cardFilters.priority.medium': 'Media',
+    'projects.cardFilters.priority.low': 'Baja',
+    'projects.cardFilters.priority.none': 'Ninguna',
+    'projects.cardFilters.clearAll': 'Quitar todos los filtros',
+  },
+} as const;

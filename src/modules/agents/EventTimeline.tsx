@@ -13,21 +13,23 @@
 import { useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 import { severityColor } from '@/modules/activity/adapters/types';
+import { useI18n } from '@/i18n';
 import { AgentSelect } from './AgentSelect';
 import { useAgentEvents } from './hooks/use-agent-events';
 import { formatRelativeTime } from './shared/format';
 import type { AgentEventRow } from './types';
 
 const SEVERITY_OPTIONS = [
-  { value: 'all', label: 'Todas' },
-  { value: 'critical', label: 'Critical' },
-  { value: 'error', label: 'Error' },
-  { value: 'warn', label: 'Warn' },
-  { value: 'info', label: 'Info' },
-  { value: 'debug', label: 'Debug' },
+  { value: 'all', key: 'agents.timeline.all' },
+  { value: 'critical', key: 'agents.timeline.critical' },
+  { value: 'error', key: 'agents.timeline.error' },
+  { value: 'warn', key: 'agents.timeline.warn' },
+  { value: 'info', key: 'agents.timeline.info' },
+  { value: 'debug', key: 'agents.timeline.debug' },
 ];
 
 export function EventTimeline({ agentId }: { agentId: string }) {
+  const { t } = useI18n();
   const [severity, setSeverity] = useState('all');
   const { events, loading, loadingMore, error, hasMore, loadMore } = useAgentEvents(agentId, severity);
 
@@ -35,10 +37,10 @@ export function EventTimeline({ agentId }: { agentId: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-          Timeline de eventos
+          {t('agents.timeline.title')}
         </span>
         <div style={{ minWidth: 120 }}>
-          <AgentSelect value={severity} options={SEVERITY_OPTIONS} onChange={setSeverity} minWidth={120} />
+          <AgentSelect value={severity} options={SEVERITY_OPTIONS.map(({ value, key }) => ({ value, label: t(key) }))} onChange={setSeverity} minWidth={120} />
         </div>
       </div>
 
@@ -56,8 +58,7 @@ export function EventTimeline({ agentId }: { agentId: string }) {
 
       {!loading && events.length === 0 && (
         <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.5, padding: '4px 2px' }}>
-          Este agente todavía no tiene eventos propios. Los eventos del sistema (login, errores,
-          workflows) se registran a nivel global en{' '}
+          {t('agents.timeline.emptyBefore')}{' '}
           <a href="/activity" style={{ color: 'var(--amber)' }}>Activity Center</a>.
         </div>
       )}
@@ -77,7 +78,7 @@ export function EventTimeline({ agentId }: { agentId: string }) {
               }}
             >
               {loadingMore && <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />}
-              Cargar más
+              {t('agents.timeline.loadMore')}
             </button>
           )}
         </div>
@@ -87,6 +88,7 @@ export function EventTimeline({ agentId }: { agentId: string }) {
 }
 
 function EventRow({ ev }: { ev: AgentEventRow }) {
+  const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const color = severityColor(ev.severity);
   const hasPayload = ev.payload && Object.keys(ev.payload).length > 0;
@@ -100,11 +102,11 @@ function EventRow({ ev }: { ev: AgentEventRow }) {
         <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)', color: 'var(--text)', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {ev.type}
         </span>
-        <span title={ev.direction === 'out' ? 'saliente' : 'entrante'} style={{ color: 'var(--text-muted)', flexShrink: 0, display: 'flex' }}>
+        <span title={ev.direction === 'out' ? t('agents.timeline.outgoing') : t('agents.timeline.incoming')} style={{ color: 'var(--text-muted)', flexShrink: 0, display: 'flex' }}>
           {ev.direction === 'out' ? <ArrowUpRight size={12} /> : <ArrowDownLeft size={12} />}
         </span>
         <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', flexShrink: 0, minWidth: 64, textAlign: 'right' }}>
-          {formatRelativeTime(ev.created_at)}
+          {formatRelativeTime(ev.created_at, locale)}
         </span>
         {hasPayload ? (open ? <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} /> : <ChevronRight size={12} style={{ color: 'var(--text-muted)' }} />) : <span style={{ width: 12 }} />}
       </div>

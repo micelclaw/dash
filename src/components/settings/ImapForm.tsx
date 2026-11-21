@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import * as syncSvc from '@/services/sync.service';
 import * as emailAccountsSvc from '@/services/email-accounts.service';
+import { useI18n } from '@/i18n';
 
 interface ImapFormProps {
   preset?: Record<string, any>;
@@ -23,6 +24,7 @@ interface ImapFormProps {
 }
 
 export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapFormProps) {
+  const { t } = useI18n();
   const [name, setName] = useState(serviceName);
   const [email, setEmail] = useState('');
   const [imapHost, setImapHost] = useState('');
@@ -54,7 +56,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
       });
 
       if (!testResult.ok) {
-        setError(testResult.error || 'IMAP connection failed. Check your credentials and server address.');
+        setError(testResult.error || t('settings.forms.imapFailed'));
         setSubmitting(false);
         return;
       }
@@ -78,7 +80,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
       });
       onComplete();
     } catch (err: any) {
-      setError(err?.message || 'Failed to create email account');
+      setError(err?.message || t('settings.forms.createEmailFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -114,13 +116,14 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
-        <label style={labelStyle}>Account Name</label>
-        <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} required />
+        <label htmlFor="imap-account-name" style={labelStyle}>{t('settings.forms.accountName')}</label>
+        <input id="imap-account-name" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
 
       <div>
-        <label style={labelStyle}>Email Address</label>
+        <label htmlFor="imap-email" style={labelStyle}>{t('settings.forms.emailAddress')}</label>
         <input
+          id="imap-email"
           style={inputStyle}
           type="email"
           value={email}
@@ -132,18 +135,20 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
 
       <div style={rowStyle}>
         <div>
-          <label style={labelStyle}>IMAP Host</label>
+          <label htmlFor="imap-host" style={labelStyle}>{t('settings.forms.imapHost')}</label>
           <input
+            id="imap-host"
             style={inputStyle}
             value={imapHost}
             onChange={(e) => setImapHost(e.target.value)}
-            placeholder={isSynology ? 'nas.local' : 'imap.example.com or localhost'}
+            placeholder={isSynology ? 'nas.local' : t('settings.forms.imapHostPlaceholder')}
             required
           />
         </div>
         <div>
-          <label style={labelStyle}>Port</label>
+          <label htmlFor="imap-port" style={labelStyle}>{t('settings.forms.port')}</label>
           <input
+            id="imap-port"
             style={{ ...inputStyle, textAlign: 'center' }}
             type="number"
             value={imapPort}
@@ -154,20 +159,22 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
 
       <div style={rowStyle}>
         <div>
-          <label style={labelStyle}>SMTP Host</label>
+          <label htmlFor="smtp-host" style={labelStyle}>{t('settings.forms.smtpHost')}</label>
           <input
+            id="smtp-host"
             style={inputStyle}
             value={smtpHost}
             onChange={(e) => setSmtpHost(e.target.value)}
-            placeholder={isSynology ? 'nas.local' : 'smtp.example.com or localhost'}
+            placeholder={isSynology ? 'nas.local' : t('settings.forms.smtpHostPlaceholder')}
           />
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Leave empty to use same as IMAP
+            {t('settings.forms.sameAsImap')}
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Port</label>
+          <label htmlFor="smtp-port" style={labelStyle}>{t('settings.forms.port')}</label>
           <input
+            id="smtp-port"
             style={{ ...inputStyle, textAlign: 'center' }}
             type="number"
             value={smtpPort}
@@ -177,18 +184,20 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
       </div>
 
       <div>
-        <label style={labelStyle}>Username</label>
+        <label htmlFor="imap-username" style={labelStyle}>{t('settings.connectors.username')}</label>
         <input
+          id="imap-username"
           style={inputStyle}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder={isSynology ? 'DSM username (or leave empty for email)' : 'Leave empty to use email address'}
+          placeholder={isSynology ? t('settings.forms.dsmUsernameOrEmail') : t('settings.forms.usernameOrEmail')}
         />
       </div>
 
       <div>
-        <label style={labelStyle}>Password</label>
+        <label htmlFor="imap-password" style={labelStyle}>{t('settings.connectors.password')}</label>
         <input
+          id="imap-password"
           style={inputStyle}
           type="password"
           value={password}
@@ -198,16 +207,17 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
       </div>
 
       <div>
-        <label style={labelStyle}>Sync Interval</label>
+        <label htmlFor="imap-sync-interval" style={labelStyle}>{t('settings.connectors.syncInterval')}</label>
         <select
+          id="imap-sync-interval"
           value={interval}
           onChange={(e) => setInterval(Number(e.target.value))}
           style={{ ...inputStyle, cursor: 'pointer' }}
         >
-          <option value={5}>Every 5 minutes</option>
-          <option value={15}>Every 15 minutes</option>
-          <option value={30}>Every 30 minutes</option>
-          <option value={60}>Every hour</option>
+          <option value={5}>{t('settings.forms.everyFiveMinutes')}</option>
+          <option value={15}>{t('settings.forms.everyFifteenMinutes')}</option>
+          <option value={30}>{t('settings.forms.everyThirtyMinutes')}</option>
+          <option value={60}>{t('settings.connectors.everyHour')}</option>
         </select>
       </div>
 
@@ -217,12 +227,12 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
           padding: '6px 8px', background: 'var(--surface)',
           borderRadius: 'var(--radius-sm)', lineHeight: 1.5,
         }}>
-          Use your Synology MailPlus credentials. The IMAP/SMTP host is your NAS address.
+          {t('settings.forms.synologyCredentials')}
         </div>
       )}
 
       {error && (
-        <div style={{ fontSize: '0.75rem', color: 'var(--error)', padding: '4px 0' }}>
+        <div role="alert" style={{ fontSize: '0.75rem', color: 'var(--error)', padding: '4px 0' }}>
           {error}
         </div>
       )}
@@ -239,7 +249,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
             fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
           }}
         >
-          Back
+          {t('settings.forms.back')}
         </button>
         <button
           type="submit"
@@ -255,7 +265,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
           }}
         >
           {submitting && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-          Connect
+          {t('settings.forms.connect')}
         </button>
       </div>
     </form>

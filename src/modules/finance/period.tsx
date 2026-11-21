@@ -22,6 +22,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { todayISO } from './personal/lib';
+import { useI18n } from '@/i18n';
 
 // ─── Modelo ────────────────────────────────────────────────────────────────
 
@@ -34,12 +35,12 @@ export type PeriodSelection =
   | { mode: 'cuatrimestres'; year: number; from: number; to: number }; // from<=to en 1..3
 
 export const PRESETS: { id: PresetId; label: string }[] = [
-  { id: 'mes', label: 'This month' },
-  { id: '30d', label: '30 days' },
-  { id: '90d', label: '90 days' },
-  { id: '12m', label: '12 months' },
-  { id: 'anio', label: 'This year' },
-  { id: 'custom', label: 'Custom' },
+  { id: 'mes', label: 'finance.period.thisMonth' },
+  { id: '30d', label: 'finance.period.days30' },
+  { id: '90d', label: 'finance.period.days90' },
+  { id: '12m', label: 'finance.period.months12' },
+  { id: 'anio', label: 'finance.period.thisYear' },
+  { id: 'custom', label: 'finance.period.custom' },
 ];
 
 export const TRIMESTRES = [1, 2, 3, 4];   // 4 trimestres (3 meses cada uno)
@@ -56,11 +57,11 @@ export function toISODate(d: Date): string {
 }
 
 // Etiqueta corta de un rango ISO (p.ej. "1 jun – 24 jun" o "1 ene 2025 – 24 jun").
-export function fmtRangeLabel(from: string, to: string): string {
+export function fmtRangeLabel(from: string, to: string, locale = 'en'): string {
   const f = new Date(from + 'T00:00:00'), t = new Date(to + 'T00:00:00');
-  if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return 'Custom';
+  if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return '';
   const sameYear = f.getFullYear() === t.getFullYear();
-  const fmt = (d: Date, withY: boolean) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', ...(withY ? { year: 'numeric' } : {}) }).format(d);
+  const fmt = (d: Date, withY: boolean) => new Intl.DateTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short', ...(withY ? { year: 'numeric' } : {}) }).format(d);
   return `${fmt(f, !sameYear)} – ${fmt(t, true)}`;
 }
 
@@ -109,9 +110,9 @@ export function rangeForSelection(sel: PeriodSelection, customFrom: string, cust
 }
 
 /** Etiqueta legible de la selección (para títulos de tarjetas/gráficas). */
-export function titleForSelection(sel: PeriodSelection, customFrom: string, customTo: string): string {
+export function titleForSelection(sel: PeriodSelection, customFrom: string, customTo: string, t: (key: string, values?: Record<string, string | number>) => string, locale: string): string {
   if (sel.mode === 'preset') {
-    return sel.preset === 'custom' ? fmtRangeLabel(customFrom, customTo) : (PRESETS.find((p) => p.id === sel.preset)?.label ?? '');
+    return sel.preset === 'custom' ? fmtRangeLabel(customFrom, customTo, locale) : t(PRESETS.find((p) => p.id === sel.preset)?.label ?? 'finance.period.custom');
   }
   const suffix = sel.mode === 'trimestres' ? 'T' : 'Q';
   const head = sel.from === sel.to ? `${sel.from}${suffix}` : `${sel.from}${suffix}–${sel.to}${suffix}`;
@@ -149,11 +150,12 @@ export const dateInputStyle: React.CSSProperties = {
 
 // Fila de dos calendarios (desde / hasta) para el preset 'custom'.
 export function CustomRangeInputs({ from, to, onFrom, onTo }: { from: string; to: string; onFrom: (v: string) => void; onTo: (v: string) => void }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>From</label>
+      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('finance.period.from')}</label>
       <input type="date" value={from} max={to} onChange={(e) => onFrom(e.target.value)} style={dateInputStyle} />
-      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>To</label>
+      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>{t('finance.period.to')}</label>
       <input type="date" value={to} min={from} max={todayISO()} onChange={(e) => onTo(e.target.value)} style={dateInputStyle} />
     </div>
   );
@@ -194,6 +196,7 @@ function Segment({ children }: { children: ReactNode }) {
  * el header superior de cada lente; usa flex-wrap para bajar de línea si no cabe.
  */
 export function PeriodControl() {
+  const { t } = useI18n();
   const { selection, selectPreset, toggleTrimestre, toggleCuatrimestre, tqYear, setYear, customFrom, customTo, setCustomFrom, setCustomTo } = useFinancePeriod();
   const isTQ = selection.mode === 'trimestres' || selection.mode === 'cuatrimestres';
   const tActive = (q: number) => selection.mode === 'trimestres' && q >= selection.from && q <= selection.to;
@@ -205,32 +208,32 @@ export function PeriodControl() {
         {/* Presets relativos a hoy */}
         <Segment>
           {PRESETS.map((p) => (
-            <Pill key={p.id} label={p.label} active={selection.mode === 'preset' && selection.preset === p.id} onClick={() => selectPreset(p.id)} />
+            <Pill key={p.id} label={t(p.label)} active={selection.mode === 'preset' && selection.preset === p.id} onClick={() => selectPreset(p.id)} />
           ))}
         </Segment>
 
         {/* Trimestres (3 meses) */}
         <Segment>
           {TRIMESTRES.map((q) => (
-            <Pill key={q} label={`${q}T`} title={`Trimestre ${q}`} active={tActive(q)} onClick={() => toggleTrimestre(q)} />
+            <Pill key={q} label={`${q}T`} title={t('finance.period.quarter', { number: q })} active={tActive(q)} onClick={() => toggleTrimestre(q)} />
           ))}
         </Segment>
 
         {/* Cuatrimestres (4 meses) */}
         <Segment>
-          {CUATRIMESTRES.map((t) => (
-            <Pill key={t} label={`${t}Q`} title={`Cuatrimestre ${t}`} active={qActive(t)} onClick={() => toggleCuatrimestre(t)} />
+          {CUATRIMESTRES.map((period) => (
+            <Pill key={period} label={`${period}Q`} title={t('finance.period.fourMonth', { number: period })} active={qActive(period)} onClick={() => toggleCuatrimestre(period)} />
           ))}
         </Segment>
 
         {/* Selector de año: solo para trimestres/cuatrimestres */}
         {isTQ && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: 2, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)' }}>
-            <button onClick={() => setYear(tqYear - 1)} aria-label="Previous year" style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
+            <button onClick={() => setYear(tqYear - 1)} aria-label={t('finance.period.previousYear')} style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
               <ChevronLeft size={15} />
             </button>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', minWidth: 34, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{tqYear}</span>
-            <button onClick={() => setYear(tqYear + 1)} aria-label="Next year" style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
+            <button onClick={() => setYear(tqYear + 1)} aria-label={t('finance.period.nextYear')} style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
               <ChevronRight size={15} />
             </button>
           </div>
@@ -269,6 +272,7 @@ interface FinancePeriodValue {
 const FinancePeriodContext = createContext<FinancePeriodValue | null>(null);
 
 export function FinancePeriodProvider({ children, initial = { mode: 'preset', preset: '12m' } }: { children: ReactNode; initial?: PeriodSelection }) {
+  const { t, locale } = useI18n();
   const [selection, setSelection] = useState<PeriodSelection>(initial);
   const [customFrom, setCustomFrom] = useState(() => { const n = new Date(); return toISODate(new Date(n.getFullYear(), n.getMonth(), 1)); });
   const [customTo, setCustomTo] = useState(() => todayISO());
@@ -282,7 +286,7 @@ export function FinancePeriodProvider({ children, initial = { mode: 'preset', pr
   const setYear = (year: number) => setSelection((s) => (s.mode === 'trimestres' || s.mode === 'cuatrimestres') ? { ...s, year } : s);
 
   const range = useMemo(() => rangeForSelection(selection, customFrom, customTo), [selection, customFrom, customTo]);
-  const title = useMemo(() => titleForSelection(selection, customFrom, customTo), [selection, customFrom, customTo]);
+  const title = useMemo(() => titleForSelection(selection, customFrom, customTo, t, locale), [selection, customFrom, customTo, t, locale]);
 
   const value: FinancePeriodValue = {
     selection, setSelection, selectPreset, toggleTrimestre, toggleCuatrimestre,

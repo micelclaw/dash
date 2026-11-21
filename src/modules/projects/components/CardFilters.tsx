@@ -13,11 +13,20 @@
 import { useState } from 'react';
 import { Search, X, Filter } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { useI18n } from '@/i18n';
 import type { CardFilters as Filters } from '../types';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
+const PRIORITY_MESSAGE_KEYS: Record<string, string> = {
+  urgent: 'projects.cardFilters.priority.urgent',
+  high: 'projects.cardFilters.priority.high',
+  medium: 'projects.cardFilters.priority.medium',
+  low: 'projects.cardFilters.priority.low',
+  none: 'projects.cardFilters.priority.none',
+};
 
 export function CardFilters({ compact }: { compact?: boolean }) {
+  const { t } = useI18n();
   const filters = useProjectsStore((s) => s.filters);
   const setFilters = useProjectsStore((s) => s.setFilters);
   const [open, setOpen] = useState(false);
@@ -35,6 +44,7 @@ export function CardFilters({ compact }: { compact?: boolean }) {
       <div style={{ position: 'relative' }}>
         <button
           onClick={() => setOpen(!open)}
+          aria-label={activeCount > 0 ? t('projects.cardFilters.openCount', { count: activeCount }) : t('projects.cardFilters.open')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -77,6 +87,7 @@ function FilterContent({
   updateFilter: (key: keyof Filters, value: string | undefined) => void;
   clearAll: () => void;
 }) {
+  const { t } = useI18n();
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
@@ -87,14 +98,15 @@ function FilterContent({
         <input
           value={filters.search ?? ''}
           onChange={(e) => updateFilter('search', e.target.value)}
-          placeholder="Search cards..."
+          aria-label={t('projects.cardFilters.search')}
+          placeholder={t('projects.cardFilters.search')}
           style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12, fontFamily: 'var(--font-sans)', padding: '2px 0' }}
         />
       </div>
 
       {/* Priority */}
       <div>
-        <span style={{ color: 'var(--text-dim)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Priority</span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>{t('projects.cardFilters.priority')}</span>
         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
           {PRIORITIES.map((p) => (
             <button
@@ -112,7 +124,7 @@ function FilterContent({
                 fontFamily: 'var(--font-sans)',
               }}
             >
-              {p}
+              {PRIORITY_MESSAGE_KEYS[p] ? t(PRIORITY_MESSAGE_KEYS[p]) : p}
             </button>
           ))}
         </div>
@@ -124,7 +136,7 @@ function FilterContent({
           onClick={clearAll}
           style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: 'var(--font-sans)' }}
         >
-          <X size={10} /> Clear all filters
+          <X size={10} /> {t('projects.cardFilters.clearAll')}
         </button>
       )}
     </div>

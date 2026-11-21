@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { RelateModal } from '@/components/shared/RelateModal';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
+import { useI18n } from '@/i18n';
 import { EventViewDetails } from './components/EventViewDetails';
 import { EventFormFields } from './components/EventFormFields';
 import {
@@ -55,6 +56,7 @@ export function EventModal({
   defaultDate,
   calendarNames,
 }: EventModalProps) {
+  const { t } = useI18n();
   useCoNavigation('event', event?.id ?? '');
   const [mode, setMode] = useState<Mode>('view');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -140,7 +142,7 @@ export function EventModal({
                 fontWeight: 600,
               }}
             >
-              {isCreate ? 'New Event' : mode === 'edit' ? 'Edit Event' : 'Event Details'}
+              {isCreate ? t('calendar.newEventTitle') : mode === 'edit' ? t('calendar.editEventTitle') : t('calendar.eventDetailsTitle')}
             </DialogTitle>
           </DialogHeader>
 
@@ -182,7 +184,7 @@ export function EventModal({
                   }}
                 >
                   <Trash2 size={14} />
-                  {confirmingDelete ? 'Are you sure?' : 'Delete'}
+                  {confirmingDelete ? t('calendar.areYouSure') : t('calendar.delete')}
                 </Button>
                 <Button
                   variant="outline"
@@ -190,7 +192,7 @@ export function EventModal({
                   style={{ borderRadius: 'var(--radius-md)', color: 'var(--text-dim)' }}
                 >
                   <Link2 size={14} />
-                  Relate
+                  {t('calendar.relate')}
                 </Button>
                 <Button
                   variant="outline"
@@ -205,7 +207,7 @@ export function EventModal({
                   }}
                 >
                   <Pencil size={14} />
-                  Edit
+                  {t('calendar.edit')}
                 </Button>
               </>
             ) : (
@@ -218,10 +220,10 @@ export function EventModal({
                   }}
                   style={{ borderRadius: 'var(--radius-md)', color: 'var(--text-dim)' }}
                 >
-                  Cancel
+                  {t('calendar.cancel')}
                 </Button>
                 <Button onClick={handleSave}>
-                  {isCreate ? 'Create' : 'Save'}
+                  {isCreate ? t('calendar.create') : t('calendar.save')}
                 </Button>
               </>
             )}

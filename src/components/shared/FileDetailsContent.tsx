@@ -30,6 +30,7 @@ import { downloadFile } from '@/lib/file-download';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { useFileLinks } from '@/modules/drive/hooks/use-file-links';
 import { api } from '@/services/api';
+import { officeFileTarget } from '@/modules/office/office-file-target';
 import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
 
@@ -58,10 +59,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function fileViewerRoute(file: FileRecord): string | null {
   if (file.id.includes('/') || !UUID_RE.test(file.id)) return null; // VFS path → no deep viewer
   const mime = file.mime_type || '';
-  if (mime === 'application/pdf') return `/office/pdf/${file.id}`;
-  if (/wordprocessing|spreadsheet|presentation|msword|ms-excel|ms-powerpoint|opendocument|rtf/i.test(mime) || mime === 'text/csv') {
-    return `/office/edit/${file.id}`;
-  }
+  const office = officeFileTarget(file);
+  if (office) return office;
   if (mime.startsWith('image/')) return `/photos?id=${file.id}`;
   return null;
 }

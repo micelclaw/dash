@@ -69,6 +69,7 @@ import { DomainsSection } from './DomainsSection';
 import { GatewayAuthSection } from './GatewayAuthSection';
 import { CompanionsSection } from './CompanionsSection';
 import { StorageSection } from './StorageSection';
+import { ConfigurationMigrationSection } from './ConfigurationMigrationSection';
 import { DriveSection } from './DriveSection';
 import { DatabaseSection } from './DatabaseSection';
 import { EnergySection } from './EnergySection';
@@ -162,6 +163,7 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   'preferences':          { component: PreferencesSection,          meta: { label: 'Learned Preferences', icon: Brain, group: 'ai-agents' } },
   'sessions':             { component: SessionSection,              meta: { label: 'Sessions', icon: History, group: 'ai-agents' } },
   'channel-bindings':     { component: ChannelBindingsSection,      meta: { label: 'Channel Bindings', icon: Link2, group: 'ai-agents' } },
+  'commands':             { component: CommandsSection,             meta: { label: 'Channel commands', icon: Terminal, group: 'ai-agents' } },
 
   // ── Apps ──
   'mail':                 { component: MailSection,                 meta: { label: 'Mail', icon: Mail, group: 'apps' } },
@@ -182,6 +184,7 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   'companions':           { component: CompanionsSection,           meta: { label: 'Apps acompañantes', icon: Puzzle, group: 'connectivity' } },
 
   // ── System ──
+  'configuration-migration': { component: ConfigurationMigrationSection, meta: { label: 'Configuración y migración', icon: HardDrive, group: 'system' } },
   'storage':              { component: StorageSection,              meta: { label: 'Storage', icon: HardDrive, group: 'system' } },
   'drive':                { component: DriveSection,                meta: { label: 'Drive', icon: FolderOpen, group: 'system' } },
   'database':             { component: DatabaseSection,             meta: { label: 'Database', icon: Database, group: 'system' } },
@@ -195,7 +198,6 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   // navigation is the unified /settings/security control plane.
   'sandbox':              { component: SandboxSection,              meta: { label: 'Sandbox', icon: Container } },
   'browser-config':       { component: BrowserConfigSection,        meta: { label: 'Browser', icon: Globe2 } },
-  'commands':             { component: CommandsSection,             meta: { label: 'Channel commands', icon: Terminal, group: 'security' } },
 
   // ── Administration (solo admins; el gating lo aplica SettingsPage) ──
   'users-groups':         { component: UsersAndGroupsSection,       meta: { label: 'Usuarios y grupos', icon: Users, group: 'admin' } },

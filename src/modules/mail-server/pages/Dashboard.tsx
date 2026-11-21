@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router';
 import { useMailServerApi } from '@micelclaw/mail-admin-ui';
 import type { MailuDomain, MailuUser, MailuAlias, MailuRelay } from '@micelclaw/mail-admin-ui';
 import { Globe, Inbox, ArrowRightLeft, Route, Plus, RefreshCw } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export default function Dashboard() {
+  const { t } = useI18n();
   const api = useMailServerApi();
   const navigate = useNavigate();
 
@@ -211,9 +213,9 @@ export default function Dashboard() {
                   letterSpacing: '0.04em',
                   borderBottom: '1px solid var(--border)',
                 }}>
-                  <span>Dominio</span>
-                  <span style={{ textAlign: 'right' }}>Usuarios</span>
-                  <span style={{ textAlign: 'right' }}>Max Aliases</span>
+                  <span>{t('mailServer.domain')}</span>
+                  <span style={{ textAlign: 'right' }}>{t('mailServer.users')}</span>
+                  <span style={{ textAlign: 'right' }}>{t('mailServer.maxAliases')}</span>
                 </div>
 
                 {recentDomains.map((d) => {

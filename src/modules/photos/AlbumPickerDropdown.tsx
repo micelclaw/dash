@@ -13,6 +13,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Plus, Camera } from 'lucide-react';
 import type { Album } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 interface AlbumPickerDropdownProps {
   open: boolean;
@@ -31,8 +32,9 @@ export function AlbumPickerDropdown({
   onSelect,
   onCreate,
   onClose,
-  title = 'Add to album',
+  title,
 }: AlbumPickerDropdownProps) {
+  const { t } = useI18n();
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [creating, setCreating] = useState(false);
@@ -78,6 +80,7 @@ export function AlbumPickerDropdown({
   }, [creating]);
 
   if (!open) return null;
+  const titleLabel = title ?? t('photos.extra.addToAlbum');
 
   const handleCreate = async () => {
     const name = newName.trim();
@@ -127,7 +130,7 @@ export function AlbumPickerDropdown({
           borderBottom: '1px solid var(--border)',
           fontFamily: 'var(--font-sans)',
         }}>
-          {title}
+          {titleLabel}
         </div>
 
         {/* Album list */}
@@ -140,7 +143,7 @@ export function AlbumPickerDropdown({
               textAlign: 'center',
               fontFamily: 'var(--font-sans)',
             }}>
-              No albums yet
+              {t('photos.extra.noAlbums')}
             </div>
           )}
 
@@ -190,7 +193,8 @@ export function AlbumPickerDropdown({
                   if (e.key === 'Enter') handleCreate();
                   if (e.key === 'Escape') { setCreating(false); setNewName(''); }
                 }}
-                placeholder="Album name..."
+                placeholder={t('photos.extra.albumName')}
+                aria-label={t('photos.extra.albumName')}
                 style={{
                   flex: 1,
                   background: 'var(--surface)',
@@ -227,7 +231,7 @@ export function AlbumPickerDropdown({
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
               <Plus size={14} />
-              New album
+              {t('photos.extra.newAlbum')}
             </button>
           )}
         </div>

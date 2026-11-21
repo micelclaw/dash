@@ -3,7 +3,6 @@ import { useVisibleSecurityPolling } from '@/hooks/useVisibleSecurityPolling';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
   Bot,
   CheckCircle2,
@@ -30,6 +29,7 @@ import {
   type SecurityRuntimeAdapterStatus,
 } from '@/services/security-policy.service';
 import { useAuthStore } from '@/stores/auth.store';
+import { Link } from 'react-router';
 
 const MODE_OPTIONS: Array<{ value: SecurityExecMode; label: string }> = [
   { value: 'deny', label: 'Deny command execution' },
@@ -257,8 +257,8 @@ export function SecurityOverviewPanel() {
     <div ref={observationRoot} className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><ShieldCheck size={19} className="text-[var(--amber)]" />Security overview</h2>
-          <p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Desired policy in Core, observed runtime enforcement and items that still need reconciliation.</p>
+          <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><ShieldCheck size={19} className="text-[var(--amber)]" />General</h2>
+          <p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Security status and global defaults inherited by agents.</p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -267,26 +267,14 @@ export function SecurityOverviewPanel() {
 
       {error && <RetryBanner severity="warn" message={error} onRetry={() => void load()} loading={loading} />}
       {adapterError && <RetryBanner severity="warn" title="Runtime adapter inventory unavailable" message={adapterError} onRetry={() => void load()} loading={loading} />}
-      {posture.recovery && <div role="status" className="rounded-[var(--radius-md)] border border-[var(--border)] p-3 text-xs text-[var(--text-dim)]">
-        Automatic recovery: {posture.recovery.enabled ? 'enabled' : 'disabled'} · waiting {Number(posture.recovery.counts.waiting_guard ?? 0) + Number(posture.recovery.counts.retry_wait ?? 0)} · recovering {posture.recovery.counts.recovering ?? 0} · manual {posture.recovery.counts.manual_required ?? 0}
-      </div>}
-
-      {(counts.legacy_unmanaged > 0 || counts.reconciliation_required > 0) && (
-        <div className="grid gap-3 md:grid-cols-2">
-          {counts.legacy_unmanaged > 0 && (
-            <div className="flex gap-3 rounded-[var(--radius-md)] border border-[color:rgba(245,158,11,.35)] bg-[color:rgba(245,158,11,.06)] p-4">
-              <ShieldAlert size={18} className="shrink-0 text-[var(--amber)]" />
-              <div><div className="text-sm font-semibold text-[var(--text)]">Legacy unmanaged agents</div><p className="mt-1 text-xs leading-5 text-[var(--text-dim)]">{counts.legacy_unmanaged} agent{counts.legacy_unmanaged === 1 ? '' : 's'} still need a managed execution mode and published profile.</p></div>
-            </div>
-          )}
-          {counts.reconciliation_required > 0 && (
-            <div className="flex gap-3 rounded-[var(--radius-md)] border border-[color:rgba(239,68,68,.35)] bg-[color:rgba(239,68,68,.06)] p-4">
-              <Activity size={18} className="shrink-0 text-[var(--error)]" />
-              <div><div className="text-sm font-semibold text-[var(--text)]">Reconciliation required</div><p className="mt-1 text-xs leading-5 text-[var(--text-dim)]">{counts.reconciliation_required} policy state{counts.reconciliation_required === 1 ? '' : 's'} differ from the last observed runtime state.</p></div>
-            </div>
-          )}
+      {(posture.recovery || counts.legacy_unmanaged > 0 || counts.reconciliation_required > 0) && <div role="status" className="flex flex-wrap items-start justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3 text-xs leading-5 text-[var(--text-dim)]">
+        <div className="space-y-1">
+          {counts.legacy_unmanaged > 0 && <p className="m-0 text-[var(--amber)]">Legacy unmanaged agents: {counts.legacy_unmanaged} still need a managed execution mode and published profile.</p>}
+          {counts.reconciliation_required > 0 && <p className="m-0 text-[var(--error)]">Reconciliation required: {counts.reconciliation_required} policy states differ from the last observed runtime state.</p>}
+          {posture.recovery && <p className="m-0">Automatic recovery: {posture.recovery.enabled ? 'enabled' : 'disabled'} · waiting {Number(posture.recovery.counts.waiting_guard ?? 0) + Number(posture.recovery.counts.retry_wait ?? 0)} · recovering {posture.recovery.counts.recovering ?? 0} · manual {posture.recovery.counts.manual_required ?? 0}</p>}
         </div>
-      )}
+        {(counts.legacy_unmanaged > 0 || counts.reconciliation_required > 0) && <Link to="/settings/security?security_tab=agent-execution" className="shrink-0 text-[var(--amber)] hover:underline">Review agent security →</Link>}
+      </div>}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard label="Agents" value={counts.total_agents} icon={Bot} />
@@ -300,7 +288,7 @@ export function SecurityOverviewPanel() {
       <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby="security-defaults-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 id="security-defaults-title" className="m-0 text-sm font-semibold text-[var(--text)]">Control-plane defaults</h3>
+            <h3 id="security-defaults-title" className="m-0 text-sm font-semibold text-[var(--text)]">Global command defaults and limits</h3>
             <p className="mt-1 text-xs text-[var(--text-muted)]">Owner-defined bounds apply before profile and agent overrides.</p>
           </div>
           {isOwner ? (

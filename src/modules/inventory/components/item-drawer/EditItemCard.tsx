@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import { useI18n } from '@/i18n';
 import { toast } from 'sonner';
 import {
   itemFormToUpdatePayload,
@@ -39,6 +40,7 @@ interface EditItemCardProps {
  * updateItem ya soporta cualquier campo, así que el drawer es el lugar natural.
  */
 export function EditItemCard({ item, onSubmit, onClose, onGenerateTag }: EditItemCardProps) {
+  const { t } = useI18n();
   // Snapshot al abrir la edición — se remonta al reabrir (mismo comportamiento
   // que el openEdit original).
   const [form, setForm] = useState<ItemFormFields>(() => itemToFormFields(item));
@@ -47,16 +49,16 @@ export function EditItemCard({ item, onSubmit, onClose, onGenerateTag }: EditIte
 
   const save = async () => {
     if (!form.name.trim()) {
-      toast.error('Name is required');
+      toast.error(t('inventory.item.nameRequired'));
       return;
     }
     setSaving(true);
     try {
       await onSubmit({ ...itemFormToUpdatePayload(form), custom_fields: sanitizeCustomFields(customFields) });
-      toast.success('Item updated');
+      toast.success(t('inventory.drawer.itemUpdated'));
       onClose();
     } catch {
-      toast.error('Failed to update item');
+      toast.error(t('inventory.drawer.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -65,81 +67,82 @@ export function EditItemCard({ item, onSubmit, onClose, onGenerateTag }: EditIte
   const generateTag = async () => {
     try {
       const updated = await onGenerateTag();
-      setForm(f => ({ ...f, asset_tag: updated.asset_tag ?? '' }));
-      toast.success(`Asset tag ${updated.asset_tag}`);
+      const generatedTag = updated.asset_tag ?? '';
+      setForm(f => ({ ...f, asset_tag: generatedTag }));
+      toast.success(t('inventory.drawer.assetTagGenerated', { tag: generatedTag }));
     } catch {
-      toast.error('Failed to generate asset tag');
+      toast.error(t('inventory.drawer.generateAssetTagFailed'));
     }
   };
 
   return (
     <div style={{ ...cardStyle, gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={sectionLabel}>Edit item</span>
+        <span style={sectionLabel}>{t('inventory.drawer.editSection')}</span>
       </div>
       <div>
-        <label style={editLabelStyle}>Category fields</label>
+        <label style={editLabelStyle}>{t('inventory.item.categoryFields')}</label>
         <CategoryFieldsForm category={form.category} value={customFields} onChange={setCustomFields} />
       </div>
       <div>
-        <label style={editLabelStyle}>Name *</label>
+        <label style={editLabelStyle}>{t('inventory.drawer.nameRequired')}</label>
         <input
           style={inputStyle}
           value={form.name}
           onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-          aria-label="Item name"
+          aria-label={t('inventory.item.name')}
           autoFocus
         />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
-          <label style={editLabelStyle}>Category</label>
+          <label style={editLabelStyle}>{t('inventory.drawer.category')}</label>
           <input style={inputStyle} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} />
         </div>
         <div>
-          <label style={editLabelStyle}>Serial number</label>
+          <label style={editLabelStyle}>{t('inventory.item.serialNumber')}</label>
           <input style={inputStyle} value={form.serial_number} onChange={e => setForm(f => ({ ...f, serial_number: e.target.value }))} />
         </div>
         <div>
-          <label style={editLabelStyle}>Asset tag</label>
+          <label style={editLabelStyle}>{t('inventory.drawer.assetTag')}</label>
           <div style={{ display: 'flex', gap: 6 }}>
             <input
               style={inputStyle}
               placeholder="INV-2026-00042"
               value={form.asset_tag}
               onChange={e => setForm(f => ({ ...f, asset_tag: e.target.value }))}
-              aria-label="Asset tag"
+              aria-label={t('inventory.drawer.assetTag')}
             />
-            <button type="button" style={{ ...btnSecondary, padding: '6px 10px', flexShrink: 0 }} onClick={() => void generateTag()} title="Auto-generate the next asset tag">
-              Gen
+            <button type="button" style={{ ...btnSecondary, padding: '6px 10px', flexShrink: 0 }} onClick={() => void generateTag()} title={t('inventory.drawer.generateTag')}>
+              {t('inventory.drawer.generate')}
             </button>
           </div>
         </div>
         <div>
-          <label style={editLabelStyle}>Brand</label>
+          <label style={editLabelStyle}>{t('inventory.item.brand')}</label>
           <input style={inputStyle} value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} />
         </div>
         <div>
-          <label style={editLabelStyle}>Model</label>
+          <label style={editLabelStyle}>{t('inventory.item.model')}</label>
           <input style={inputStyle} value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))} />
         </div>
         <div>
-          <label style={editLabelStyle}>Purchase date</label>
+          <label style={editLabelStyle}>{t('inventory.item.purchaseDate')}</label>
           <input style={inputStyle} type="date" value={form.purchase_date} onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))} />
         </div>
         <div>
-          <label style={editLabelStyle}>Purchase price</label>
+          <label style={editLabelStyle}>{t('inventory.item.purchasePrice')}</label>
           <input style={inputStyle} type="number" min="0" step="0.01" value={form.purchase_price} onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))} />
         </div>
         <div>
-          <label style={editLabelStyle}>Warranty until</label>
+          <label style={editLabelStyle}>{t('inventory.item.warrantyUntil')}</label>
           <input style={inputStyle} type="date" value={form.warranty_until} onChange={e => setForm(f => ({ ...f, warranty_until: e.target.value }))} />
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button style={btnSecondary} disabled={saving} onClick={onClose}>Cancel</button>
+        <button style={btnSecondary} disabled={saving} onClick={onClose}>{t('inventory.drawer.cancel')}</button>
         <button style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={() => void save()}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('inventory.drawer.saving') : t('inventory.drawer.save')}
         </button>
       </div>
     </div>

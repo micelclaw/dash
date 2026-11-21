@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Search, Link, Check, FileText, Calendar, Mail, User, Bookmark, File, Package, Receipt, ArrowLeftRight } from 'lucide-react';
 import { api } from '@/services/api';
 import type { SearchResult } from '@/types/search';
+import { useI18n } from '@/i18n';
 
 interface EntityLinkData {
   id: string;
@@ -26,15 +27,15 @@ interface EntityLinkData {
 }
 
 const DOMAIN_TABS = [
-  { id: 'all', label: 'All' },
-  { id: 'note', label: 'Notes', icon: FileText },
-  { id: 'event', label: 'Events', icon: Calendar },
-  { id: 'email', label: 'Emails', icon: Mail },
-  { id: 'contact', label: 'Contacts', icon: User },
-  { id: 'file', label: 'Files', icon: File },
-  { id: 'inventory', label: 'Inventory', icon: Package },
-  { id: 'finance_document', label: 'Facturas', icon: Receipt },
-  { id: 'finance_journal_entry', label: 'Movimientos', icon: ArrowLeftRight },
+  { id: 'all', labelKey: 'projects.entityLinkPicker.domain.all' },
+  { id: 'note', labelKey: 'projects.entityLinkPicker.domain.notes', icon: FileText },
+  { id: 'event', labelKey: 'projects.entityLinkPicker.domain.events', icon: Calendar },
+  { id: 'email', labelKey: 'projects.entityLinkPicker.domain.emails', icon: Mail },
+  { id: 'contact', labelKey: 'projects.entityLinkPicker.domain.contacts', icon: User },
+  { id: 'file', labelKey: 'projects.entityLinkPicker.domain.files', icon: File },
+  { id: 'inventory', labelKey: 'projects.entityLinkPicker.domain.inventory', icon: Package },
+  { id: 'finance_document', labelKey: 'projects.entityLinkPicker.domain.invoices', icon: Receipt },
+  { id: 'finance_journal_entry', labelKey: 'projects.entityLinkPicker.domain.transactions', icon: ArrowLeftRight },
 ];
 
 const DOMAIN_ICONS: Record<string, typeof FileText> = {
@@ -49,20 +50,20 @@ const DOMAIN_ICONS: Record<string, typeof FileText> = {
   finance_journal_entry: ArrowLeftRight,
 };
 
-function getResultTitle(result: SearchResult): string {
+function getResultTitle(result: SearchResult, t: (key: string) => string): string {
   const r = result.record;
-  if (!r) return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || 'Unknown';
+  if (!r) return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || t('projects.entityLinkPicker.fallback.unknown');
   switch (result.domain) {
-    case 'note': return String(r.title || 'Untitled');
-    case 'event': return String(r.title || 'Untitled event');
-    case 'contact': return String(r.display_name || 'Unknown');
-    case 'email': return String(r.subject || '(no subject)');
-    case 'file': return String(r.filename || 'Untitled');
-    case 'diary': return String(r.entry_date || 'Diary entry');
-    case 'inventory': return String(r.name || 'Artículo');
-    case 'finance_document': return String(r.number || r.bill_to_name || 'Factura');
-    case 'finance_journal_entry': return String(r.description || 'Movimiento');
-    default: return String(r.title || r.name || 'Unknown');
+    case 'note': return String(r.title || t('projects.entityLinkPicker.fallback.untitled'));
+    case 'event': return String(r.title || t('projects.entityLinkPicker.fallback.untitledEvent'));
+    case 'contact': return String(r.display_name || t('projects.entityLinkPicker.fallback.unknown'));
+    case 'email': return String(r.subject || t('projects.entityLinkPicker.fallback.noSubject'));
+    case 'file': return String(r.filename || t('projects.entityLinkPicker.fallback.untitled'));
+    case 'diary': return String(r.entry_date || t('projects.entityLinkPicker.fallback.diaryEntry'));
+    case 'inventory': return String(r.name || t('projects.entityLinkPicker.fallback.inventoryItem'));
+    case 'finance_document': return String(r.number || r.bill_to_name || t('projects.entityLinkPicker.fallback.invoice'));
+    case 'finance_journal_entry': return String(r.description || t('projects.entityLinkPicker.fallback.journalEntry'));
+    default: return String(r.title || r.name || t('projects.entityLinkPicker.fallback.unknown'));
   }
 }
 
@@ -72,6 +73,7 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
   onClose: () => void;
   onLinksChanged?: () => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -176,9 +178,9 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
         }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>
             <Link size={14} />
-            Link Entity
+            {t('projects.entityLinkPicker.title')}
           </span>
-          <button onClick={onClose} style={closeBtnStyle}><X size={16} /></button>
+          <button onClick={onClose} style={closeBtnStyle} aria-label={t('projects.entityLinkPicker.close')}><X size={16} /></button>
         </div>
 
         {/* Search */}
@@ -195,7 +197,8 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
             <Search size={14} style={{ color: 'var(--text-muted)' }} />
             <input
               autoFocus
-              placeholder="Search notes, events, contacts..."
+              placeholder={t('projects.entityLinkPicker.search.placeholder')}
+              aria-label={t('projects.entityLinkPicker.search.label')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
@@ -223,6 +226,7 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
             <button
               key={dt.id}
               onClick={() => setTab(dt.id)}
+              aria-pressed={tab === dt.id}
               style={{
                 padding: '3px 8px',
                 borderRadius: 4,
@@ -238,7 +242,7 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
                 whiteSpace: 'nowrap',
               }}
             >
-              {dt.label}
+              {t(dt.labelKey)}
             </button>
           ))}
         </div>
@@ -247,19 +251,19 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
         <div style={{ flex: 1, overflow: 'auto', padding: '8px 0' }}>
           {loading && (
             <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-              Searching...
+              {t('projects.entityLinkPicker.searching')}
             </div>
           )}
 
           {!loading && search.length >= 2 && results.length === 0 && (
             <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-              No results found
+              {t('projects.entityLinkPicker.noResults')}
             </div>
           )}
 
           {!loading && search.length < 2 && (
             <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-              Type at least 2 characters to search
+              {t('projects.entityLinkPicker.minimumQuery')}
             </div>
           )}
 
@@ -267,7 +271,7 @@ export function EntityLinkPicker({ boardId, cardId, onClose, onLinksChanged }: {
             const entityId = result.record_id;
             const isLinked = linkedIds.has(entityId);
             const Icon = DOMAIN_ICONS[result.domain] ?? FileText;
-            const title = getResultTitle(result);
+            const title = getResultTitle(result, t);
             return (
               <div
                 key={entityId}

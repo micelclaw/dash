@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { useI18n } from '@/i18n';
 
 interface CustomModelConfigModalProps {
   mode: 'add' | 'edit';
@@ -51,6 +52,7 @@ export function CustomModelConfigModal({
   onClose,
   onSuccess,
 }: CustomModelConfigModalProps) {
+  const { t } = useI18n();
   const [contextWindow, setContextWindow] = useState<number>(initialContextWindow ?? 200_000);
   const [maxTokens, setMaxTokens] = useState<number>(initialMaxTokens ?? 8_192);
   const [saving, setSaving] = useState(false);
@@ -74,7 +76,7 @@ export function CustomModelConfigModal({
         max_tokens: maxTokens,
         context_window: contextWindow,
       });
-      toast.success(mode === 'add' ? `Added ${modelId}` : `Updated ${modelId}`);
+      toast.success(t(mode === 'add' ? 'gateway.customModel.added' : 'gateway.customModel.updated', { model: modelId }));
       onSuccess();
       onClose();
     } catch (err) {
@@ -128,7 +130,7 @@ export function CustomModelConfigModal({
             margin: 0, fontSize: '1rem', fontWeight: 600,
             color: 'var(--text)', fontFamily: 'var(--font-sans)',
           }}>
-            {mode === 'add' ? 'Add model' : 'Edit model'}
+            {t(mode === 'add' ? 'gateway.customModel.addTitle' : 'gateway.customModel.editTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -148,13 +150,13 @@ export function CustomModelConfigModal({
         }}>
           <strong style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{provider}/{modelId}</strong>
           <br />
-          The provider's <code style={{ fontFamily: 'var(--font-mono)' }}>/v1/models</code> endpoint doesn't expose context limits. Set them so OpenClaw doesn't compact prematurely.
+          {t('gateway.customModel.contextHelp')}
         </p>
 
         {/* Context Window */}
         <Field
-          label="Context window (tokens)"
-          desc="Total tokens the model can hold (input + output)."
+          label={t('gateway.customModel.contextWindow')}
+          desc={t('gateway.customModel.contextDescription')}
           value={contextWindow}
           onChange={setContextWindow}
           presets={CTX_PRESETS}
@@ -162,8 +164,8 @@ export function CustomModelConfigModal({
 
         {/* Max Tokens */}
         <Field
-          label="Max output tokens"
-          desc="Maximum tokens per response. Must be ≤ context window."
+          label={t('gateway.customModel.maxOutput')}
+          desc={t('gateway.customModel.maxOutputDescription')}
           value={maxTokens}
           onChange={setMaxTokens}
           presets={MAX_TOKEN_PRESETS}
@@ -174,7 +176,7 @@ export function CustomModelConfigModal({
             fontSize: '0.6875rem', color: '#f43f5e',
             margin: '4px 0 12px', fontFamily: 'var(--font-sans)',
           }}>
-            Max output tokens must be ≤ context window.
+            {t('gateway.customModel.contextTooSmall')}
           </p>
         )}
 
@@ -192,12 +194,12 @@ export function CustomModelConfigModal({
           }}>
             <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 4 }}>
               {probeError.code === 'MODEL_NOT_IN_CATALOG'
-                ? 'Modelo no encontrado en el proveedor'
+                ? t('gateway.customModel.notFound')
                 : probeError.code === 'MODEL_PROBE_UNREACHABLE'
-                  ? 'No se pudo contactar al proveedor'
+                  ? t('gateway.customModel.unreachable')
                   : probeError.code === 'MODEL_NOT_SERVING'
-                    ? 'Modelo listado pero no responde'
-                    : 'Verificación rechazada por el proveedor'}
+                    ? t('gateway.customModel.notServing')
+                    : t('gateway.customModel.rejected')}
             </div>
             <div style={{ color: 'var(--text-dim)', marginBottom: 6 }}>
               {probeError.message}
@@ -205,7 +207,7 @@ export function CustomModelConfigModal({
             {probeError.sample && probeError.sample.length > 0 && (
               <details style={{ marginTop: 6 }}>
                 <summary style={{ cursor: 'pointer', color: 'var(--text-dim)', fontSize: '0.625rem' }}>
-                  Modelos disponibles ({probeError.sample.length})
+                  {t('gateway.customModel.availableModels', { count: probeError.sample.length })}
                 </summary>
                 <div style={{
                   marginTop: 6,
@@ -241,7 +243,7 @@ export function CustomModelConfigModal({
               cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Cancel
+            {t('gateway.customModel.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -257,7 +259,7 @@ export function CustomModelConfigModal({
             }}
           >
             {saving && <Loader2 size={12} className="spin" />}
-            {saving ? 'Verifying...' : mode === 'add' ? 'Add' : 'Save'}
+            {saving ? t('gateway.customModel.verifying') : mode === 'add' ? t('gateway.customModel.addAction') : t('gateway.customModel.saveAction')}
           </button>
         </div>
       </div>

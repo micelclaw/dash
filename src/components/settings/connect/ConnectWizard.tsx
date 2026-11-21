@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { toast } from 'sonner';
+import {Button} from '@/components/ui/button';
 import { DATA_TYPES, dataType as findDataType, type DataTypeMeta } from '@/config/data-types';
 import * as syncSvc from '@/services/sync.service';
 import * as emailSvc from '@/services/email-accounts.service';
@@ -40,6 +41,9 @@ import { WhereStep, type ProviderChoice } from './WhereStep';
 import { AuthStep, type AuthResult } from './AuthStep';
 import { CollectionsStep, type CollectionsChoice } from './CollectionsStep';
 import { TaskMappingStep } from './TaskMappingStep';
+import { api } from '@/services/api';
+import {useAuthStore} from '@/stores/auth.store';
+import { ownOAuthCallback } from '@/components/onboarding/progress';
 
 type Fase = 'what' | 'where' | 'auth' | 'collections' | 'mapping';
 
@@ -53,9 +57,14 @@ export interface ConnectWizardProps {
    * "+ Conectar" de cada módulo.
    */
   fixedDataType?: string;
+  fixedProvider?: string;
+  requireOwnCallback?: boolean;
 }
 
-export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: ConnectWizardProps) {
+export function ConnectWizard({ open, onClose, onConnected, fixedDataType, fixedProvider, requireOwnCallback = false }: ConnectWizardProps) {
+  const oauthDirect=useRef<{id:string;controller:AbortController;popup:Window|null}|null>(null);
+  const [oauthState,setOAuthState]=useState('');
+  const sessionGeneration=useAuthStore(s=>s.sessionGeneration);
   const oauthPending = useRef<{ state: string; popup: Window; origin: string } | null>(null);
   const nextcloudLoginGeneration = useRef(0);
   const nextcloudLoginPopup = useRef<Window | null>(null);
@@ -74,8 +83,14 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
   const [suggestedCap, setSuggestedCap] = useState(2000);
   const [taskSchemas, setTaskSchemas] = useState<syncSvc.TaskCollectionSchema[]>([]);
 
+  const oauthGeneration=useRef(0);
+  const cancelOAuth=useCallback(()=>{
+    oauthGeneration.current++;const direct=oauthDirect.current;oauthDirect.current=null;direct?.controller.abort();direct?.popup?.close();if(direct?.id)void syncSvc.cancelDirectOAuth(direct.id).catch(()=>{});const pending=oauthPending.current;oauthPending.current=null;
+    if(pending){pending.popup.close();try{const saved=JSON.parse(localStorage.getItem('claw_oauth_pending')??'null');if(saved?.state===pending.state)localStorage.removeItem('claw_oauth_pending');}catch{}}
+  },[]);
+  useEffect(()=>()=>{cancelOAuth();},[cancelOAuth,sessionGeneration]);
   const reset = useCallback(() => {
-    oauthPending.current = null;
+    cancelOAuth();
     nextcloudLoginGeneration.current++;
     nextcloudLoginPopup.current?.close();
     nextcloudLoginPopup.current = null;
@@ -86,10 +101,10 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
     setCollectionsError(null);
     setCollectionsDiagnostic({});
     setTaskSchemas([]);
-    setBusy(false);
-  }, []);
+    setBusy(false);setOAuthState('');
+  }, [cancelOAuth]);
 
-  useEffect(() => { if (!open) { nextcloudLoginGeneration.current++; nextcloudLoginPopup.current?.close(); nextcloudLoginPopup.current = null; } }, [open]);
+  useEffect(() => { if (!open) { cancelOAuth(); nextcloudLoginGeneration.current++; nextcloudLoginPopup.current?.close(); nextcloudLoginPopup.current = null; } }, [open,cancelOAuth]);
 
   // Al abrir: si el tipo viene fijado (botón "+" de un módulo) se salta la
   // ventana 1. Si no, se cuentan las integraciones que hay por tipo para el
@@ -155,14 +170,15 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
       const pending = oauthPending.current;
       if (event.data?.type !== 'oauth_callback' || !pending || event.source !== pending.popup ||
           event.origin !== pending.origin || event.data.state !== pending.state) return;
-      oauthPending.current = null;
+      const generation=oauthGeneration.current;oauthPending.current = null;
+      if(event.data.error){pending.popup.close();setBusy(false);toast.error('Autorización denegada o cancelada');return;}
       try {
         const creado = await syncSvc.oauthCallback({
           provider: event.data.provider,
           code: event.data.code,
           state: event.data.state,
         });
-        localStorage.removeItem('claw_oauth_pending');
+        if(generation!==oauthGeneration.current)return;localStorage.removeItem('claw_oauth_pending');
         // La autorización NO es el final del viaje: falta la pregunta de qué
         // traerse. Antes aquí se cerraba el asistente, así que una cuenta de
         // Google entera entraba sin que nadie preguntase nada.
@@ -175,7 +191,7 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
         // muestra tal cual en vez de un "algo falló".
         toast.error(err instanceof Error ? err.message : 'No se pudo completar la autorización');
       } finally {
-        setBusy(false);
+        if(generation===oauthGeneration.current){localStorage.removeItem('claw_oauth_pending');setBusy(false);}
       }
     };
     window.addEventListener('message', handler);
@@ -184,7 +200,8 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
 
   const empezarOAuth = useCallback(async (
     slug: string,
-    ownClient?: { clientId: string; clientSecret: string },
+    ownClient?: { clientId: string; clientSecret: string;clientType?:'public'|'confidential' },
+    mode:'local'|'companion'='local',
   ) => {
     if (!tipo) return;
     const scope = eleccion?.provider.oauth_scopes?.join(',');
@@ -194,25 +211,48 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
       toast.error(`Todavía no se puede autorizar ${tipo.label.toLowerCase()} de este proveedor`);
       return;
     }
-    setBusy(true);
+    const generation=++oauthGeneration.current;
+    const popup=mode==='companion'?null:window.open('about:blank','claw_oauth_'+Date.now()+'_'+generation,'width=500,height=700,scrollbars=yes,resizable=yes');
+    if(!popup&&mode==='local'){toast.error('El navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio.');return;}
+    if(popup)oauthPending.current={state:'',popup,origin:window.location.origin};setBusy(true);
+    const controller=new AbortController();oauthDirect.current={id:'',controller,popup};
     try {
+      const caps=await syncSvc.directOAuthCapabilities(controller.signal);
+      const direct=mode==='companion'||ownClient?.clientType==='public'&&['google','microsoft'].includes(oauthProvider)||!ownClient&&caps.providers.some(p=>p.provider===oauthProvider&&p.local);
+      if(direct){
+        const flow=await syncSvc.startDirectOAuth(oauthProvider,connectorType,scope.split(','),mode,controller.signal,ownClient?{client_id:ownClient.clientId,client_secret:ownClient.clientSecret,client_type:ownClient.clientType}:undefined);
+        if(generation!==oauthGeneration.current){void syncSvc.cancelDirectOAuth(flow.operation.id).catch(()=>{});popup?.close();return;}
+        oauthDirect.current={id:flow.operation.id,controller,popup};oauthPending.current=null;
+        if(mode==='local'){if(!flow.authorize_url)throw Error('El servidor no devolvió la autorización');popup!.location.href=flow.authorize_url;}
+        setOAuthState(mode==='companion'?'Abre el Companion emparejado con esta instalación y usuario. Confirma el destino para autorizar.':'Esperando autorización en el proveedor…');
+        const created=await syncSvc.pollDirectOAuth(flow.operation.id,controller.signal,op=>{if(generation===oauthGeneration.current&&op.status==='exchanging')setOAuthState('Guardando la conexión en esta instalación…');});
+        if(generation!==oauthGeneration.current)return;
+        popup?.close();oauthDirect.current=null;setConnectorId(created.id);setFase('collections');void cargarColecciones(created.id);setBusy(false);setOAuthState('');return;
+      }
+      oauthDirect.current=null;
+      const allowedOrigins=requireOwnCallback?(await api.get<{data:{oauth_callback_origins:string[]}}>('/initial-setup/local-access')).data.oauth_callback_origins:[];
+      const expectedCallback=ownClient?eleccion?.provider.own_oauth_redirect_uri:eleccion?.provider.oauth_redirect_uri;
+      if (requireOwnCallback && !ownOAuthCallback(expectedCallback, window.location.origin,allowedOrigins)) throw new Error('El callback OAuth no corresponde a esta instalación y sus puertos. Revisa la URL de retorno de la aplicación; no se ha iniciado la autorización.');
       const oauth = await syncSvc.getOAuthAuthorizeUrl(oauthProvider, scope, ownClient ? {
         client_id: ownClient.clientId,
-        client_secret: ownClient.clientSecret,
+        ...(ownClient.clientSecret?{client_secret:ownClient.clientSecret}:{}),
+        ...(ownClient.clientType?{client_type:ownClient.clientType}:{}),
       } : undefined, connectorType);
-      localStorage.setItem('claw_oauth_pending', JSON.stringify({ provider: slug, state: oauth.state }));
-      const popup = window.open(oauth.authorize_url, 'claw_oauth', 'width=500,height=700,scrollbars=yes,resizable=yes');
-      if (popup) oauthPending.current = { state: oauth.state, popup,
-        origin: new URL(eleccion?.provider.oauth_redirect_uri ?? window.location.origin).origin };
+      const actualCallback=new URL(oauth.authorize_url).searchParams.get('redirect_uri');
+      if(actualCallback!==expectedCallback)throw new Error('El callback recibido no coincide con el anunciado para este cliente.');
+      if (requireOwnCallback && !ownOAuthCallback(actualCallback, window.location.origin,allowedOrigins)) throw new Error('La URL de retorno recibida no corresponde a esta instalación. No se abrirá el proveedor.');
+      if(generation!==oauthGeneration.current)return;
+      if (popup) {oauthPending.current = { state: oauth.state, popup,
+        origin: new URL(actualCallback ?? window.location.origin).origin };popup.location.href=oauth.authorize_url;}
       if (!popup) {
         toast.error('El navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio.');
         setBusy(false);
       }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo iniciar la autorización');
-      setBusy(false);
+      if(generation!==oauthGeneration.current)return;cancelOAuth();
+      toast.error(err instanceof Error ? err.message : 'No se pudo iniciar la autorización');setBusy(false);
     }
-  }, [tipo, eleccion]);
+  }, [tipo, eleccion, requireOwnCallback,cancelOAuth,cargarColecciones]);
 
   const empezarNextcloud = useCallback(async (serverUrl: string) => {
     const generation = ++nextcloudLoginGeneration.current;
@@ -351,7 +391,7 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
     } finally {
       setBusy(false);
     }
-  }, [tipo, eleccion]);
+  }, [tipo, eleccion, requireOwnCallback,cancelOAuth]);
 
   // ── Empezar de verdad ─────────────────────────────────────────────────────
   const empezar = useCallback(async (c: CollectionsChoice) => {
@@ -401,7 +441,7 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
     } finally {
       setBusy(false);
     }
-  }, [connectorId, onConnected, onClose]);
+  }, [connectorId, onConnected, onClose,cancelOAuth]);
 
   /**
    * Cerrar a mitad. Si ya se creó la integración (p.ej. tras autorizar, cuando
@@ -409,13 +449,13 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
    * tiene que enterarse — si no, autorizas, cierras, y parece que no pasó nada.
    */
   const cerrar = useCallback(() => {
-    oauthPending.current = null;
+    cancelOAuth();
     nextcloudLoginGeneration.current++;
     nextcloudLoginPopup.current?.close();
     nextcloudLoginPopup.current = null;
     if (connectorId) onConnected();
     onClose();
-  }, [connectorId, onConnected, onClose]);
+  }, [connectorId, onConnected, onClose,cancelOAuth]);
 
   const titulo = useMemo(() => {
     if (fase === 'what') return 'Conectar';
@@ -441,8 +481,7 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
         data-provider={eleccion?.provider.slug ?? undefined}
         style={{
           position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          width: 'min(480px, calc(100vw - 24px))',
-          maxHeight: 'min(84vh, calc(100dvh - 24px))',
+          width: 480, maxHeight: '84vh',
           background: 'var(--glass-modal)', backdropFilter: 'blur(20px)',
           border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
           boxShadow: '0 16px 64px rgba(0,0,0,0.5)', zIndex: 201,
@@ -456,6 +495,7 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
           {puedeVolver ? (
             <button
               onClick={() => {
+                cancelOAuth();setBusy(false);setOAuthState('');
                 if (fase === 'mapping') setFase('collections');
                 else if (fase === 'collections') setFase('auth');
                 else if (fase === 'auth') setFase('where');
@@ -481,7 +521,8 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
           </button>
         </div>
 
-        <div style={{ padding: 16, overflow: 'auto', flex: 1, minHeight: 0, overscrollBehavior: 'contain' }}>
+        <div style={{ padding: 16, overflow: 'auto', flex: 1 }}>
+          {busy&&oauthState&&<div role="status" style={{marginBottom:12}}><p>{oauthState}</p><Button variant="ghost" onClick={()=>{cancelOAuth();setBusy(false);setOAuthState('');}}>Cancelar autorización</Button></div>}
           {fase === 'what' && (
             <WhatStep
               counts={counts}
@@ -492,6 +533,7 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
           {fase === 'where' && tipo && (
             <WhereStep
               dataType={tipo}
+              fixedProvider={fixedProvider}
               onPick={(c) => { setEleccion(c); setFase('auth'); }}
             />
           )}
@@ -503,13 +545,14 @@ export function ConnectWizard({ open, onClose, onConnected, fixedDataType }: Con
               ownServer={eleccion.ownServer}
               busy={busy}
               onBack={() => {
+                cancelOAuth();setOAuthState('');
                 nextcloudLoginGeneration.current++;
                 nextcloudLoginPopup.current?.close();
                 nextcloudLoginPopup.current = null;
                 setBusy(false);
                 setFase('where');
               }}
-              onOAuth={(slug, ownClient) => void empezarOAuth(slug, ownClient)}
+              onOAuth={(slug, ownClient,mode) => void empezarOAuth(slug, ownClient,mode)}
               onNextcloudLogin={(serverUrl) => void empezarNextcloud(serverUrl)}
               onReady={(r) => void conectar(r)}
             />

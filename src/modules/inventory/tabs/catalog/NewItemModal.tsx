@@ -26,6 +26,7 @@ import {
 import { btnPrimary, btnSecondary, inputStyle, selectStyle } from '@/modules/inventory/ui';
 import { CategoryCombo } from './CategoryCombo';
 import { Field } from './catalog-ui';
+import { useI18n } from '@/i18n';
 
 // Los campos core vienen de ItemFormFields (types.ts); aquí solo se añaden
 // los extras propios del alta (ubicación, stock, tags como texto, etc.).
@@ -53,6 +54,7 @@ const EMPTY_FORM: NewItemForm = {
 };
 
 export function NewItemModal({ onClose }: { onClose: () => void }) {
+  const { t: tr } = useI18n();
   const { categories, locations, createItem } = useInventoryStore();
   const [form, setForm] = useState<NewItemForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +96,7 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) {
-      toast.error('Name is required');
+      toast.error(tr('inventory.item.nameRequired'));
       return;
     }
     const body: CreateItemPayload = itemFormToCreatePayload(form);
@@ -118,10 +120,10 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     try {
       await createItem(body);
-      toast.success('Item created');
+      toast.success(tr('inventory.item.created'));
       onClose();
     } catch {
-      toast.error('Failed to create item');
+      toast.error(tr('inventory.item.createFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -154,10 +156,10 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>New item</h3>
+          <h3 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{tr('inventory.catalog.newItem')}</h3>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={tr('inventory.close')}
             style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 2, display: 'flex' }}
           >
             <X size={16} />
@@ -165,68 +167,68 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Field label="Name *">
+          <Field label={`${tr('inventory.item.name')} *`}>
             <input style={inputStyle} value={form.name} onChange={e => set('name', e.target.value)} autoFocus required />
           </Field>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Category">
+            <Field label={tr('inventory.category')}>
               <CategoryCombo value={form.category} onChange={setCategory} options={categories} />
             </Field>
-            <Field label="Location">
+            <Field label={tr('inventory.location')}>
               <select style={{ ...selectStyle, width: '100%', padding: '6px 8px' }} value={form.location_id} onChange={e => set('location_id', e.target.value)}>
-                <option value="">No location</option>
+                <option value="">{tr('inventory.reports.noLocation')}</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </Field>
-            <Field label="Brand">
+            <Field label={tr('inventory.item.brand')}>
               <input style={inputStyle} value={form.brand} onChange={e => set('brand', e.target.value)} />
             </Field>
-            <Field label="Model">
+            <Field label={tr('inventory.item.model')}>
               <input style={inputStyle} value={form.model} onChange={e => set('model', e.target.value)} />
             </Field>
           </div>
 
-          <Field label="Serial number">
+          <Field label={tr('inventory.item.serialNumber')}>
             <input style={inputStyle} value={form.serial_number} onChange={e => set('serial_number', e.target.value)} />
           </Field>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Purchase date">
+            <Field label={tr('inventory.item.purchaseDate')}>
               <input style={inputStyle} type="date" value={form.purchase_date} onChange={e => set('purchase_date', e.target.value)} />
             </Field>
-            <Field label="Purchase price">
+            <Field label={tr('inventory.item.purchasePrice')}>
               <input style={inputStyle} type="number" min="0" step="0.01" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} />
             </Field>
-            <Field label="Warranty until">
+            <Field label={tr('inventory.item.warrantyUntil')}>
               <input style={inputStyle} type="date" value={form.warranty_until} onChange={e => set('warranty_until', e.target.value)} />
             </Field>
-            <Field label="Quantity">
+            <Field label={tr('inventory.quantity')}>
               <input style={inputStyle} type="number" min="0" step="any" value={form.quantity} onChange={e => set('quantity', e.target.value)} />
             </Field>
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', color: 'var(--text)', cursor: 'pointer' }}>
             <input type="checkbox" checked={form.track_stock} onChange={e => set('track_stock', e.target.checked)} />
-            Track stock
+            {tr('inventory.item.trackStock')}
           </label>
 
           {form.track_stock && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Min quantity">
+              <Field label={tr('inventory.item.minQuantity')}>
                 <input style={inputStyle} type="number" min="0" step="any" value={form.min_qty} onChange={e => set('min_qty', e.target.value)} />
               </Field>
-              <Field label="Unit of measure">
-                <input style={inputStyle} placeholder="unit, kg, l…" value={form.uom} onChange={e => set('uom', e.target.value)} />
+              <Field label={tr('inventory.item.unitOfMeasure')}>
+                <input style={inputStyle} placeholder={tr('inventory.item.uomPlaceholder')} value={form.uom} onChange={e => set('uom', e.target.value)} />
               </Field>
             </div>
           )}
 
-          <Field label="Tags (comma separated)">
-            <input style={inputStyle} placeholder="electronics, office" value={form.tags} onChange={e => set('tags', e.target.value)} />
+          <Field label={tr('inventory.item.tagsComma')}>
+            <input style={inputStyle} placeholder={tr('inventory.item.tagsPlaceholder')} value={form.tags} onChange={e => set('tags', e.target.value)} />
           </Field>
 
-          <Field label="Description">
+          <Field label={tr('inventory.item.description')}>
             <textarea
               style={{ ...inputStyle, resize: 'vertical' }}
               rows={2}
@@ -235,7 +237,7 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
             />
           </Field>
 
-          <Field label="Category fields">
+          <Field label={tr('inventory.item.categoryFields')}>
             <CategoryFieldsForm
               value={form.customFields}
               onChange={next => set('customFields', next)}
@@ -244,9 +246,9 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
           </Field>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button type="button" style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button type="button" style={btnSecondary} onClick={onClose}>{tr('inventory.cancel')}</button>
             <button type="submit" style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }} disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create item'}
+              {submitting ? tr('inventory.item.creating') : tr('inventory.item.create')}
             </button>
           </div>
         </form>

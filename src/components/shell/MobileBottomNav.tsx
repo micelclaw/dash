@@ -12,17 +12,19 @@ import { Settings, MessageSquare, Search, LayoutGrid, Plus } from 'lucide-react'
 import { MobileMoreSheet } from './MobileMoreSheet';
 import { CaptureSheet } from './CaptureSheet';
 import { settingsRouteForPath } from '@/config/settings-route-map';
+import { useI18n } from '@/i18n';
 
 // Slot 0 = "Ajustes" contextual (sustituye a "Hoy"): abre los ajustes del módulo
 // actual, o los generales si no tiene sección propia (ver settings-route-map).
 const SLOTS = [
-  { id: 'settings', label: 'Ajustes', icon: Settings, path: '__settings' },
-  { id: 'chat', label: 'Chat', icon: MessageSquare, path: '/chat' },
-  { id: 'search', label: 'Buscar', icon: Search, path: '/search' },
-  { id: 'more', label: 'Más', icon: LayoutGrid, path: '__more' },
+  { id: 'settings', icon: Settings, path: '__settings' },
+  { id: 'chat', icon: MessageSquare, path: '/chat' },
+  { id: 'search', icon: Search, path: '/search' },
+  { id: 'more', icon: LayoutGrid, path: '__more' },
 ] as const;
 
 export function MobileBottomNav() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -40,7 +42,7 @@ export function MobileBottomNav() {
     navigate(path);
   };
 
-  const Slot = ({ id, label, icon: Icon, path }: (typeof SLOTS)[number]) => {
+  const Slot = ({ id, icon: Icon, path }: (typeof SLOTS)[number]) => {
     const active = isActive(path);
     return (
       <button
@@ -52,7 +54,7 @@ export function MobileBottomNav() {
           color: active ? 'var(--amber)' : 'var(--text-muted)', minWidth: 0,
         }}>
         <Icon size={20} />
-        <span style={{ fontSize: '0.62rem', fontWeight: active ? 600 : 400 }}>{label}</span>
+        <span style={{ fontSize: '0.62rem', fontWeight: active ? 600 : 400 }}>{t(`shell.nav.${id}`)}</span>
       </button>
     );
   };
@@ -73,7 +75,7 @@ export function MobileBottomNav() {
           <button
             onClick={() => setCaptureOpen(true)}
             data-testid="nav-capture"
-            aria-label="Capturar"
+            aria-label={t('shell.nav.capture')}
             style={{
               width: 52, height: 52, marginTop: -18, borderRadius: '50%', border: '3px solid var(--bg)',
               background: 'var(--amber)', color: '#1a1a1a', display: 'flex', alignItems: 'center',

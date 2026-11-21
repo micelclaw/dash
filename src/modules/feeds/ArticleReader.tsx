@@ -16,8 +16,10 @@ import { ExternalLink, Star, FileText, Sparkles, Eye, EyeOff, Loader2, Share2 } 
 import { useFeedsStore } from '@/stores/feeds.store';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import DOMPurify from 'dompurify';
+import { useI18n } from '@/i18n';
 
 export function ArticleReader() {
+  const { t } = useI18n();
   const articles = useFeedsStore(s => s.articles);
   const activeArticleId = useFeedsStore(s => s.activeArticleId);
   const toggleRead = useFeedsStore(s => s.toggleRead);
@@ -35,7 +37,7 @@ export function ArticleReader() {
   if (!article) {
     return (
       <div className="flex items-center justify-center h-full text-[var(--text-muted)] text-sm">
-        Select an article to read
+        {t('feeds.selectArticle')}
       </div>
     );
   }
@@ -53,7 +55,7 @@ export function ArticleReader() {
     try {
       await summarizeArticle(article.id);
     } catch (err: any) {
-      setSummarizeError(err?.message || 'Failed to generate summary');
+      setSummarizeError(err?.message || t('feeds.summaryError'));
     } finally {
       setSummarizing(false);
     }
@@ -85,12 +87,12 @@ export function ArticleReader() {
         <div className="flex items-center gap-1 flex-wrap">
           <ActionButton
             icon={article.is_read ? <EyeOff size={14} /> : <Eye size={14} />}
-            label={article.is_read ? 'Mark unread' : 'Mark read'}
+            label={article.is_read ? t('feeds.markUnread') : t('feeds.markRead')}
             onClick={() => toggleRead(article.id, !article.is_read)}
           />
           <ActionButton
             icon={<Star size={14} className={article.is_favorite ? 'fill-[var(--amber)] text-[var(--amber)]' : ''} />}
-            label={article.is_favorite ? 'Unfavorite' : 'Favorite'}
+            label={article.is_favorite ? t('feeds.unfavorite') : t('feeds.favorite')}
             onClick={() => toggleFavorite(article.id)}
           />
           <a
@@ -99,17 +101,17 @@ export function ArticleReader() {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--surface-hover)] rounded"
           >
-            <ExternalLink size={14} /> Original
+            <ExternalLink size={14} /> {t('feeds.original')}
           </a>
           <ActionButton
             icon={<Share2 size={14} />}
-            label="Compartir"
+            label={t('feeds.share')}
             onClick={() => setShareOpen(true)}
           />
           {!article.full_text_fetched && !isYoutube && (
             <ActionButton
               icon={fetchingFull ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-              label="Fetch full text"
+              label={t('feeds.fetchFullText')}
               onClick={handleFetchFull}
               disabled={fetchingFull}
             />
@@ -117,14 +119,14 @@ export function ArticleReader() {
           {!article.ai_summary ? (
             <ActionButton
               icon={summarizing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              label={summarizing ? 'Summarizing...' : 'Summarize'}
+              label={summarizing ? t('feeds.summarizing') : t('feeds.summarize')}
               onClick={handleSummarize}
               disabled={summarizing}
             />
           ) : !summarizing ? (
             <ActionButton
               icon={<Sparkles size={14} />}
-              label="Re-summarize"
+              label={t('feeds.resummarize')}
               onClick={handleSummarize}
               disabled={summarizing}
             />
@@ -135,7 +137,7 @@ export function ArticleReader() {
       {/* AI Summary / Error */}
       {summarizeError && (
         <div className="mx-4 mt-3 p-3 rounded border border-red-500/30 bg-red-500/10">
-          <p className="text-xs font-medium text-red-400 mb-1">AI Summary Error</p>
+          <p className="text-xs font-medium text-red-400 mb-1">{t('feeds.summaryError')}</p>
           <p className="text-sm text-red-300">{summarizeError}</p>
         </div>
       )}
@@ -143,7 +145,7 @@ export function ArticleReader() {
         <div className="mx-4 mt-3 p-3 rounded border border-[var(--amber-dim)] bg-[var(--amber-dim)]">
           <p className="text-xs font-medium text-[var(--amber)] mb-1 flex items-center gap-1">
             {summarizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-            {summarizing ? 'Generating summary...' : 'AI Summary'}
+            {summarizing ? t('feeds.generatingSummary') : t('feeds.aiSummary')}
           </p>
           <p className="text-sm text-[var(--text)] whitespace-pre-wrap">
             {article.ai_summary || ''}
@@ -158,7 +160,7 @@ export function ArticleReader() {
         {isYoutube && youtubeId && (
           <div className="mb-4">
             <iframe
-              title={article.title || 'Video'}
+              title={article.title || t('feeds.video')}
               src={`https://www.youtube-nocookie.com/embed/${youtubeId}`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -197,12 +199,12 @@ export function ArticleReader() {
                 disabled={fetchingFull}
                 className="block mt-4 text-[var(--amber)] hover:underline text-xs disabled:opacity-50"
               >
-                {fetchingFull ? 'Fetching...' : 'Fetch full article'}
+                {fetchingFull ? t('feeds.fetching') : t('feeds.fetchFullArticle')}
               </button>
             )}
           </div>
         ) : (
-          <p className="text-sm text-[var(--text-muted)]">No content available</p>
+          <p className="text-sm text-[var(--text-muted)]">{t('feeds.noContent')}</p>
         )}
       </div>
 

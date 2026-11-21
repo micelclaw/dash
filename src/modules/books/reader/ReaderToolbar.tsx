@@ -17,6 +17,7 @@
  */
 
 import { ArrowLeft, List, Settings } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export interface ReaderToolbarProps {
   title: string;
@@ -36,6 +37,7 @@ export function ReaderToolbar({
   onOpenToc,
   onOpenSettings,
 }: ReaderToolbarProps) {
+  const { t } = useI18n();
   return (
     <div
       className={`absolute inset-x-0 top-0 z-20 flex h-12 items-center gap-1 bg-black/60 px-2 text-white backdrop-blur-sm transition-all duration-200 ${
@@ -44,8 +46,8 @@ export function ReaderToolbar({
     >
       <button
         onClick={onClose}
-        title="Close reader (Esc)"
-        aria-label="Close reader"
+        title={t('books.closeReader')}
+        aria-label={t('books.closeReaderLabel')}
         className="rounded-md p-2 hover:bg-white/15"
       >
         <ArrowLeft size={18} />
@@ -56,16 +58,16 @@ export function ReaderToolbar({
       </div>
       <button
         onClick={onOpenToc}
-        title="Table of contents"
-        aria-label="Table of contents"
+        title={t('books.tableOfContents')}
+        aria-label={t('books.tableOfContents')}
         className="rounded-md p-2 hover:bg-white/15"
       >
         <List size={18} />
       </button>
       <button
         onClick={onOpenSettings}
-        title="Reader settings"
-        aria-label="Reader settings"
+        title={t('books.readerSettings')}
+        aria-label={t('books.readerSettings')}
         className="rounded-md p-2 hover:bg-white/15"
       >
         <Settings size={18} />

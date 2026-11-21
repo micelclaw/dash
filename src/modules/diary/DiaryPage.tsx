@@ -20,8 +20,10 @@ import { DiaryEditor } from './DiaryEditor';
 import { useDiary } from './hooks/use-diary';
 import { BookOpen } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useI18n } from '@/i18n';
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -110,9 +112,9 @@ export function Component() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
           <EmptyState
             icon={BookOpen}
-            title="Select an entry"
-            description="Choose a diary entry from the timeline or start writing today's entry."
-            actions={[{ label: "+ Write today's entry", onClick: handleCreateToday, variant: 'primary' }]}
+            title={t('diary.selectEntry')}
+            description={t('diary.emptyDescription')}
+            actions={[{ label: `+ ${t('diary.writeToday')}`, onClick: handleCreateToday, variant: 'primary' }]}
           />
         </div>
       )}

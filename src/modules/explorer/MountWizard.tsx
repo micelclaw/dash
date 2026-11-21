@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, HardDrive, Cloud, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 interface MountServiceDef {
   id: string;
@@ -41,6 +42,7 @@ interface MountWizardProps {
 }
 
 export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
+  const { t } = useI18n();
   const [step, setStep] = useState<WizardStep>('pick');
   const [selectedService, setSelectedService] = useState<MountServiceDef | null>(null);
   const [mountName, setMountName] = useState('');
@@ -78,9 +80,9 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
           setMountName(selectedService?.name ?? 'Cloud Drive');
           setMountPath(`/${selectedService?.provider_type ?? 'cloud'}/`);
           setStep('configure');
-          toast.success('Authorization successful');
+          toast.success(t('explorer.mount.authSuccess'));
         } catch {
-          toast.error('OAuth authorization failed');
+          toast.error(t('explorer.mount.authFailed'));
           setStep('pick');
         }
       }
@@ -88,7 +90,7 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [step, selectedService]);
+  }, [step, selectedService, t]);
 
   const handleServiceClick = useCallback(async (service: MountServiceDef) => {
     if (service.flow === 'coming_soon') return;
@@ -120,14 +122,14 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
       );
 
       if (!popup) {
-        toast.error('Popup blocked. Please allow popups.');
+        toast.error(t('explorer.mount.popupBlocked'));
         setStep('pick');
       }
     } catch {
-      toast.error('Failed to start authorization');
+      toast.error(t('explorer.mount.startFailed'));
       setStep('pick');
     }
-  }, []);
+  }, [t]);
 
   const handleCreateMount = useCallback(async () => {
     if (!mountName.trim() || !mountPath.trim() || !selectedService) return;
@@ -141,19 +143,19 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
         config: connectorId ? { connectorId } : {},
         read_only: readOnly,
       });
-      toast.success(`"${mountName}" mounted`);
+      toast.success(t('explorer.mount.mounted', { name: mountName }));
       onCreated();
       onClose();
     } catch (err: any) {
       if (err?.response?.data?.error?.code === 'CONFLICT') {
-        toast.error('A mount with this name already exists');
+        toast.error(t('explorer.mount.conflict'));
       } else {
-        toast.error(err?.message || 'Failed to create mount');
+        toast.error(err?.message || t('explorer.mount.createFailed'));
       }
     } finally {
       setCreating(false);
     }
-  }, [mountName, mountPath, selectedService, connectorId, readOnly, onCreated, onClose]);
+  }, [mountName, mountPath, selectedService, connectorId, readOnly, onCreated, onClose, t]);
 
   if (!open) return null;
 
@@ -177,10 +179,12 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
           borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ flex: 1, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            {step === 'pick' ? 'Add Storage Source' : step === 'oauth-pending' ? 'Authorizing...' : 'Configure Mount'}
+            {step === 'pick' ? t('explorer.mount.addTitle') : step === 'oauth-pending' ? t('explorer.mount.authorizing') : t('explorer.mount.configure')}
           </span>
           <button
             onClick={onClose}
+            title={t('shared.action.close')}
+            aria-label={t('shared.action.close')}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, display: 'flex' }}
           >
             <X size={16} />
@@ -231,7 +235,7 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
                         background: 'var(--bg)', borderRadius: 'var(--radius-sm)',
                         color: 'var(--text-muted)', border: '1px solid var(--border)',
                       }}>
-                        Soon
+                        {t('explorer.mount.soon')}
                       </span>
                     )}
                   </button>
@@ -242,13 +246,13 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
 
           {/* Step: OAuth pending */}
           {step === 'oauth-pending' && (
-            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div role="status" style={{ textAlign: 'center', padding: '32px 0' }}>
               <Loader2 size={32} style={{ color: 'var(--amber)', animation: 'spin 1s linear infinite', marginBottom: 12 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>
-                Complete authorization in the popup window
+                {t('explorer.mount.popupInstructions')}
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                If the popup was blocked, please allow popups for this site.
+                {t('explorer.mount.popupHelp')}
               </div>
               <button
                 onClick={() => setStep('pick')}
@@ -259,7 +263,7 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
                   color: 'var(--text-dim)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
                 }}
               >
-                Cancel
+                {t('explorer.local.cancel')}
               </button>
             </div>
           )}
@@ -268,24 +272,26 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
           {step === 'configure' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={labelStyle}>Mount name</label>
+                <label style={labelStyle}>{t('explorer.mount.name')}</label>
                 <input
                   value={mountName}
+                  aria-label={t('explorer.mount.name')}
                   onChange={e => setMountName(e.target.value)}
                   style={inputStyle}
-                  placeholder="My Cloud Drive"
+                  placeholder={t('explorer.mount.namePlaceholder')}
                 />
               </div>
               <div>
-                <label style={labelStyle}>Mount path</label>
+                <label style={labelStyle}>{t('explorer.mount.path')}</label>
                 <input
                   value={mountPath}
+                  aria-label={t('explorer.mount.path')}
                   onChange={e => setMountPath(e.target.value)}
                   style={inputStyle}
                   placeholder="/gdrive/"
                 />
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  VFS path where this source will be mounted
+                  {t('explorer.mount.pathHelp')}
                 </div>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -295,7 +301,7 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
                   onChange={e => setReadOnly(e.target.checked)}
                   style={{ accentColor: 'var(--amber)' }}
                 />
-                <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Read-only</span>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('explorer.mount.readOnly')}</span>
               </label>
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
@@ -307,7 +313,7 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
                     cursor: 'pointer', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
                   }}
                 >
-                  Cancel
+                  {t('explorer.local.cancel')}
                 </button>
                 <button
                   onClick={handleCreateMount}
@@ -319,7 +325,7 @@ export function MountWizard({ open, onClose, onCreated }: MountWizardProps) {
                     fontWeight: 600, opacity: creating ? 0.6 : 1,
                   }}
                 >
-                  {creating ? 'Creating...' : 'Create Mount'}
+                  {creating ? t('explorer.mount.createBusy') : t('explorer.mount.create')}
                 </button>
               </div>
             </div>

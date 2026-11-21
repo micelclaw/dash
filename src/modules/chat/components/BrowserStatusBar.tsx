@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useI18n } from '@/i18n';
+
 interface BrowserStatusBarProps {
   url: string | null;
   humanizedAction: string | null;
@@ -17,7 +19,9 @@ interface BrowserStatusBarProps {
 }
 
 export function BrowserStatusBar({ url, humanizedAction, isActive }: BrowserStatusBarProps) {
-  const displayUrl = url ? truncateUrl(url, 50) : 'Starting browser...';
+  const { t } = useI18n();
+  const startingLabel = t('chat.browserStatus.starting');
+  const displayUrl = url ? truncateUrl(url, 50) : startingLabel;
 
   return (
     <div style={{
@@ -45,7 +49,7 @@ export function BrowserStatusBar({ url, humanizedAction, isActive }: BrowserStat
       )}
 
       {/* URL */}
-      <span style={{ color: 'rgba(255,255,255,0.6)', flexShrink: 0 }}>
+      <span aria-label={url ? undefined : startingLabel} style={{ color: 'rgba(255,255,255,0.6)', flexShrink: 0 }}>
         {displayUrl}
       </span>
 

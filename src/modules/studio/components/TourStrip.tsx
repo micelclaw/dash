@@ -19,6 +19,7 @@
 
 import { useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface Props {
   /** localStorage key that marks the tour as seen ('1'). */
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function TourStrip({ storageKey, steps }: Props) {
+  const { t } = useI18n();
   const [seen, setSeen] = useState(() => {
     try { return localStorage.getItem(storageKey) === '1'; } catch { return true; }
   });
@@ -48,11 +50,11 @@ export function TourStrip({ storageKey, steps }: Props) {
       </span>
       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{step + 1}/{steps.length}</span>
       {step < steps.length - 1 ? (
-        <button onClick={() => setStep((s) => s + 1)} style={nextBtn}>Next</button>
+        <button onClick={() => setStep((s) => s + 1)} style={nextBtn}>{t('studio.next')}</button>
       ) : (
-        <button onClick={dismiss} style={nextBtn}>Got it!</button>
+        <button onClick={dismiss} style={nextBtn}>{t('studio.gotIt')}</button>
       )}
-      <button onClick={dismiss} style={skipBtn} aria-label="Skip">
+      <button onClick={dismiss} style={skipBtn} aria-label={t('studio.skip')}>
         <X size={13} />
       </button>
     </div>

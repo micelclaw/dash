@@ -18,7 +18,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { PlugZap } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, ZFS_COPY } from '../ZfsHelp';
+import { useI18n } from '@/i18n';
+import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, WarnBox } from './ZfsModal';
 
 export function DiskMaintenanceModal({
@@ -29,44 +30,44 @@ export function DiskMaintenanceModal({
   const demo = useStorageStore((s) => s.zfs_demo);
   const diskAction = useStorageStore((s) => s.zfsDiskAction);
   const [busy, setBusy] = useState(false);
+  const { t } = useI18n();
 
   const META = {
-    offline: { title: 'Desconectar disco', verb: 'desconectar', copy: ZFS_COPY.offline, danger: !hasRedundancy, btn: 'Desconectar', icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
-    online: { title: 'Reconectar disco', verb: 'reconectar', copy: ZFS_COPY.online, danger: false, btn: 'Reconectar', icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
-    detach: { title: 'Separar disco', verb: 'separar', copy: ZFS_COPY.detach, danger: !hasRedundancy, btn: 'Separar', icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
+    offline: { title: t('storage.diskMaintenance.offlineTitle'), verb: t('storage.diskMaintenance.offlineVerb'), copy: t('storage.diskMaintenance.copyOffline'), danger: !hasRedundancy, btn: t('storage.diskMaintenance.offline'), icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
+    online: { title: t('storage.diskMaintenance.onlineTitle'), verb: t('storage.diskMaintenance.onlineVerb'), copy: t('storage.diskMaintenance.copyOnline'), danger: false, btn: t('storage.diskMaintenance.online'), icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
+    detach: { title: t('storage.diskMaintenance.detachTitle'), verb: t('storage.diskMaintenance.detachVerb'), copy: t('storage.diskMaintenance.copyDetach'), danger: !hasRedundancy, btn: t('storage.diskMaintenance.detach'), icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
   }[action];
 
   const submit = async () => {
     setBusy(true);
     try {
       await diskAction(pool, diskName, action);
-      toast.success(`Disco ${action === 'offline' ? 'desconectado' : action === 'online' ? 'reconectado' : 'separado'}${demo ? ' (demo)' : ''}`);
+      toast.success(t(`storage.diskMaintenance.success${action === 'offline' ? 'Offline' : action === 'online' ? 'Online' : 'Detach'}`, { demo: demo ? t('storage.common.demoSuffix') : '' }));
       onClose();
     } catch (e) {
-      toast.error(`No se pudo ${META.verb} el disco: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(t('storage.diskMaintenance.error', { verb: META.verb, error: e instanceof Error ? e.message : String(e) }));
     } finally { setBusy(false); }
   };
 
   return (
     <ZfsModal title={META.title} icon={META.icon} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton primary={!META.danger} danger={META.danger} disabled={busy} onClick={submit}>{busy ? 'Aplicando…' : META.btn}</ZfsButton></>}>
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton primary={!META.danger} danger={META.danger} disabled={busy} onClick={submit}>{busy ? t('storage.diskMaintenance.busy') : META.btn}</ZfsButton></>}>
       <SectionIntro>{META.copy}</SectionIntro>
       <div style={{ fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.6 }}>
-        <div>Almacén: <strong>{pool}</strong></div>
-        <div style={{ wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>Disco: <strong>{diskName}</strong></div>
-        <div>Acción: <strong>{META.verb}</strong>.</div>
+        <div>{t('storage.diskMaintenance.pool')} <strong>{pool}</strong></div>
+        <div style={{ wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>{t('storage.diskMaintenance.disk')} <strong>{diskName}</strong></div>
+        <div>{t('storage.diskMaintenance.action')} <strong>{META.verb}</strong>.</div>
       </div>
       {META.danger ? (
         <WarnBox>
-          Atención: este disco <strong>no tiene redundancia suficiente</strong> ahora mismo. Si lo {META.verb}s, el almacén
-          puede quedar sin protección o con sus datos en riesgo. Asegúrate de tener una copia antes de continuar.
-          {!demo && ' Esta operación requiere token + aprobación en el servidor.'}
+          {t('storage.diskMaintenance.noRedundancy')}
+          {!demo && t('storage.common.serverApproval')}
         </WarnBox>
       ) : (
         action !== 'online' && (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            El almacén tiene redundancia suficiente: seguirá funcionando con normalidad mientras este disco está fuera.
-            {!demo && ' Esta operación requiere token + aprobación en el servidor.'}
+            {t('storage.diskMaintenance.redundancy')}
+            {!demo && t('storage.common.serverApproval')}
           </div>
         )
       )}

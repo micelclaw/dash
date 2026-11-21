@@ -32,7 +32,7 @@ export const useUiModulesStore = create<UiModulesState>((set) => ({
       set({ modules, loaded: true });
     } catch {
       // fail-soft: si falla, no añadimos módulos dinámicos (los estáticos siguen).
-      set({ loaded: true });
+      set({ modules: [], loaded: true });
     }
   },
 }));

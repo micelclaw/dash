@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import * as syncSvc from '@/services/sync.service';
 import * as messagingCli from '@/services/messaging-cli.service';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 // ─── Signal REST API Form ───────────────────────────────
 // Flow: Deploy signal-cli → Enter phone → Link via QR code → Connect
@@ -25,6 +26,9 @@ import { Field, FormActions } from './shared';
 type SignalStep = 'deploy' | 'phone' | 'linking' | 'ready';
 
 export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [step, setStep] = useState<SignalStep>('deploy');
   const [apiUrl, setApiUrl] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -68,15 +72,15 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
       if (status.running && status.url) {
         setApiUrl(status.url);
         setDeployStatus('ready');
-        toast.success('Signal CLI REST API is running');
+        toast.success(t('settings.signal.apiRunning'));
         setStep('phone');
       } else {
         setDeployStatus('error');
-        toast.error('Signal CLI started but API not healthy');
+        toast.error(t('settings.signal.apiUnhealthy'));
       }
     } catch (err: any) {
       setDeployStatus('error');
-      toast.error(err?.message || 'Failed to deploy Signal CLI');
+      toast.error(err?.message || tRef.current('settings.signal.deployFailed'));
     } finally {
       setDeploying(false);
     }
@@ -98,15 +102,15 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
           if (check.linked) {
             if (linkPollRef.current) clearInterval(linkPollRef.current);
             setStep('ready');
-            toast.success('Signal account linked!');
+            toast.success(t('settings.signal.accountLinked'));
           }
         } catch {
           // polling error — ignore
         }
       }, 5000);
     } catch (err: any) {
-      setLinkError(err?.message || 'Failed to generate QR code');
-      toast.error('Failed to start linking');
+      setLinkError(err?.message || tRef.current('settings.signal.startLinkFailed'));
+      toast.error(tRef.current('settings.signal.startLinkFailed'));
     } finally {
       setLinkLoading(false);
     }
@@ -122,7 +126,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
       });
       onComplete();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to connect Signal');
+      toast.error(err?.message || tRef.current('settings.signal.connectFailed'));
     } finally {
       setSaving(false);
     }
@@ -153,7 +157,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
               borderRadius: 'var(--radius-md)',
             }}>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 8 }}>
-                Signal requires a <strong>signal-cli REST API</strong> service. Deploy it automatically:
+                {t('settings.signal.requirement')}
               </div>
               <button
                 type="button"
@@ -172,21 +176,21 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
                 }}
               >
                 {deploying ? (
-                  <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Deploying Signal CLI...</>
+                  <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('settings.signal.deploying')}</>
                 ) : deployStatus === 'error' ? (
-                  <><Container size={14} /> Retry deploy</>
+                  <><Container size={14} /> {t('settings.signal.retryDeploy')}</>
                 ) : (
-                  <><Container size={14} /> Deploy Signal CLI REST API</>
+                  <><Container size={14} /> {t('settings.signal.deployApi')}</>
                 )}
               </button>
               {deploying && (
                 <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 6 }}>
-                  Pulling image and starting container... this may take a minute.
+                  {t('settings.signal.startingContainer')}
                 </div>
               )}
               {deployStatus === 'error' && (
                 <div style={{ fontSize: '0.6875rem', color: 'var(--error)', marginTop: 6 }}>
-                  Deployment failed. You can retry or enter a custom URL below.
+                  {t('settings.signal.deployError')}
                 </div>
               )}
             </div>
@@ -195,7 +199,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
           {/* Manual URL input */}
           {!deploying && (
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', margin: '4px 0' }}>
-              or enter a custom REST API URL:
+              {t('settings.signal.customUrl')}
             </div>
           )}
           {!deploying && (
@@ -204,6 +208,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
                 type="url"
                 value={apiUrl}
                 onChange={e => setApiUrl(e.target.value)}
+                aria-label={t('settings.signal.customUrl')}
                 placeholder="http://localhost:8282"
               />
               <Button
@@ -212,7 +217,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
                 onClick={() => { if (apiUrl) { setDeployStatus('ready'); setStep('phone'); } }}
                 disabled={!apiUrl}
               >
-                Use this URL
+                {t('settings.signal.useUrl')}
               </Button>
             </>
           )}
@@ -231,14 +236,14 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
             fontSize: '0.8125rem', color: '#22c55e',
           }}>
             <Check size={14} />
-            Signal CLI REST API running at {apiUrl}
+            {t('settings.signal.apiRunning')}: {apiUrl}
           </div>
 
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            Enter your phone number to link this device to your Signal account.
+            {t('settings.signal.enterPhone')}
           </div>
 
-          <Field label="Your Signal Phone Number" hint="The phone number linked to your Signal mobile app.">
+          <Field label={t('settings.signal.phoneLabel')} hint={t('settings.signal.phoneHint')}>
             <Input
               type="tel"
               value={phoneNumber}
@@ -249,7 +254,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
 
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <Button type="button" variant="outline" onClick={() => setStep('deploy')} className="flex-1 text-[var(--text-dim)]">
-              Back
+              {t('settings.signal.back')}
             </Button>
             <button
               type="button"
@@ -266,9 +271,9 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
               }}
             >
               {linkLoading ? (
-                <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Generating QR...</>
+                <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('settings.signal.generatingQr')}</>
               ) : (
-                'Link Signal Account'
+                t('settings.signal.linkAccount')
               )}
             </button>
           </div>
@@ -286,7 +291,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
             textAlign: 'center', padding: '8px 0',
             fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.6,
           }}>
-            Scan this QR code with your Signal app:
+            {t('settings.signal.scanQr')}
             <br />
             <strong style={{ color: 'var(--text)' }}>Signal → Settings → Linked Devices → +</strong>
           </div>
@@ -301,7 +306,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
               }}>
                 <img
                   src={qrImage}
-                  alt="Signal QR Code"
+                  alt={t('settings.signal.qrAlt')}
                   style={{ width: 200, height: 200, imageRendering: 'pixelated' }}
                 />
               </div>
@@ -313,7 +318,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
             padding: '8px 0', fontSize: '0.8125rem', color: 'var(--text-muted)',
           }}>
             <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-            Waiting for you to scan...
+            {t('settings.signal.waitingScan')}
           </div>
 
           <Button
@@ -327,7 +332,7 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
               setStep('phone');
             }}
           >
-            Cancel
+            {t('settings.signal.cancel')}
           </Button>
         </>
       )}
@@ -344,11 +349,11 @@ export function SignalForm({ onComplete, onCancel }: { onComplete: () => void; o
             fontSize: '0.8125rem', color: '#22c55e',
           }}>
             <Check size={14} />
-            Signal account linked ({phoneNumber})
+            {t('settings.signal.linkedPhone', { phone: phoneNumber })}
           </div>
 
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            Your Signal account is linked and ready. Click Connect to start observing messages.
+            {t('settings.signal.ready')}
           </div>
 
           <FormActions onBack={onCancel} saving={saving} onConfirm={handleConnect} />

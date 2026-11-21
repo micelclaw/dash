@@ -23,6 +23,7 @@ import { api } from './api';
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface ConnectorInfo {
+  collection_selection_pending?:boolean;
   /** Causa del último fallo, con su pista. Vacío si no ha fallado. */
   last_error?: string | null;
   /**
@@ -109,10 +110,12 @@ export interface DataProvider {
   } | null;
   /** ¿Se conecta con la aplicación que trae Micelclaw, o con una registrada aquí? */
   uses_shipped_oauth_client?: boolean;
+  oauth_product_publication?: 'testing' | 'production' | null;
   /** Esta instalación necesita que la persona pegue su Client ID y Secret. */
   requires_own_oauth_client?: boolean;
   /** Dirección exacta que debe registrarse en la aplicación OAuth. */
   oauth_redirect_uri?: string | null;
+  own_oauth_redirect_uri?: string | null;
   preset_hint: string | null;
   connection_fields?: Array<{ name: string; secret: boolean }>;
 }
@@ -468,12 +471,13 @@ export async function testConnection(body: Record<string, unknown>): Promise<Tes
 export async function getOAuthAuthorizeUrl(
   provider: string,
   scopes: string,
-  ownClient?: { client_id: string; client_secret: string },
+  ownClient?: { client_id: string; client_secret?: string; client_type?:'public'|'confidential' },
   connectorType?: string,
 ): Promise<{ authorize_url: string; state: string }> {
   const res = await api.post<{ data: { authorize_url: string; state: string } }>(
     `/sync/oauth/authorize/${provider}`,
     {
+      return_origin:window.location.origin,
       scopes: scopes.split(',').map((scope) => scope.trim()).filter(Boolean),
       ...(ownClient ?? {}),
       ...(connectorType ? { connector_type: connectorType } : {}),
@@ -649,4 +653,21 @@ export async function commitWhatsAppImport(
     formData,
   );
   return res.data;
+}
+
+export interface DirectOAuthOperation {id:string;user_id:string;installation_id:string;provider:string;connector_type:string;scopes:string[];target_origin:string;expires_at:number;status:'waiting_companion'|'waiting_authorization'|'exchanging'|'connected'|'cancelled'|'error'|'expired';error_code?:string;result?:{id:string;provider:string;status:string;scopes:string[];connectors?:Array<{id:string;connector_type:string;status:string}>};}
+export async function directOAuthCapabilities(signal?:AbortSignal):Promise<{providers:Array<{provider:string;local:boolean;companion:boolean}>}>{return (await api.get<{data:{providers:Array<{provider:string;local:boolean;companion:boolean}>}}>('/sync/oauth/direct/capabilities',undefined,{signal})).data;}
+export async function startDirectOAuth(provider:string,connectorType:string,scopes:string[],mode:'local'|'companion',signal?:AbortSignal,ownClient?:{client_id:string;client_secret?:string;client_type?:'public'|'confidential'}):Promise<{operation:DirectOAuthOperation;authorize_url?:string;state?:string}>{return (await api.post<{data:{operation:DirectOAuthOperation;authorize_url?:string;state?:string}}>(`/sync/oauth/direct/${encodeURIComponent(provider)}`,{connector_type:connectorType,scopes,mode,target_origin:window.location.origin,...ownClient},{signal})).data;}
+export async function pollDirectOAuth(id:string,signal:AbortSignal,onState?:(operation:DirectOAuthOperation)=>void):Promise<{id:string;provider:string;status:string;scopes:string[];connectors?:Array<{id:string;connector_type:string;status:string}>}>{
+ while(!signal.aborted){const op=(await api.get<{data:DirectOAuthOperation}>(`/sync/oauth/direct/status/${encodeURIComponent(id)}`,undefined,{signal})).data;onState?.(op);
+ if(op.status==='connected'){if(!op.result?.id||op.result.status!=='connected')throw Error('El servidor no confirmó la conexión guardada');return op.result;}
+ if(['error','expired','cancelled'].includes(op.status))throw Error(op.status==='cancelled'?'Autorización cancelada':op.status==='expired'?'La autorización caducó. Reintenta.':'No se pudo guardar la conexión ('+(op.error_code??'OAUTH_ERROR')+'). Reintenta.');
+ await new Promise<void>((ok,reject)=>{const abort=()=>{clearTimeout(timer);signal.removeEventListener('abort',abort);reject(new DOMException('Cancelado','AbortError'));};const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);ok();},750);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();});}
+ throw new DOMException('Cancelado','AbortError');
+}
+export async function cancelDirectOAuth(id:string):Promise<DirectOAuthOperation>{return (await api.delete<{data:DirectOAuthOperation}>(`/sync/oauth/direct/${encodeURIComponent(id)}`)).data;}
+
+export async function startGroupedOAuth(provider:string,connectorTypes:string[],scopes:string[],signal:AbortSignal,mode:'local'|'companion'='local'){
+ const first=connectorTypes[0];if(!first)throw new Error('Selecciona al menos un servicio');
+ return (await api.post<{data:{operation:DirectOAuthOperation;authorize_url?:string;state?:string}}>(`/sync/oauth/direct/${encodeURIComponent(provider)}`,{connector_type:first,connector_types:connectorTypes,scopes:[...new Set(scopes)],mode,target_origin:window.location.origin},{signal})).data;
 }

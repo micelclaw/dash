@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Adapter } from './adapters/types';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 interface Props<Row> {
   adapter: Adapter<Row>;
@@ -24,7 +25,8 @@ interface Props<Row> {
   emptyMessage?: string;
 }
 
-export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin entradas para los filtros actuales.' }: Props<Row>) {
+export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage }: Props<Row>) {
+  const { t } = useI18n();
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
   const isMobile = useIsMobile();
   const getKey = adapter.getRowKey ?? ((row: Row) => String(rows.indexOf(row)));
@@ -49,13 +51,13 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
             {loading && rows.length === 0 ? (
               <tr>
                 <td colSpan={adapter.columns.length} className="px-3 py-8 text-center text-[var(--text-muted)]">
-                  Cargando…
+                  {t('activity.loading')}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={adapter.columns.length} className="px-3 py-8 text-center text-[var(--text-muted)]">
-                  {emptyMessage}
+                  {emptyMessage ?? t('activity.noEntries')}
                 </td>
               </tr>
             ) : (
@@ -95,11 +97,12 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
           }
         >
           <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
-            <span className="text-sm font-medium">Detalle</span>
+            <span className="text-sm font-medium">{t('activity.detail')}</span>
             <button
               onClick={() => setSelectedRow(null)}
               className="p-1 rounded hover:bg-[var(--surface-hover)]"
-              aria-label="Cerrar detalle"
+              aria-label={t('activity.closeDetail')}
+              title={t('activity.closeDetail')}
             >
               <X size={14} />
             </button>

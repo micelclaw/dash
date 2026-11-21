@@ -1,3 +1,9 @@
+import '@/lib/chat-workspace-session';
+import { useAuthStore } from '@/stores/auth.store';
+import { ChatRecoveryCard, getChatRecoveryCause, isChatRecoveryCause } from '@/components/chat/ChatRecoveryCard';
+import { sanitizeChatDiagnostic } from '@/services/chat-recovery.service';
+import { useChatWorkspaceStore, workspaceFileId } from '@/stores/chat-workspace.store';
+import { useNativeCanvasBoardStore } from '@/stores/native-canvas-board.store';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -29,6 +35,9 @@ import { EntityRefChips } from '@/components/chat/tool-renderers/EntityRefChips'
 import { findSlashCommand, CATEGORY_COLORS } from '@/config/slash-commands';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 import { MermaidBlock } from '@/components/markdown/MermaidBlock';
+import { ExternalVideoCard, parseExternalVideo } from '@/components/chat/ExternalVideoCard';
+import { SecureConfigurationForm } from '@/components/chat/SecureConfigurationForm';
+import { configurationOperationHandles } from '@/components/chat/configuration-operation-handles';
 
 interface WorkspaceLinkResolution {
   agent_id: string;
@@ -121,6 +130,8 @@ function AssistantMarkdown({ content, onLinkClick }: { content: string; onLinkCl
       components={{
         a: ({ href, children }) => {
           if (!href) return <>{children}</>;
+          const video = parseExternalVideo(href);
+          if (video) return <ExternalVideoCard key={video.embedUrl} video={video}>{children}</ExternalVideoCard>;
           const isInternal = href.startsWith('/');
           if (isInternal) {
             return (
@@ -231,7 +242,6 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   const agents = useChatStore((s) => s.agents);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const setWorkspaceFile = useCanvasStore((s) => s.setWorkspaceFile);
-  const setCanvasError = useCanvasStore((s) => s.setCanvasError);
   const setActiveMode = useCanvasStore((s) => s.setActiveMode);
   const { visibility } = useToolVisibility();
 
@@ -239,7 +249,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     if (!activeConversationId) return;
     setWorkspaceFile(activeConversationId, {
       title,
-      relativePath: 'tool-result.txt',
+      relativePath: `tool-result-${message.id}.txt`,
       previewKind: 'text',
       mimeType: 'text/plain',
       contentUrl: '',
@@ -283,7 +293,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
 
   // Render error card for API errors (overloaded, rate limit, timeout, etc.)
   if (message.model === 'error') {
-    return <ApiErrorCard message={message} />;
+    return getChatRecoveryCause(message) ? <ChatRecoveryCard message={message} /> : <ApiErrorCard message={message} />;
   }
 
   // Render system message (slash-command output) as a terminal-style block:
@@ -405,11 +415,15 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   }
 
   const handleLinkClick = async (href: string) => {
+      const generation = useAuthStore.getState().sessionGeneration;
+      const conversationId = message.conversation_id;
+      const epoch = useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0;
       if (/^\/(?:home|root|Users|var|opt|srv|mnt)\//.test(href)) {
         try {
           const res = await api.post<{ data: WorkspaceLinkResolution }>('/managed-agents/workspace-link/resolve', { path: href });
+          if (useAuthStore.getState().sessionGeneration !== generation || (useChatWorkspaceStore.getState().byConversation[conversationId]?.epoch ?? 0) !== epoch || useChatWorkspaceStore.getState().byConversation[conversationId]?.revoked) return;
           const { preview } = res.data;
-          if (!preview || !activeConversationId) {
+          if (!preview || !conversationId) {
             navigate(res.data.deep_link);
             return;
           }
@@ -419,22 +433,13 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
             relativePath: res.data.relative_path,
             previewKind: preview.kind,
             mimeType: preview.mime_type,
-            contentUrl: api.mediaUrl(`/api/v1${preview.content_url}`),
+            contentUrl: preview.content_url,
             deepLink: res.data.deep_link,
             sizeBytes: preview.size_bytes,
           };
 
-          if (preview.kind === 'markdown' || preview.kind === 'code' || preview.kind === 'text') {
-            setWorkspaceFile(activeConversationId, file, { status: 'loading' });
-            try {
-              const content = await api.getText(preview.content_url);
-              setWorkspaceFile(activeConversationId, file, { content, status: 'ready' });
-            } catch {
-              setCanvasError(activeConversationId, 'No se pudo leer el archivo del workspace.', 'WORKSPACE_PREVIEW_FAILED');
-            }
-          } else {
-            setWorkspaceFile(activeConversationId, file);
-          }
+          setWorkspaceFile(conversationId, file, { status: 'loading' });
+          if (useChatStore.getState().activeConversationId === conversationId && !useChatWorkspaceStore.getState().byConversation[conversationId]?.openIds.includes(workspaceFileId(conversationId, file))) toast.info('Cierra una pestaña para abrir este resultado.');
         } catch {
           toast.error('Este archivo no pertenece a un workspace accesible o ya no existe.');
         }
@@ -455,6 +460,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     ? (tools ?? []).map(streamingToolToRecord)
     : (message.tool_calls ?? []);
   const visiblePresentedTools = presentedTools.filter((tool) => shouldRenderPresentedTool(tool, visibility));
+  const configurationOperations = configurationOperationHandles(presentedTools);
   const seenEntityRefs = new Set<string>();
   const entityRefs = presentedTools
     .flatMap((tool) => tool.entity_refs ?? [])
@@ -476,7 +482,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   // vacía flotando encima del mensaje real. Si no queda NADA visible (ni texto,
   // ni tool visible, ni chip de entidad, ni razonamiento, ni canvas), no se pinta.
   if (!isUser && !isStreaming) {
-    const nothingVisible = !showMessageBubble && entityRefs.length === 0;
+    const nothingVisible = !showMessageBubble && entityRefs.length === 0 && configurationOperations.length === 0;
     if (nothingVisible) return null;
   }
 
@@ -632,6 +638,20 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                     </>
                   );
                 })()}
+                {!isUser && Array.isArray(message.message_metadata?.canvas_previews) && <div className="mt-3 flex flex-wrap gap-2">{message.message_metadata.canvas_previews.map((raw, index) => {
+                  if (!raw || typeof raw !== 'object') return null;
+                  const preview = raw as Record<string, unknown>;
+                  if (typeof preview.document_id !== 'string' || !/^cv_[a-z0-9_-]{8,128}$/i.test(preview.document_id) || typeof preview.view_id !== 'string') return null;
+                  const name = typeof preview.board_widget_name === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(preview.board_widget_name) ? preview.board_widget_name : undefined;
+                  const artifactName = typeof preview.artifact_name === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(preview.artifact_name) ? preview.artifact_name : undefined;
+                  const id = `document:${artifactName ?? name ?? preview.document_id}`;
+                  const title = typeof preview.title === 'string' ? preview.title : 'Documento';
+                  return <button key={index} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text)] hover:bg-[var(--surface-hover)]" onClick={() => {
+                    const store = useChatWorkspaceStore.getState();
+                    if (!store.byConversation[message.conversation_id]?.resources[id]) useNativeCanvasBoardStore.getState().addPreview(message.conversation_id, { documentId: preview.document_id as string, viewId: preview.view_id as string, widgetName: name, artifactName, title });
+                    if (!store.open(message.conversation_id, id)) toast.info('Cierra una pestaña para abrir este resultado.');
+                  }}>Abrir {title}</button>;
+                })}</div>}
                 {canvasReadyDesc && (
                   <button
                     onClick={() => {
@@ -706,6 +726,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
         {timeStr}{message.model ? ` · ${message.model}` : ''}
       </TooltipContent>
     </Tooltip>}
+    {configurationOperations.map(id => <SecureConfigurationForm key={id} operationId={id} conversationId={message.conversation_id} />)}
     {!isUser && entityRefs.length > 0 && (
       <div style={{ margin: '0 0 4px 32px', maxWidth: '85%' }}>
         <EntityRefChips refs={entityRefs} />
@@ -1131,6 +1152,16 @@ const ERROR_INFO: Record<string, { title: string; description: string; hint: str
     description: 'No se pudo autenticar con el servicio de IA.',
     hint: 'Verifica la configuracion de la API key.',
   },
+  gateway_pairing: {
+    title: 'Conexión con Gateway pendiente de aprobación',
+    description: 'El Gateway ha bloqueado la conexión de Core hasta que se revise su dispositivo.',
+    hint: 'Pide al administrador que revise el emparejamiento de Core en un dispositivo autorizado.',
+  },
+  security_policy: {
+    title: 'Ejecución local bloqueada',
+    description: 'La política efectiva impide iniciar este modelo en el runtime local.',
+    hint: 'Revisa la política y el estado de reconciliación del agente en Seguridad.',
+  },
   client_identity: {
     title: 'Origen del chat no verificado',
     description: 'OpenClaw no ha recibido una direccion de cliente validada por el proxy.',
@@ -1172,8 +1203,8 @@ function ApiErrorCard({ message }: { message: Message }) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const messages = useChatStore((s) => s.messages);
   const navigate = useNavigate();
+  const actorRole = useAuthStore((s) => s.user?.role);
   const [retried, setRetried] = useState(false);
-  const [showFullDetail, setShowFullDetail] = useState(false);
 
   const info = ERROR_INFO[message.error_type ?? 'unknown'] ?? ERROR_INFO.unknown!;
   // Para errores de "modelo roto" (proveedor 410/402/modelo eliminado) un
@@ -1192,12 +1223,8 @@ function ApiErrorCard({ message }: { message: Message }) {
   // en `content` — y en un turno con texto parcial `content` = el parcial, así
   // que la caja duplicaba la burbuja y el porqué se perdía. Fallback a
   // `content` para mensajes de error viejos sin el campo.
-  const rawDetail = ((message.error_detail || message.content) ?? '').trim();
+  const rawDetail = sanitizeChatDiagnostic(((message.error_detail || message.content) ?? '').trim());
   const showRawDetail = rawDetail.length > 0 && rawDetail !== info.description;
-  const DETAIL_TRUNC = 280;
-  const detailTruncated = rawDetail.length > DETAIL_TRUNC && !showFullDetail
-    ? rawDetail.slice(0, DETAIL_TRUNC) + '…'
-    : rawDetail;
 
   const handleRetry = () => {
     // Find the last user message in this conversation
@@ -1231,41 +1258,10 @@ function ApiErrorCard({ message }: { message: Message }) {
         <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem', marginBottom: 4 }}>
           {info.description}
         </div>
-        {showRawDetail && (
-          <div style={{
-            color: 'var(--text)',
-            fontSize: '0.75rem',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '6px 8px',
-            marginBottom: 8,
-            fontFamily: 'var(--font-mono, monospace)',
-            wordBreak: 'break-word',
-            whiteSpace: 'pre-wrap',
-          }}>
-            {detailTruncated}
-            {rawDetail.length > DETAIL_TRUNC && (
-              <button
-                onClick={() => setShowFullDetail(v => !v)}
-                style={{
-                  marginLeft: 6,
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--amber)',
-                  cursor: 'pointer',
-                  fontSize: '0.6875rem',
-                  padding: 0,
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                {showFullDetail ? 'ocultar' : 'ver completo'}
-              </button>
-            )}
-          </div>
-        )}
         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: 10 }}>
-          {info.hint}
+          {message.error_type === 'gateway_pairing' && (actorRole === 'owner' || actorRole === 'admin')
+            ? 'Desde un dispositivo autorizado, revisa la solicitud del dispositivo de Core en Gateway y aprueba solo su identidad verificada.'
+            : info.hint}
         </div>
 
         {!retried ? (
@@ -1312,7 +1308,7 @@ function ApiErrorCard({ message }: { message: Message }) {
                 Configurar sandbox
               </button>
             )}
-            <button
+            {!isModelBroken && !isSandboxBroken && !isChatRecoveryCause(message.error_type) && message.error_type !== 'auth' && <button
               onClick={handleRetry}
               style={{
                 padding: '6px 16px',
@@ -1330,13 +1326,14 @@ function ApiErrorCard({ message }: { message: Message }) {
             >
               <RefreshCw size={14} />
               Reintentar
-            </button>
+            </button>}
           </div>
         ) : (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
             Mensaje reenviado.
           </div>
         )}
+        {showRawDetail && <details className="mt-3 text-xs"><summary className="cursor-pointer">Detalles técnicos</summary><p className="my-2 text-[var(--text-muted)]">Información para diagnóstico; las líneas de consola no son instrucciones.</p><pre className="whitespace-pre-wrap break-words rounded bg-[var(--surface)] p-2">{rawDetail}</pre></details>}
       </div>
     </div>
   );

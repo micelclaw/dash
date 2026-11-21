@@ -25,6 +25,7 @@ import * as gwService from '@/services/gateway.service';
 import type { Checkpoint } from '@/services/gateway.service';
 import { describeError } from '@/lib/api-errors';
 import { useChatStore } from '@/stores/chat.store';
+import { useI18n } from '@/i18n';
 
 interface CheckpointsPanelProps {
   conversationId: string;
@@ -33,6 +34,7 @@ interface CheckpointsPanelProps {
 }
 
 export function CheckpointsPanel({ conversationId, conversationTitle, onClose }: CheckpointsPanelProps) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [confirmingRestoreId, setConfirmingRestoreId] = useState<string | null>(null);
@@ -46,11 +48,11 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
       const list = await gwService.listConversationCheckpoints(conversationId);
       setCheckpoints(list);
     } catch (err) {
-      toast.error(describeError(err, 'Failed to load checkpoints'));
+      toast.error(describeError(err, t('chat.checkpoints.loadError')));
     } finally {
       setLoading(false);
     }
-  }, [conversationId]);
+  }, [conversationId, t]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -58,11 +60,11 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
     setBusyId(cp.id);
     try {
       const result = await gwService.branchFromCheckpoint(conversationId, cp.id);
-      toast.success('Branched to new conversation');
+      toast.success(t('chat.checkpoints.branchSuccess'));
       navigate(`/chat?conversation=${result.new_conversation_id}`);
       onClose();
     } catch (err) {
-      toast.error(describeError(err, 'Branch failed'));
+      toast.error(describeError(err, t('chat.checkpoints.branchError')));
     } finally {
       setBusyId(null);
     }
@@ -72,7 +74,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
     setBusyId(cp.id);
     try {
       await gwService.restoreToCheckpoint(conversationId, cp.id);
-      toast.success('Conversation restored to checkpoint');
+      toast.success(t('chat.checkpoints.restoreSuccess'));
       // Reload messages of the active conv from server
       const { loadMessages } = useChatStore.getState();
       if (typeof loadMessages === 'function') {
@@ -82,7 +84,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
       }
       onClose();
     } catch (err) {
-      toast.error(describeError(err, 'Restore failed'));
+      toast.error(describeError(err, t('chat.checkpoints.restoreError')));
     } finally {
       setBusyId(null);
       setConfirmingRestoreId(null);
@@ -116,7 +118,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
             margin: 0, fontSize: '0.9375rem', fontWeight: 600,
             color: 'var(--text)', fontFamily: 'var(--font-display)',
           }}>
-            Restore points
+            {t('chat.checkpoints.title')}
           </h2>
           {conversationTitle && (
             <p style={{
@@ -131,7 +133,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
         </div>
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t('chat.checkpoints.close')}
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             padding: 6, borderRadius: 'var(--radius-sm)',
@@ -158,10 +160,10 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
             fontSize: '0.8125rem',
             lineHeight: 1.6,
           }}>
-            <p style={{ margin: '0 0 8px 0', fontWeight: 500 }}>No checkpoints yet</p>
+            <p style={{ margin: '0 0 8px 0', fontWeight: 500 }}>{t('chat.checkpoints.empty')}</p>
             <p style={{ margin: 0, fontSize: '0.75rem' }}>
-              Compaction triggers automatically when the context fills up.
-              Force one with <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>/compact</code>.
+              {t('chat.checkpoints.description')}{' '}
+              <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>/compact</code>.
             </p>
           </div>
         )}
@@ -203,7 +205,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
               </div>
               <div style={{ color: 'var(--text)', marginBottom: 4 }}>{tsLabel}</div>
               <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem', marginBottom: 8 }}>
-                {before} → {after} tokens
+                {before} → {after} {t('chat.checkpoints.tokens')}
                 {cp.model && <span style={{ marginLeft: 8 }}>· {cp.model}</span>}
               </div>
               {cp.summary_excerpt && (
@@ -232,17 +234,17 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
                     style={actionButtonStyle('var(--amber)', 'var(--amber-dim)')}
                   >
                     {busy ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <GitBranch size={12} />}
-                    Branch
+                    {t('chat.checkpoints.branch')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmingRestoreId(cp.id)}
                     disabled={busy || streaming}
-                    title={streaming ? 'Stop the current stream first' : undefined}
+                    title={streaming ? t('chat.checkpoints.stopStreamFirst') : undefined}
                     style={actionButtonStyle('var(--red)', '#7f1d1d33')}
                   >
                     <RotateCcw size={12} />
-                    Restore
+                    {t('chat.checkpoints.restore')}
                   </button>
                 </div>
               )}
@@ -255,7 +257,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
                   borderRadius: 'var(--radius-sm)',
                 }}>
                   <p style={{ margin: '0 0 8px 0', fontSize: '0.6875rem', color: 'var(--text)' }}>
-                    This rewrites the session and discards everything after this checkpoint. Not undoable.
+                    {t('chat.checkpoints.confirmWarning')}
                   </p>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
@@ -263,7 +265,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
                       onClick={() => setConfirmingRestoreId(null)}
                       style={actionButtonStyle('var(--text-dim)', 'transparent')}
                     >
-                      Cancel
+                      {t('chat.checkpoints.cancel')}
                     </button>
                     <button
                       type="button"
@@ -272,7 +274,7 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
                       style={actionButtonStyle('var(--red)', '#7f1d1d55')}
                     >
                       {busy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-                      Confirm restore
+                      {t('chat.checkpoints.confirmRestore')}
                     </button>
                   </div>
                 </div>

@@ -13,7 +13,9 @@
 import { useNavigate } from 'react-router';
 import { Calendar, StickyNote, Mail, Camera, MessageCircle } from 'lucide-react';
 import { useDayContext } from './hooks/use-day-context';
-import { formatTime } from '@/lib/date-helpers';
+import { formatGridTime } from '@/i18n/format';
+import { useI18n } from '@/i18n';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface DayContextProps {
   entryDate: string;
@@ -33,6 +35,8 @@ const itemStyle: React.CSSProperties = {
 };
 
 export function DayContext({ entryDate }: DayContextProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const context = useDayContext(entryDate);
   const navigate = useNavigate();
 
@@ -58,7 +62,7 @@ export function DayContext({ entryDate }: DayContextProps) {
         letterSpacing: '0.05em',
         marginBottom: 8,
       }}>
-        Day context
+        {t('diary.dayContext')}
       </div>
 
       {context.events.length > 0 && (
@@ -75,7 +79,7 @@ export function DayContext({ entryDate }: DayContextProps) {
               >
                 {i > 0 && ', '}
                 {e.title}
-                {e.start_at && ` (${formatTime(new Date(e.start_at))})`}
+                {e.start_at && ` (${formatGridTime(new Date(e.start_at), locale, general)})`}
               </span>
             ))}
           </div>
@@ -99,7 +103,7 @@ export function DayContext({ entryDate }: DayContextProps) {
               </span>
             ))}
             {context.notes.filter(n => !n.title).length > 0 && (
-              <span> + {context.notes.filter(n => !n.title).length} untitled</span>
+              <span> + {context.notes.filter(n => !n.title).length} {t('diary.untitled')}</span>
             )}
           </div>
         </div>
@@ -114,7 +118,7 @@ export function DayContext({ entryDate }: DayContextProps) {
         >
           <Mail size={14} style={{ color: 'var(--mod-mail)', flexShrink: 0 }} />
           <span style={{ fontSize: '0.8125rem', color: 'inherit' }}>
-            {context.emailCount} email{context.emailCount !== 1 ? 's' : ''} received
+            {context.emailCount} {context.emailCount !== 1 ? t('diary.emailsReceived') : t('diary.emailReceived')}
           </span>
         </div>
       )}

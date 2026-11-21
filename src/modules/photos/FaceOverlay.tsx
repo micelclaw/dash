@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { usePhotoAiStore, type FaceDetection } from '@/stores/photo-ai.store';
+import { useI18n } from '@/i18n';
 
 interface FaceOverlayProps {
   imageWidth: number;
@@ -28,6 +29,7 @@ interface ImageBounds {
 }
 
 export function FaceOverlay({ imageWidth, imageHeight, containerRef, onFaceClick }: FaceOverlayProps) {
+  const { t } = useI18n();
   const faceDetections = usePhotoAiStore((s) => s.faceDetections);
   const showOverlay = usePhotoAiStore((s) => s.showFaceOverlay);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -88,6 +90,10 @@ export function FaceOverlay({ imageWidth, imageHeight, containerRef, onFaceClick
               onMouseEnter={() => setHoveredId(face.id)}
               onMouseLeave={() => setHoveredId(null)}
               onClick={(e) => { e.stopPropagation(); onFaceClick(face); }}
+              role="button"
+              tabIndex={0}
+              aria-label={face.cluster_name ?? t('photos.extra.unknownFace')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFaceClick(face); } }}
               style={{
                 position: 'absolute',
                 left, top, width, height,
@@ -117,7 +123,7 @@ export function FaceOverlay({ imageWidth, imageHeight, containerRef, onFaceClick
                   pointerEvents: 'none',
                 }}
               >
-                {face.cluster_name ?? 'Unknown'}
+                {face.cluster_name ?? t('photos.extra.unknown')}
               </div>
             )}
           </div>

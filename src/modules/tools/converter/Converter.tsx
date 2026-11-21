@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowUpDown } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 /* ── Category definitions ── */
 interface UnitDef { id: string; label: string; toBase: (v: number) => number; fromBase: (v: number) => number }
@@ -92,6 +93,7 @@ function getCurrencyUnits(rates: Record<string, number>): UnitDef[] {
 }
 
 export function Converter() {
+  const { t, locale } = useI18n();
   const [catIdx, setCatIdx] = useState(0);
   const [value, setValue] = useState('1');
   const [fromIdx, setFromIdx] = useState(0);
@@ -148,7 +150,14 @@ export function Converter() {
 
   const formatResult = (v: number) => {
     if (Math.abs(v) < 0.001 && v !== 0) return v.toExponential(4);
-    return parseFloat(v.toPrecision(10)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+    return parseFloat(v.toPrecision(10)).toLocaleString(locale, { maximumFractionDigits: 6 });
+  };
+
+  const unitLabel = (unit: UnitDef) => {
+    if (unit.id === 'kn') return t('converter.unit.knots');
+    if (unit.id === 'cup') return t('converter.unit.cup');
+    if (unit.id === 'ton') return t('converter.unit.ton');
+    return unit.label;
   };
 
   const selectStyle: React.CSSProperties = {
@@ -172,6 +181,7 @@ export function Converter() {
           <button
             key={c.id}
             onClick={() => handleCatChange(i)}
+            aria-pressed={i === catIdx}
             style={{
               padding: '4px 8px', fontSize: '0.625rem', fontWeight: 500,
               border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
@@ -180,7 +190,7 @@ export function Converter() {
               whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)',
             }}
           >
-            {c.label}
+            {t(`converter.category.${c.id}`)}
           </button>
         ))}
       </div>
@@ -189,6 +199,7 @@ export function Converter() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <input
           type="text"
+          aria-label={t('converter.inputValue')}
           inputMode="decimal"
           value={value}
           onChange={e => setValue(e.target.value)}
@@ -199,8 +210,8 @@ export function Converter() {
             fontFamily: 'var(--font-mono)', textAlign: 'right', outline: 'none',
           }}
         />
-        <select value={fromIdx} onChange={e => setFromIdx(Number(e.target.value))} style={selectStyle}>
-          {units.map((u, i) => <option key={u.id} value={i}>{u.label}</option>)}
+        <select aria-label={t('converter.fromUnit')} value={fromIdx} onChange={e => setFromIdx(Number(e.target.value))} style={selectStyle}>
+          {units.map((u, i) => <option key={u.id} value={i}>{unitLabel(u)}</option>)}
         </select>
       </div>
 
@@ -208,6 +219,7 @@ export function Converter() {
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <button
           onClick={swap}
+          aria-label={t('converter.swapUnits')}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 32, height: 32, border: '1px solid var(--border)',
@@ -230,8 +242,8 @@ export function Converter() {
         }}>
           {formatResult(result)}
         </div>
-        <select value={toIdx} onChange={e => setToIdx(Number(e.target.value))} style={selectStyle}>
-          {units.map((u, i) => <option key={u.id} value={i}>{u.label}</option>)}
+        <select aria-label={t('converter.toUnit')} value={toIdx} onChange={e => setToIdx(Number(e.target.value))} style={selectStyle}>
+          {units.map((u, i) => <option key={u.id} value={i}>{unitLabel(u)}</option>)}
         </select>
       </div>
 
@@ -240,13 +252,13 @@ export function Converter() {
         flex: 1, overflowY: 'auto', fontSize: '0.6875rem', color: 'var(--text-dim)',
         fontFamily: 'var(--font-mono)', display: 'flex', flexDirection: 'column', gap: 2,
         padding: '4px 0',
-      }}>
+      }} role="region" aria-label={t('converter.quickConversions')}>
         {units.filter((_, i) => i !== fromIdx && i !== toIdx).slice(0, 4).map(u => {
           const converted = u.fromBase(from!.toBase(numVal));
           return (
             <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>{numVal} {from?.label}</span>
-              <span style={{ color: 'var(--text)' }}>{formatResult(converted)} {u.label}</span>
+              <span>{numVal} {from ? unitLabel(from) : ''}</span>
+              <span style={{ color: 'var(--text)' }}>{formatResult(converted)} {unitLabel(u)}</span>
             </div>
           );
         })}

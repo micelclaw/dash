@@ -22,7 +22,7 @@
  * Flujo: explain → identity (crear/importar) → ready (Session ID + QR) → elegir chats.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Loader2, Check, Info, AlertTriangle, Copy, KeyRound, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ import * as syncSvc from '@/services/sync.service';
 import * as messagingCli from '@/services/messaging-cli.service';
 import { QrImage } from '@/components/shared/QrImage';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 type Step = 'explain' | 'identity' | 'ready';
 type Variant = 'own' | 'link';
@@ -50,6 +51,9 @@ export function SessionForm({
   onComplete: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [step, setStep] = useState<Step>('explain');
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState('');
@@ -70,7 +74,7 @@ export function SessionForm({
       setIdentity(res);
       setStep('ready');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo crear la identidad de Session');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.session.identityFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +96,7 @@ export function SessionForm({
     } catch (err) {
       // Un connector por usuario → 409 = "ya existe" → seguir al selector.
       if (err instanceof ApiError && err.status === 409) { onComplete(); return; }
-      toast.error(err instanceof Error ? err.message : 'No se pudo crear el canal');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.session.channelFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -106,36 +110,29 @@ export function SessionForm({
         {variant === 'own' ? (
           <>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              Crea una identidad de Session <strong>nueva y separada</strong> que vive en tu servidor.
+              {t('settings.session.identityOwn')}
             </p>
             <div style={{ ...CALLOUT, background: 'rgba(0,247,130,0.07)', border: '1px solid rgba(0,247,130,0.25)', color: '#34d399' }}>
               <Info size={13} style={{ marginTop: 1, flexShrink: 0 }} />
               <span>
-                <strong>NO son los chats de tu móvil.</strong> Es una cuenta aparte. El servidor
-                <strong> nunca</strong> guarda la clave maestra de tu cuenta real. Para hablar con
-                alguien: comparte tu Session ID/QR para que te añadan. ¿Quieres el espejo de tu móvil?
-                Usa la tarjeta «Session · tu móvil».
+                {t('settings.session.ownWarning')}
               </span>
             </div>
           </>
         ) : (
           <>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              Conecta <strong>tu cuenta real</strong> de Session pegando tu <strong>frase de
-              recuperación</strong> — verás y responderás tus chats REALES del móvil.
+              {t('settings.session.importIntro')}
             </p>
             <div style={{ ...CALLOUT, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#fbbf24' }}>
               <AlertTriangle size={13} style={{ marginTop: 1, flexShrink: 0 }} />
               <span>
-                <strong>No pierdes nada en el móvil</strong> — Session es multi-dispositivo por la
-                frase; ambos funcionan a la vez. Pero pones tu <strong>clave maestra</strong> en un
-                servidor always-on: si lo comprometen, tu identidad no se puede revocar (la frase no
-                rota). Si prefieres cero riesgo, usa «Session · identidad propia».
+                {t('settings.session.importWarning')}
               </span>
             </div>
           </>
         )}
-        <FormActions onBack={onCancel} saving={false} onConfirm={() => setStep('identity')} submitLabel="Continuar" />
+        <FormActions onBack={onCancel} saving={false} onConfirm={() => setStep('identity')} submitLabel={t('settings.matrix.continue')} />
       </div>
     );
   }
@@ -145,15 +142,15 @@ export function SessionForm({
   if (step === 'identity') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="Nombre para mostrar (opcional)" hint="Es como te verán tus contactos en Session.">
+        <Field label={t('settings.session.displayNameOptional')} hint={t('settings.session.displayNameHint')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Víctor (MicelclawOS)" />
         </Field>
         {variant === 'link' && (
-          <Field label="Frase de recuperación" hint="Session → Ajustes → Frase de recuperación (13 palabras). Se guarda cifrada.">
+          <Field label={t('settings.session.recoveryPhrase')} hint={t('settings.session.recoveryHint')}>
             <textarea
               value={mnemonicIn}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMnemonicIn(e.target.value)}
-              placeholder="palabra1 palabra2 palabra3 …"
+              placeholder={t('settings.session.mnemonicPlaceholder')}
               rows={3}
               style={{
                 width: '100%', resize: 'vertical', fontFamily: 'monospace', fontSize: '0.6875rem',
@@ -165,21 +162,21 @@ export function SessionForm({
         )}
         {submitting && (
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Preparando el puente de Session… la primera vez puede tardar un minuto en construirse.
+            {t('settings.session.preparing')}
           </p>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="outline" onClick={() => setStep('explain')} disabled={submitting} className="flex-1">Atrás</Button>
+          <Button variant="outline" onClick={() => setStep('explain')} disabled={submitting} className="flex-1">{t('settings.forms.back')}</Button>
           <Button
             onClick={handleCreateIdentity}
             disabled={submitting || (variant === 'link' && !mnemonicIn.trim())}
             className="flex-1"
           >
             {submitting
-              ? <><Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> Preparando…</>
+              ? <><Loader2 size={14} className="animate-spin" style={{ marginRight: 6 }} /> {t('settings.session.preparingShort')}</>
               : variant === 'link'
-                ? <><KeyRound size={14} style={{ marginRight: 6 }} /> Importar mi cuenta</>
-                : <><UserPlus size={14} style={{ marginRight: 6 }} /> Crear identidad</>}
+                ? <><KeyRound size={14} style={{ marginRight: 6 }} /> {t('settings.session.import')}</>
+                : <><UserPlus size={14} style={{ marginRight: 6 }} /> {t('settings.session.create')}</>}
           </Button>
         </div>
       </div>
@@ -192,14 +189,14 @@ export function SessionForm({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ ...CALLOUT, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
         <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-        <span>{variant === 'link' ? 'Cuenta importada.' : 'Identidad creada.'} Este es tu Session ID.</span>
+        <span>{variant === 'link' ? t('settings.session.imported') : t('settings.session.created')} {t('settings.session.id')}</span>
       </div>
 
-      <Field label="Tu Session ID" hint={variant === 'own' ? 'Compártelo (o deja que escaneen el QR) para que te añadan.' : 'Es el ID de tu cuenta real.'}>
+      <Field label={t('settings.session.id')} hint={variant === 'own' ? t('settings.session.ownIdHint') : t('settings.session.realIdHint')}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <Input readOnly value={identity?.session_id ?? ''} style={{ fontFamily: 'monospace', fontSize: '0.625rem' }} />
-          <Button variant="ghost" size="sm" disabled={!identity}
-            onClick={() => { if (identity) { void navigator.clipboard.writeText(identity.session_id); toast.success('Session ID copiado'); } }}>
+          <Button variant="ghost" size="sm" aria-label={t('settings.session.copyId')} disabled={!identity}
+            onClick={() => { if (identity) { void navigator.clipboard.writeText(identity.session_id); toast.success(t('settings.session.idCopied')); } }}>
             <Copy size={13} />
           </Button>
         </div>
@@ -214,14 +211,14 @@ export function SessionForm({
       {variant === 'own' && identity?.mnemonic && (
         <div style={{ ...CALLOUT, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#fbbf24', flexDirection: 'column' }}>
           <span style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600 }}>
-            <KeyRound size={12} /> Guarda esta frase de recuperación
+            <KeyRound size={12} /> {t('settings.session.savePhrase')}
           </span>
           <code style={{ fontSize: '0.625rem', wordBreak: 'break-word', color: 'var(--text)' }}>{identity.mnemonic}</code>
-          <span style={{ opacity: 0.85 }}>Es la única forma de recuperar esta identidad. Guárdala en un sitio seguro.</span>
+          <span style={{ opacity: 0.85 }}>{t('settings.session.recoveryHelp')}</span>
         </div>
       )}
 
-      <FormActions onBack={() => setStep('identity')} saving={submitting} onConfirm={handleFinish} submitLabel="Elegir chats" />
+      <FormActions onBack={() => setStep('identity')} saving={submitting} onConfirm={handleFinish} submitLabel={t('settings.session.chooseChats')} />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { avisosDeConector } from './connector-avisos';
 import { DataServiceIcon, type DataServiceDomain } from '@/config/data-provider-icons';
 import { taskWritePresentation } from './connector-task-write-state';
+import { useI18n } from '@/i18n';
 
 // ─── Connector icons ──────────────────────────────────────
 
@@ -160,15 +161,15 @@ const STATUS_COLORS: Record<string, string> = {
   disconnected: 'var(--text-muted)',
 };
 
-function timeAgo(ts: string | null): string {
-  if (!ts) return 'Never';
+function timeAgo(ts: string | null, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (!ts) return t('settings.connectors.never');
   const diff = Date.now() - new Date(ts).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('settings.connectors.justNow');
+  if (mins < 60) return t('settings.connectors.minutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t('settings.connectors.hoursAgo', { count: hours });
+  return t('settings.connectors.daysAgo', { count: Math.floor(hours / 24) });
 }
 
 
@@ -210,6 +211,7 @@ interface ConnectorCardProps {
 }
 
 export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCardProps) {
+  const { t } = useI18n();
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<{ processed: number; total?: number; folder?: string; phase?: string } | null>(null);
   const catalogLabels = useConnectorLabels();
@@ -264,9 +266,9 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     setSyncing(true);
     try {
       await syncSvc.runConnector(connector.id);
-      toast.success(`Sync started: ${label}`);
+      toast.success(t('settings.connectors.syncStarted', { label }));
     } catch {
-      toast.error('Failed to start sync');
+      toast.error(t('settings.connectors.syncFailed'));
       setSyncing(false);
       return;
     }
@@ -281,21 +283,21 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
       if (connector.status === 'paused') {
         // Resume — trigger immediate sync
         await syncSvc.resumeConnector(connector.id);
-        toast.success(`Resumed: ${label}`);
+        toast.success(t('settings.connectors.resumed', { label }));
       } else {
         // Pause — will also abort running sync if active
         await syncSvc.pauseConnector(connector.id);
         if (isSyncing) {
           setSyncing(false);
           setProgress(null);
-          toast.success(`Sync cancelled: ${label}`);
+          toast.success(t('settings.connectors.cancelled', { label }));
         } else {
-          toast.success(`Paused: ${label}`);
+          toast.success(t('settings.connectors.paused', { label }));
         }
       }
       onRefresh();
     } catch {
-      toast.error('Operation failed');
+      toast.error(t('settings.connectors.operationFailed'));
     }
   };
 
@@ -319,13 +321,13 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
 
   const handleRevokeOAuth = async () => {
     if (!oauthProvider) return;
-    if (!confirm(`Revoke OAuth access for ${oauthProvider}? This will disconnect ALL ${oauthProvider} connectors.`)) return;
+    if (!confirm(t('settings.connectors.confirmRevoke', { provider: oauthProvider }))) return;
     try {
       await syncSvc.deleteOAuthCredentials(oauthProvider);
-      toast.success(`OAuth access revoked for ${oauthProvider}`);
+      toast.success(t('settings.connectors.oauthRevoked', { provider: oauthProvider }));
       onRefresh();
     } catch {
-      toast.error('Failed to revoke OAuth access');
+      toast.error(t('settings.connectors.oauthRevokeFailed'));
     }
   };
 
@@ -443,7 +445,7 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
           </span>
           <span>{estadoEscrituraTareas.pendingText}</span>
           {estadoEscrituraTareas.blocked && estadoEscrituraTareas.pendingCount > 0 && (
-            <span>These changes will not be uploaded while writing is blocked.</span>
+            <span>{t('settings.connectors.blockedWrite')}</span>
           )}
         </div>
       )}
@@ -451,14 +453,14 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
       {/* Bottom: last sync + actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-          {syncing && !progress ? 'Syncing...' : `Last sync: ${timeAgo(connector.last_sync_at)}`}
+          {syncing && !progress ? t('settings.connectors.syncing') : t('settings.connectors.lastSync', { time: timeAgo(connector.last_sync_at, t) })}
         </span>
         <div style={{ display: 'flex', gap: 2 }}>
           <button
             onClick={handleSync}
             disabled={syncing || connector.status === 'syncing'}
             style={{ ...iconBtnStyle, opacity: syncing ? 0.5 : 1 }}
-            title="Sync now"
+            title={t('settings.connectors.syncNow')}
           >
             {syncing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
           </button>
@@ -474,25 +476,25 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
             }}
             title={
               (syncing || connector.status === 'syncing')
-                ? 'Stop sync'
+                ? t('settings.connectors.stopSync')
                 : connector.status === 'paused'
-                  ? 'Resume'
-                  : 'Pause'
+                  ? t('settings.connectors.resume')
+                  : t('settings.connectors.pause')
             }
           >
             {connector.status === 'paused' ? <Play size={14} /> : <Pause size={14} />}
           </button>
           {onConfigure && (
-            <button onClick={() => onConfigure(connector.id)} style={iconBtnStyle} title="Configure">
+            <button onClick={() => onConfigure(connector.id)} style={iconBtnStyle} title={t('settings.connectors.configure')}>
               <Settings size={14} />
             </button>
           )}
           {oauthProvider && (
-            <button onClick={handleRevokeOAuth} style={{ ...iconBtnStyle, color: 'var(--warning, #f59e0b)' }} title={`Revoke ${oauthProvider} OAuth`}>
+            <button onClick={handleRevokeOAuth} style={{ ...iconBtnStyle, color: 'var(--warning, #f59e0b)' }} title={t('settings.connectors.revokeOAuth', { provider: oauthProvider })}>
               <Unlink size={14} />
             </button>
           )}
-          <button onClick={() => setDisconnectOpen(true)} style={{ ...iconBtnStyle, color: 'var(--error)' }} title="Disconnect">
+          <button onClick={() => setDisconnectOpen(true)} style={{ ...iconBtnStyle, color: 'var(--error)' }} title={t('settings.connectors.disconnect')}>
             <Trash2 size={14} />
           </button>
         </div>

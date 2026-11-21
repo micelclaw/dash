@@ -59,7 +59,9 @@ function richText(element: Element): RichText[] {
     let nextLink = link;
     if (node.tagName === 'A') {
       const url = node.getAttribute('href') || '';
-      const parsed = new URL(url, window.location.origin);
+      // MCP Apps use an opaque iframe origin. Absolute native links remain valid;
+      // a relative URL must never be resolved against an invented origin there.
+      const parsed = new URL(url, window.location.origin === 'null' ? undefined : window.location.origin);
       if (!['https:','http:','mailto:'].includes(parsed.protocol) || parsed.username || parsed.password)
         throw new Error('El enlace no es compatible con Notion. Tu borrador se conserva.');
       nextLink = {url: parsed.href};

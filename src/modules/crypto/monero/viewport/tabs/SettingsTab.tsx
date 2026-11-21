@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Loader2, RefreshCw, Eye, EyeOff, Key, Lock, AlertTriangle, Info, Clock } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 import { api } from '@/services/api';
@@ -32,6 +33,7 @@ interface AuditEntry {
 }
 
 export function SettingsTab() {
+  const { t, locale } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [info, setInfo] = useState<WalletInfo | null>(null);
@@ -148,12 +150,12 @@ export function SettingsTab() {
     if (rpc.error) {
       setPassResult({ ok: false, msg: rpc.error });
     } else {
-      setPassResult({ ok: true, msg: 'Password changed successfully' });
+      setPassResult({ ok: true, msg: t('crypto.wallet.passwordChanged') });
       setOldPass('');
       setNewPass('');
     }
     setPassLoading(false);
-  }, [call, oldPass, newPass]);
+  }, [call, oldPass, newPass, t]);
 
   // Refresh wallet
   const refreshWallet = useCallback(async () => {
@@ -161,12 +163,12 @@ export function SettingsTab() {
     setRefreshResult(null);
     const result = await call<{ blocks_fetched: number; received_money: boolean }>('refresh', {});
     if (result) {
-      setRefreshResult(`Scanned ${result.blocks_fetched} blocks${result.received_money ? ' — new funds detected' : ''}`);
+      setRefreshResult(t('crypto.wallet.blocksScanned', { count: result.blocks_fetched, newFunds: result.received_money ? t('crypto.wallet.newFundsDetected') : '' }));
     } else {
-      setRefreshResult(rpc.error || 'Refresh failed');
+      setRefreshResult(rpc.error || t('crypto.wallet.refreshFailed'));
     }
     setRefreshing(false);
-  }, [call]);
+  }, [call, t]);
 
   // Rescan blockchain
   const rescanBlockchain = useCallback(async () => {
@@ -177,57 +179,57 @@ export function SettingsTab() {
       setRefreshing(false);
       return;
     }
-    setRefreshResult(rpc.error || 'Rescan initiated');
+    setRefreshResult(rpc.error || t('crypto.wallet.rescanInitiated'));
     setRefreshing(false);
-  }, [call]);
+  }, [call, t]);
 
   // Get/Set attribute
   const getAttribute = useCallback(async () => {
     if (!attrKey.trim()) return;
     const result = await call<{ value: string }>('get_attribute', { key: attrKey.trim() });
     if (result) setAttrResult(`Value: ${result.value}`);
-    else setAttrResult(rpc.error || 'Not found');
-  }, [call, attrKey]);
+    else setAttrResult(rpc.error || t('crypto.wallet.attributeNotFound'));
+  }, [call, attrKey, t]);
 
   const setAttribute = useCallback(async () => {
     if (!attrKey.trim()) return;
     await call('set_attribute', { key: attrKey.trim(), value: attrValue });
     if (rpc.error) setAttrResult(rpc.error);
-    else setAttrResult('Attribute saved');
-  }, [call, attrKey, attrValue]);
+    else setAttrResult(t('crypto.wallet.attributeSaved'));
+  }, [call, attrKey, attrValue, t]);
 
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
-        <Loader2 size={16} className="spin" /> Loading settings...
+        <Loader2 size={16} className="spin" /> {t('crypto.wallet.loading')}
       </div>
     );
   }
 
   return (
     <div className="se-root">
-      <h3 className="se-title">Settings</h3>
+      <h3 className="se-title">{t('crypto.wallet.settings')}</h3>
 
       {/* Wallet info */}
       <div className="se-section">
-        <div className="se-section-title">Wallet Info</div>
+        <div className="se-section-title">{t('crypto.wallet.info')}</div>
         <div className="se-info-grid">
           <div className="se-info-item">
-            <span className="se-info-label">Wallet</span>
-            <span className="se-info-value">{info?.active_wallet ?? 'None'}</span>
+            <span className="se-info-label">{t('crypto.wallet.walletLabel')}</span>
+            <span className="se-info-value">{info?.active_wallet ?? '-'}</span>
           </div>
           <div className="se-info-item">
-            <span className="se-info-label">Height</span>
-            <span className="se-info-value">{info?.height?.toLocaleString() ?? '-'}</span>
+            <span className="se-info-label">{t('crypto.wallet.height')}</span>
+            <span className="se-info-value">{info?.height?.toLocaleString(locale) ?? '-'}</span>
           </div>
           <div className="se-info-item">
-            <span className="se-info-label">RPC Version</span>
+            <span className="se-info-label">{t('crypto.wallet.rpcVersion')}</span>
             <span className="se-info-value">{info?.version ?? '-'}</span>
           </div>
           <div className="se-info-item">
-            <span className="se-info-label">Status</span>
+            <span className="se-info-label">{t('crypto.wallet.status')}</span>
             <span className="se-info-value" style={{ color: info?.rpc_reachable ? '#22c55e' : '#ef4444' }}>
-              {info?.rpc_reachable ? 'Connected' : 'Disconnected'}
+              {info?.rpc_reachable ? t('crypto.wallet.connected') : t('crypto.wallet.disconnected')}
             </span>
           </div>
         </div>
@@ -235,20 +237,20 @@ export function SettingsTab() {
 
       {/* Seed & Keys */}
       <div className="se-section">
-        <div className="se-section-title">Seed & Keys</div>
+        <div className="se-section-title">{t('crypto.wallet.seedAndKeys')}</div>
         <div className="se-warning-sm">
           <AlertTriangle size={11} />
-          <span>Never share your seed or spend key. Anyone with access can steal your funds.</span>
+          <span>{t('crypto.wallet.secretWarning')}</span>
         </div>
 
         {/* Mnemonic Seed */}
         <div className="se-secret-row">
           <div className="se-secret-header">
             <Key size={13} />
-            <span className="se-secret-label">Mnemonic Seed</span>
+            <span className="se-secret-label">{t('crypto.wallet.mnemonicSeedLabel')}</span>
             <div style={{ flex: 1 }} />
             <button className="se-secret-btn" onClick={revealSeed} disabled={seedLoading}>
-              {seedLoading ? <Loader2 size={12} className="spin" /> : showSeed ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Reveal</>}
+              {seedLoading ? <Loader2 size={12} className="spin" /> : showSeed ? <><EyeOff size={12} /> {t('crypto.wallet.hide')}</> : <><Eye size={12} /> {t('crypto.wallet.reveal')}</>}
             </button>
           </div>
           {showSeed && seed && (
@@ -260,10 +262,10 @@ export function SettingsTab() {
         <div className="se-secret-row">
           <div className="se-secret-header">
             <Key size={13} />
-            <span className="se-secret-label">Private View Key</span>
+            <span className="se-secret-label">{t('crypto.wallet.privateViewKey')}</span>
             <div style={{ flex: 1 }} />
             <button className="se-secret-btn" onClick={revealViewKey} disabled={keyLoading}>
-              {keyLoading ? <Loader2 size={12} className="spin" /> : showViewKey ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Reveal</>}
+              {keyLoading ? <Loader2 size={12} className="spin" /> : showViewKey ? <><EyeOff size={12} /> {t('crypto.wallet.hide')}</> : <><Eye size={12} /> {t('crypto.wallet.reveal')}</>}
             </button>
           </div>
           {showViewKey && viewKey && (
@@ -275,10 +277,10 @@ export function SettingsTab() {
         <div className="se-secret-row">
           <div className="se-secret-header">
             <Key size={13} />
-            <span className="se-secret-label">Private Spend Key</span>
+            <span className="se-secret-label">{t('crypto.wallet.privateSpendKey')}</span>
             <div style={{ flex: 1 }} />
             <button className="se-secret-btn" onClick={revealSpendKey} disabled={keyLoading}>
-              {keyLoading ? <Loader2 size={12} className="spin" /> : showSpendKey ? <><EyeOff size={12} /> Hide</> : <><Eye size={12} /> Reveal</>}
+              {keyLoading ? <Loader2 size={12} className="spin" /> : showSpendKey ? <><EyeOff size={12} /> {t('crypto.wallet.hide')}</> : <><Eye size={12} /> {t('crypto.wallet.reveal')}</>}
             </button>
           </div>
           {showSpendKey && spendKey && (
@@ -289,18 +291,18 @@ export function SettingsTab() {
 
       {/* Change Password */}
       <div className="se-section">
-        <div className="se-section-title">Change Password</div>
+        <div className="se-section-title">{t('crypto.wallet.changePassword')}</div>
         <div className="se-pass-form">
           <div className="se-field">
-            <label className="se-label">Current Password</label>
-            <input className="se-input" type="password" value={oldPass} onChange={(e) => setOldPass(e.target.value)} placeholder="Leave empty if no password" />
+            <label className="se-label">{t('crypto.wallet.currentPassword')}</label>
+            <input className="se-input" type="password" value={oldPass} onChange={(e) => setOldPass(e.target.value)} placeholder={t('crypto.wallet.noPasswordPlaceholder')} />
           </div>
           <div className="se-field">
-            <label className="se-label">New Password</label>
-            <input className="se-input" type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Enter new password" />
+            <label className="se-label">{t('crypto.wallet.newPassword')}</label>
+            <input className="se-input" type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder={t('crypto.wallet.enterNewPassword')} />
           </div>
           <button className="se-btn se-btn-primary" onClick={changePassword} disabled={passLoading || !newPass}>
-            {passLoading ? <><Loader2 size={12} className="spin" /> Changing...</> : <><Lock size={12} /> Change Password</>}
+            {passLoading ? <><Loader2 size={12} className="spin" /> {t('crypto.wallet.changing')}</> : <><Lock size={12} /> {t('crypto.wallet.changePassword')}</>}
           </button>
           {passResult && (
             <div className={`se-feedback ${passResult.ok ? 'se-feedback-ok' : 'se-feedback-err'}`}>
@@ -312,14 +314,14 @@ export function SettingsTab() {
 
       {/* Wallet Refresh */}
       <div className="se-section">
-        <div className="se-section-title">Sync & Refresh</div>
+        <div className="se-section-title">{t('crypto.wallet.syncRefresh')}</div>
         <div className="se-btn-row">
           <button className="se-btn se-btn-secondary" onClick={refreshWallet} disabled={refreshing}>
             {refreshing ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}
-            Refresh Wallet
+            {t('crypto.wallet.refreshWallet')}
           </button>
           <button className="se-btn se-btn-secondary" onClick={rescanBlockchain} disabled={refreshing}>
-            Rescan Blockchain
+            {t('crypto.wallet.rescanBlockchain')}
           </button>
         </div>
         {refreshResult && (
@@ -329,13 +331,13 @@ export function SettingsTab() {
 
       {/* Wallet Attributes */}
       <div className="se-section">
-        <div className="se-section-title">Wallet Attributes</div>
-        <div className="se-section-desc">Key-value metadata stored in the wallet file.</div>
+        <div className="se-section-title">{t('crypto.wallet.attributes')}</div>
+        <div className="se-section-desc">{t('crypto.wallet.attributesHelp')}</div>
         <div className="se-attr-form">
-          <input className="se-input se-input-sm" placeholder="Key" value={attrKey} onChange={(e) => setAttrKey(e.target.value)} />
-          <input className="se-input se-input-sm" placeholder="Value" value={attrValue} onChange={(e) => setAttrValue(e.target.value)} />
-          <button className="se-btn se-btn-secondary se-btn-sm" onClick={getAttribute}>Get</button>
-          <button className="se-btn se-btn-secondary se-btn-sm" onClick={setAttribute}>Set</button>
+          <input className="se-input se-input-sm" placeholder={t('crypto.wallet.key')} value={attrKey} onChange={(e) => setAttrKey(e.target.value)} />
+          <input className="se-input se-input-sm" placeholder={t('crypto.wallet.value')} value={attrValue} onChange={(e) => setAttrValue(e.target.value)} />
+          <button className="se-btn se-btn-secondary se-btn-sm" onClick={getAttribute}>{t('crypto.wallet.get')}</button>
+          <button className="se-btn se-btn-secondary se-btn-sm" onClick={setAttribute}>{t('crypto.wallet.set')}</button>
         </div>
         {attrResult && <div className="se-feedback se-feedback-ok">{attrResult}</div>}
       </div>
@@ -343,18 +345,18 @@ export function SettingsTab() {
       {/* Activity Log */}
       <div className="se-section">
         <div className="se-section-title-row">
-          <div className="se-section-title">Activity Log</div>
-          <button className="se-refresh-sm" onClick={fetchAuditLog} title="Refresh">
+          <div className="se-section-title">{t('crypto.wallet.activityLog')}</div>
+          <button className="se-refresh-sm" onClick={fetchAuditLog} title={t('crypto.wallet.refresh')}>
             <RefreshCw size={11} />
           </button>
         </div>
         {auditLoading ? (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Loader2 size={12} className="spin" /> Loading...
+            <Loader2 size={12} className="spin" /> {t('crypto.wallet.loading')}
           </div>
         ) : auditLog.length === 0 ? (
           <div className="se-empty">
-            <Info size={12} /> No activity recorded yet
+            <Info size={12} /> {t('crypto.wallet.noActivity')}
           </div>
         ) : (
           <div className="se-audit-list">

@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useIsPhone } from '@/hooks/use-media-query';
 import { NotificationItem } from './NotificationItem';
+import { useI18n } from '@/i18n';
 
 interface NotificationDropdownProps {
   open: boolean;
@@ -21,6 +22,7 @@ interface NotificationDropdownProps {
 }
 
 export function NotificationDropdown({ open, onClose }: NotificationDropdownProps) {
+  const { t } = useI18n();
   const notifications = useNotificationStore((s) => s.notifications);
   const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
   const isPhone = useIsPhone();
@@ -103,7 +105,7 @@ export function NotificationDropdown({ open, onClose }: NotificationDropdownProp
         }}
       >
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-          Notifications
+          {t('shell.notifications.title')}
         </span>
         {notifications.some((n) => !n.read) && (
           <button
@@ -119,7 +121,7 @@ export function NotificationDropdown({ open, onClose }: NotificationDropdownProp
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Mark all read
+            {t('shell.notifications.markAll')}
           </button>
         )}
       </div>
@@ -128,7 +130,7 @@ export function NotificationDropdown({ open, onClose }: NotificationDropdownProp
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {notifications.length === 0 ? (
           <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-            No notifications
+            {t('shell.notifications.empty')}
           </div>
         ) : (
           notifications.slice(0, 10).map((n) => (

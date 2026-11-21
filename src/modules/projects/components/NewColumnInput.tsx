@@ -13,12 +13,14 @@
 import { useState, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { useI18n } from '@/i18n';
 
 const COLUMN_COLOR_PRESETS = [
   '#94a3b8', '#3b82f6', '#8b5cf6', '#f59e0b', '#22c55e', '#ef4444',
 ] as const;
 
 export function NewColumnInput({ boardId }: { boardId: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [color, setColor] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function NewColumnInput({ boardId }: { boardId: string }) {
           flexShrink: 0,
         }}
       >
-        <Plus size={14} /> Add column
+        <Plus size={14} /> {t('projects.newColumnInput.open')}
       </button>
     );
   }
@@ -90,13 +92,14 @@ export function NewColumnInput({ boardId }: { boardId: string }) {
     >
       <input
         autoFocus
+        aria-label={t('projects.newColumnInput.titlePlaceholder')}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleCreate();
           if (e.key === 'Escape') reset();
         }}
-        placeholder="Column title..."
+        placeholder={t('projects.newColumnInput.titlePlaceholder')}
         style={{
           width: '100%',
           background: 'var(--card)',
@@ -117,6 +120,7 @@ export function NewColumnInput({ boardId }: { boardId: string }) {
             key={c}
             onClick={() => setColor(color === c ? null : c)}
             title={c}
+            aria-label={t('projects.newColumnInput.color', { color: c })}
             style={{
               width: 18,
               height: 18,
@@ -131,11 +135,12 @@ export function NewColumnInput({ boardId }: { boardId: string }) {
         <input
           type="number"
           min={1}
+          aria-label={t('projects.newColumnInput.wipTitle')}
           value={wipLimit}
           onChange={(e) => setWipLimit(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
           placeholder="WIP"
-          title="WIP limit (optional)"
+          title={t('projects.newColumnInput.wipTitle')}
           style={{
             width: 52,
             marginLeft: 'auto',
@@ -168,7 +173,7 @@ export function NewColumnInput({ boardId }: { boardId: string }) {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          Add
+          {t('projects.newColumnInput.add')}
         </button>
         <button
           onClick={reset}
@@ -183,7 +188,7 @@ export function NewColumnInput({ boardId }: { boardId: string }) {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          Cancel
+          {t('projects.newColumnInput.cancel')}
         </button>
       </div>
     </div>

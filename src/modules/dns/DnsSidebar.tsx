@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { Crown, RefreshCw, Globe, Server, BookOpen, Home } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 export type DnsSection = 'welcome' | 'subdomain' | 'ddns' | 'local-domains' | 'zones' | 'providers';
 
@@ -25,6 +26,7 @@ interface DnsSidebarProps {
 }
 
 export function DnsSidebar({ active, onChange, zoneCount, providerCount, localDomainCount, hasSubdomain }: DnsSidebarProps) {
+  const { t } = useI18n();
   return (
     <div style={{
       width: 210, flexShrink: 0,
@@ -45,18 +47,18 @@ export function DnsSidebar({ active, onChange, zoneCount, providerCount, localDo
         DNS
       </div>
 
-      <NavItem icon={BookOpen} label="Empezar aquí" active={active === 'welcome'} onClick={() => onChange('welcome')} />
+      <NavItem icon={BookOpen} label={t('dns.startHere')} active={active === 'welcome'} onClick={() => onChange('welcome')} />
 
-      <SectionHeader label="Management" />
-      <NavItem icon={Crown} label="Mi subdominio" active={active === 'subdomain'} onClick={() => onChange('subdomain')} dot={hasSubdomain ? '#22c55e' : undefined} badge="PRO" />
-      <NavItem icon={RefreshCw} label="DNS Dinámico" active={active === 'ddns'} onClick={() => onChange('ddns')} />
-      <NavItem icon={Home} label="Dominios locales" active={active === 'local-domains'} onClick={() => onChange('local-domains')} count={localDomainCount} />
+      <SectionHeader label={t('dns.management')} />
+      <NavItem icon={Crown} label={t('dns.mySubdomain')} active={active === 'subdomain'} onClick={() => onChange('subdomain')} dot={hasSubdomain ? '#22c55e' : undefined} badge="PRO" />
+      <NavItem icon={RefreshCw} label={t('dns.dynamicDns')} active={active === 'ddns'} onClick={() => onChange('ddns')} />
+      <NavItem icon={Home} label={t('dns.localDomains')} active={active === 'local-domains'} onClick={() => onChange('local-domains')} count={localDomainCount} />
 
       <Divider />
 
-      <SectionHeader label="Configuration" />
-      <NavItem icon={Globe} label="Zonas" active={active === 'zones'} onClick={() => onChange('zones')} count={zoneCount} />
-      <NavItem icon={Server} label="Proveedores" active={active === 'providers'} onClick={() => onChange('providers')} count={providerCount} />
+      <SectionHeader label={t('dns.configuration')} />
+      <NavItem icon={Globe} label={t('dns.zones')} active={active === 'zones'} onClick={() => onChange('zones')} count={zoneCount} />
+      <NavItem icon={Server} label={t('dns.providers')} active={active === 'providers'} onClick={() => onChange('providers')} count={providerCount} />
 
       <div style={{ flex: 1 }} />
     </div>

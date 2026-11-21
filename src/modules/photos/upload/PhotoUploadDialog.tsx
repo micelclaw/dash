@@ -14,6 +14,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, UploadCloud, Smartphone, Image as ImageIcon } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useSharedTargetFiles } from './useSharedTargetFiles';
+import { useI18n } from '@/i18n';
 
 interface PhotoUploadDialogProps {
   open: boolean;
@@ -31,6 +32,7 @@ interface PhotoUploadDialogProps {
  *   3. Auto-drain of the share-target cache on open (covers the ?shared=1 land).
  */
 export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialogProps) {
+  const { t } = useI18n();
   const [dragging, setDragging] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +95,9 @@ export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialog
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('photos.extra.uploadPhotos')}
         style={{
           width: 'min(560px, 100%)',
           maxHeight: '90vh', overflowY: 'auto',
@@ -105,8 +110,8 @@ export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialog
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>Upload photos</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4, display: 'flex' }}>
+          <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>{t('photos.extra.uploadPhotos')}</span>
+          <button onClick={onClose} aria-label={t('photos.extra.close')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4, display: 'flex' }}>
             <X size={16} />
           </button>
         </div>
@@ -115,6 +120,10 @@ export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialog
           {/* Zone 1: drop / pick */}
           <div
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+            role="button"
+            tabIndex={0}
+            aria-label={t('photos.extra.dropOrBrowse')}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
@@ -130,9 +139,9 @@ export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialog
           >
             <UploadCloud size={28} style={{ color: 'var(--mod-photos)' }} />
             <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
-              Drop photos here or click to browse
+              {t('photos.extra.dropOrBrowse')}
             </div>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Images and videos</div>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{t('photos.extra.imagesAndVideos')}</div>
             <input
               ref={fileInputRef}
               type="file"
@@ -147,7 +156,7 @@ export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialog
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: 14, background: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
             <div style={{ flexShrink: 0, width: 110, height: 110, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {qrDataUrl ? (
-                <img src={qrDataUrl} alt="QR to open Micelclaw on your phone" style={{ width: '100%', height: '100%' }} />
+                <img src={qrDataUrl} alt={t('photos.extra.qrAlt')} style={{ width: '100%', height: '100%' }} />
               ) : (
                 <ImageIcon size={28} style={{ color: '#999' }} />
               )}
@@ -155,10 +164,10 @@ export function PhotoUploadDialog({ open, onClose, onUpload }: PhotoUploadDialog
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
                 <Smartphone size={14} style={{ color: 'var(--mod-photos)' }} />
-                From your phone
+                {t('photos.extra.fromPhone')}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Scan to open Micelclaw, sign in once, then <strong style={{ color: 'var(--text)' }}>Add to Home Screen</strong>. After that you can share photos from your gallery straight into Micelclaw.
+                {t('photos.extra.phoneInstructions')}
               </div>
               <code style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>{origin}</code>
             </div>

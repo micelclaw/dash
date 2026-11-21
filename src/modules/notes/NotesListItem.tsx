@@ -21,6 +21,7 @@ import { RelateModal } from '@/components/shared/RelateModal';
 import { timeAgo } from '@/lib/time';
 import { getPreview } from '@/lib/text';
 import type { Note } from '@/types/notes';
+import { useI18n } from '@/i18n';
 
 interface NotesListItemProps {
   note: Note;
@@ -32,6 +33,7 @@ interface NotesListItemProps {
 }
 
 export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDelete }: NotesListItemProps) {
+  const { t } = useI18n();
   const [highlight, setHighlight] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [relateOpen, setRelateOpen] = useState(false);
@@ -74,7 +76,7 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
             color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
             {note.pinned && <span style={{ marginRight: 4 }}>📌</span>}
-            {note.title || 'Untitled'}
+            {note.title || t('notes.untitled')}
           </div>
 
           {/* Preview */}
@@ -105,13 +107,13 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
         </div>
       }
       items={[
-        { label: note.pinned ? 'Unpin' : 'Pin', icon: Pin, onClick: onPin },
-        { label: 'Archive', icon: Archive, onClick: onArchive },
+        { label: t(note.pinned ? 'notes.unpin' : 'notes.pin'), icon: Pin, onClick: onPin },
+        { label: t('notes.archive'), icon: Archive, onClick: onArchive },
         { label: '', icon: undefined, onClick: () => {}, separator: true },
-        { label: 'Share', icon: Share2, onClick: () => setShareOpen(true) },
-        { label: 'Relate', icon: Link2, onClick: () => setRelateOpen(true) },
+        { label: t('notes.share'), icon: Share2, onClick: () => setShareOpen(true) },
+        { label: t('notes.relate'), icon: Link2, onClick: () => setRelateOpen(true) },
         { label: '', icon: undefined, onClick: () => {}, separator: true },
-        { label: 'Delete', icon: Trash, onClick: onDelete, variant: 'danger' as const },
+        { label: t('notes.delete'), icon: Trash, onClick: onDelete, variant: 'danger' as const },
       ]}
     />
     {shareOpen && (
@@ -119,7 +121,7 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
         open={shareOpen}
         entityType="note"
         entityId={note.id}
-        entityTitle={note.title || 'Untitled'}
+        entityTitle={note.title || t('notes.untitled')}
         onClose={() => setShareOpen(false)}
       />
     )}

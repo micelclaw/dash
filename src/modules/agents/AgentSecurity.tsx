@@ -1,854 +1,427 @@
-import { useVisibleSecurityPolling } from '@/hooks/useVisibleSecurityPolling';
-import { SecurityRecoveryStatus } from '@/components/settings/sections/security/SecurityRecoveryStatus';
-/** Desired/effective command security for one managed agent. */
-
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Activity,
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  KeyRound,
-  Layers3,
-  Loader2,
-  Plus,
-  RotateCw,
-  Shield,
-  ShieldAlert,
-  ShieldOff,
-  Trash2,
-} from 'lucide-react';
+/** Security v3: approved hierarchy, inline help and transactions. No presentation action writes policy. */
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { RetryBanner } from '@/components/settings/shared/RetryBanner';
 import { ApiError } from '@/services/api';
-import { breakGlassLeasePresentation } from '@/services/security-policy.ui-state';
 import { useAuthStore } from '@/stores/auth.store';
+import { useVisibleSecurityPolling } from '@/hooks/useVisibleSecurityPolling';
 import {
-  addAgentSecurityRule,
-  getAgentSecurity,
-  getAgentSecurityRuntime,
-  getSecuritySettings,
-  listCommandProfiles,
-  previewAgentSecurity,
-  reconcileAgentSecurity,
-  requestAgentBreakGlass,
-  revokeAgentBreakGlass,
-  revokeAgentSecurityRule,
-  updateAgentSecurity,
-  type AgentSecurity as AgentSecurityData,
-  type AgentSecurityRuntime,
-  type AgentSecurityPreview,
-  type CommandProfileSummary,
-  type SecurityRuntimeAdapterStatus,
-  type SecurityExecMode,
-  type SecurityPolicySettings,
-  type SecurityRuleEffect,
+  addAgentSecurityRule, getAgentSecurity, getAgentSecurityRuntime, getSecuritySettings, listCommandProfiles, listProtectedCategories,
+  previewAgentSecurity, reconcileAgentSecurity, requestAgentBreakGlass, revokeAgentBreakGlass, revokeAgentSecurityRule, updateAgentSecurity,
+  type AgentSecurity as SecurityData, type AgentSecurityRuntime, type AgentSecurityPreview, type AgentSecurityPolicyInput,
+  type CommandProfileSummary, type ProtectedSecurityCategory, type SecurityExecMode, type SecurityPolicySettings, type SecurityRuleEffect,
 } from '@/services/security-policy.service';
-import { AgentSandboxConfig } from './AgentSandboxConfig';
+import { AgentSandboxConfig, type SandboxViewState } from './AgentSandboxConfig';
+import { SecurityHelpProvider, SecurityHelp, SecuritySection, SecurityFacts, SecurityButton, StatusDot, StatusText, InlineReview, RadioChoice, focusSecurity, settingClass, inputClass, type AspectStatus } from './security/SecurityUi';
+import { commandStatus, displayTime, effectiveLease, effectCopy, fallbackCopy, freshTime, isExecMode, leaseOpen, leaseStatus, modeCopy, modeRank, safeSecurityText, sourceCopy, verifiedCommands } from './security/security-state';
 
 interface AgentSecurityProps {
   agentId: string;
   agentName: string;
   showSandbox?: boolean;
   onChanged?: () => void;
+  embedded?: boolean;
+  profileCatalogRevision?: number;
+  onManageProfiles?: () => void;
 }
+type Fallback = keyof typeof fallbackCopy;
+type PolicyDraft = { mode: SecurityExecMode; profileId: string; fallback: Fallback };
+type Confirmation = { kind: 'reconcile'; agentId: string; revision: number; mode: SecurityExecMode } | { kind: 'tighten'; fingerprint: string; effect: 'prompt' | 'block'; revision: number } | { kind: 'remove'; id: string; revision: number } | { kind: 'add'; revision: number } | { kind: 'revoke'; id: string; revision: number };
+const durations = [5, 15, 30, 60] as const;
+const profileSignature = (profile?: CommandProfileSummary) => JSON.stringify(profile ? [profile.id, profile.published_version, profile.extension_policy, profile.max_exec_mode, profile.updated_at] : null);
+const savedDraft = (data: SecurityData): PolicyDraft => ({ mode: data.desired.mode ?? 'deny', profileId: data.desired.profile_id ?? '', fallback: data.desired.unattended_fallback ?? 'deny_and_notify' });
+const message = (error: unknown) => safeSecurityText(error instanceof Error ? error.message : 'No se pudo completar la operación');
+const forbidden = (error: unknown) => error instanceof ApiError && error.status !== undefined && [401, 403, 404].includes(error.status);
 
-const MODE_LABELS: Record<SecurityExecMode, { label: string; description: string }> = {
-  deny: { label: 'Deny', description: 'No command execution.' },
-  allowlist: { label: 'Allowlist', description: 'Only matching published rules.' },
-  ask: { label: 'Ask', description: 'Prompt when policy requires a human decision.' },
-  auto: { label: 'Automatic', description: 'Use the complete policy decision graph.' },
-};
-
-const MODE_RANK: Record<SecurityExecMode, number> = {
-  deny: 0,
-  allowlist: 1,
-  ask: 2,
-  auto: 3,
-};
-
-const BREAK_GLASS_DURATIONS = [5, 15, 30] as const;
-type BreakGlassDuration = (typeof BREAK_GLASS_DURATIONS)[number];
-type RuntimeAdapterView = AgentSecurityData['adapters'][number] | SecurityRuntimeAdapterStatus;
-
-const SENSITIVE_FIELD = /(?:authorization|cookie|credential|password|private[_-]?key|api[_-]?key|secret|token)/i;
-
-function safeDisplayText(value: string, maxLength = 180): string {
-  const redacted = value
-    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
-    .replace(/((?:authorization|cookie|credential|password|private[_-]?key|api[_-]?key|secret|token)\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]');
-  return redacted.length > maxLength ? `${redacted.slice(0, maxLength - 1)}…` : redacted;
-}
-
-function compactSafeValue(value: unknown, depth = 0): unknown {
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (typeof value === 'string') return safeDisplayText(value);
-  if (depth >= 2) return Array.isArray(value) ? `[${value.length} items]` : '[object]';
-  if (Array.isArray(value)) {
-    const items = value.slice(0, 8).map((item) => compactSafeValue(item, depth + 1));
-    return value.length > items.length ? [...items, `… ${value.length - items.length} more`] : items;
-  }
-  if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).slice(0, 12);
-    const compact = Object.fromEntries(entries.map(([key, item]) => [
-      key,
-      SENSITIVE_FIELD.test(key) ? '[redacted]' : compactSafeValue(item, depth + 1),
-    ]));
-    const omitted = Object.keys(value as Record<string, unknown>).length - entries.length;
-    if (omitted > 0) compact._more = `${omitted} fields omitted`;
-    return compact;
-  }
-  return String(value);
-}
-
-function CompactPolicyValue({ value, empty = 'Not reported' }: { value: unknown; empty?: string }) {
-  const isEmpty = value === null || value === undefined
-    || (typeof value === 'object' && Object.keys(value as object).length === 0);
-  if (isEmpty) return <span className="text-xs text-[var(--text-muted)]">{empty}</span>;
-  return <pre className="m-0 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-sm)] bg-[var(--surface)] p-2 font-mono text-[11px] leading-5 text-[var(--text-dim)]">{JSON.stringify(compactSafeValue(value), null, 2)}</pre>;
-}
-
-function AdapterCard({ adapter }: { adapter: RuntimeAdapterView }) {
-  const [open, setOpen] = useState(false);
-  const panelId = `security-adapter-${adapter.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-  const detailed = 'supported_scopes' in adapter;
-  const scopes = detailed ? adapter.supported_scopes : [];
-  const modes = detailed ? adapter.supported_modes : [];
-  const capabilities = detailed ? adapter.guard_capabilities : null;
-  const notes = detailed ? (adapter.notes ?? []).slice(0, 8) : [];
-  const sourceLayers = Array.isArray(adapter.source_layers) ? adapter.source_layers.slice(0, 12) : [];
-
-  return (
-    <div className="overflow-hidden rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)]">
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={panelId} className="flex w-full items-start gap-3 border-0 bg-transparent p-3 text-left hover:bg-[var(--surface-hover)]">
-        <span className="mt-0.5 text-[var(--text-muted)]">{open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span>
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium text-[var(--text)]">{adapter.label ?? adapter.id}</span><StatePill state={adapter.availability} /></span>
-          <span className="mt-1 block text-[11px] leading-4 text-[var(--text-muted)]">
-            {detailed ? adapter.family.replaceAll('_', ' ') : 'runtime adapter'}
-            {scopes.length > 0 ? ` · ${scopes.join(', ')}` : ''}
-            {modes.length > 0 ? ` · modes: ${modes.join(', ')}` : ''}
-          </span>
-        </span>
-      </button>
-      {open && (
-        <div id={panelId} className="space-y-4 border-t border-[var(--border)] p-3">
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div><div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Requested policy</div><CompactPolicyValue value={adapter.requested_policy} /></div>
-            <div><div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Effective policy</div><CompactPolicyValue value={adapter.effective_policy} empty="Not observed by the runtime" /></div>
-          </div>
-          <div>
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Source layers</div>
-            {sourceLayers.length === 0 ? <span className="text-xs text-[var(--text-muted)]">No source layers reported.</span> : (
-              <div className="space-y-2">{sourceLayers.map((layer, index) => {
-                const source = typeof layer === 'object' && layer !== null && 'source' in layer ? String(layer.source) : `Layer ${index + 1}`;
-                const value = typeof layer === 'object' && layer !== null && 'value' in layer ? layer.value : layer;
-                return <div key={`${source}-${index}`} className="grid min-w-0 gap-1 sm:grid-cols-[150px_minmax(0,1fr)]"><span className="text-xs font-medium text-[var(--text-dim)]">{source.replaceAll('_', ' ')}</span><CompactPolicyValue value={value} /></div>;
-              })}</div>
-            )}
-          </div>
-          {capabilities && (
-            <div><div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Guard capabilities</div><div className="flex flex-wrap gap-2">{Object.entries(capabilities).map(([name, enabled]) => <span key={name} className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${enabled ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'}`}>{name.replaceAll('_', ' ')} · {enabled ? 'yes' : 'no'}</span>)}</div></div>
-          )}
-          {detailed && <div className="text-[11px] leading-5 text-[var(--text-muted)]">Applies: {adapter.apply_effect.replaceAll('_', ' ')} · approvals: {adapter.approval_transport.replaceAll('_', ' ')}</div>}
-          {notes.length > 0 && <div><div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Notes</div><ul className="m-0 list-disc space-y-1 pl-5 text-xs leading-5 text-[var(--text-dim)]">{notes.map((note, index) => <li key={index}>{safeDisplayText(note, 240)}</li>)}</ul></div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function observedGuardHealth(runtime: AgentSecurityRuntime | null, security: AgentSecurityData | null): string {
-  const runtimeHealth = runtime?.guard.health;
-  if (typeof runtimeHealth === 'string') return runtimeHealth;
-  const effectiveHealth = security?.effective.policy?.guard;
-  return typeof effectiveHealth === 'string' ? effectiveHealth : 'unavailable';
-}
-
-function breakGlassErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) {
-    return error instanceof Error ? error.message : 'No se pudo activar el acceso temporal';
-  }
-  if (error.code === 'INVALID_SECURITY_PIN') return 'El PIN de seguridad es incorrecto.';
-  if (error.code === 'SECURITY_PIN_REQUIRED') return 'Configura primero un PIN de seguridad para tu cuenta.';
-  if (error.code === 'BREAK_GLASS_REQUIRES_INTERACTIVE_BASE_MODE') return 'La política base debe estar guardada en modo Ask o Automatic.';
-  if (error.code === 'BREAK_GLASS_DURATION_EXCEEDED') return 'La duración supera el máximo definido por el owner.';
-  if (error.code === 'BREAK_GLASS_ROLE_REQUIRED') return 'Tu rol no puede activar acceso completo temporal.';
-  return error.message;
-}
-
-function stateColor(state: string): string {
-  if (state === 'in_sync' || state === 'healthy' || state === 'active') return '#22c55e';
-  if (state === 'pending_application' || state === 'reconciliation_required' || state === 'drifted') return '#f59e0b';
-  if (state === 'application_failed' || state === 'unhealthy') return '#ef4444';
-  if (state === 'degraded') return '#f59e0b';
-  if (state === 'unavailable' || state === 'unmanaged' || state === 'legacy_unmanaged' || state === 'revoked' || state === 'expired') return '#94a3b8';
-  return 'var(--text-dim)';
-}
-
-function StatePill({ state }: { state: string }) {
-  const color = stateColor(state);
-  const variableColor = color.startsWith('var(');
-  return <span role="status" className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase" style={{ color, borderColor: variableColor ? 'var(--border)' : `${color}55`, background: variableColor ? 'var(--card)' : `${color}12` }}>{state.replaceAll('_', ' ')}</span>;
-}
-
-type BreakGlassLease = AgentSecurityData['break_glass'][number];
-
-const BREAK_GLASS_STATUS_COPY: Record<BreakGlassLease['status'], string> = {
-  pending_application: 'Waiting for runtime application',
-  active: 'Core lease is active',
-  application_failed: 'Runtime application failed',
-  revoked: 'Lease revoked',
-  expired: 'Lease expired',
-};
-
-function BreakGlassLeaseState({ lease }: { lease: BreakGlassLease }) {
-  const presentation = breakGlassLeasePresentation(lease);
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2" aria-label={`Lease status: ${lease.status.replaceAll('_', ' ')}`}>
-      <StatePill state={lease.status} />
-      {presentation.effective ? (
-        <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-400">Effective now</span>
-      ) : lease.status === 'active' ? (
-        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-[var(--amber)]">Not verified effective</span>
-      ) : null}
-      <span className="text-[10px] text-[var(--text-muted)]">
-        Runtime application: {lease.provider_application.replaceAll('_', ' ')}
-        {lease.guard_policy_version !== null ? ` · guard v${lease.guard_policy_version}` : ''}
-      </span>
-    </div>
-  );
-}
-
-function JsonFacts({ value }: { value: Record<string, unknown> | null }) {
-  if (!value || Object.keys(value).length === 0) return <span className="text-xs text-[var(--text-muted)]">Not observed</span>;
-  return (
-    <dl className="grid gap-2 sm:grid-cols-2">
-      {Object.entries(value).slice(0, 12).map(([key, item]) => (
-        <div key={key} className="min-w-0 rounded-[var(--radius-sm)] bg-[var(--card)] p-2">
-          <dt className="text-[10px] uppercase tracking-wide text-[var(--text-muted)]">{key.replaceAll('_', ' ')}</dt>
-          <dd className="m-0 mt-1 break-words font-mono text-xs text-[var(--text-dim)]">{typeof item === 'object' ? JSON.stringify(item) : String(item)}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function ToolSecurityRegistryStatus({ value }: { value: unknown }) {
+function registryData(value: unknown) {
   if (!value || typeof value !== 'object') return null;
-  const status = value as Record<string, unknown>;
-  const contracts = status.registered_contracts, pending = status.pending_tool_count;
-  if (status.enforced !== true || typeof contracts !== 'number' || !Number.isSafeInteger(contracts) || contracts < 0
-    || typeof pending !== 'number' || !Number.isSafeInteger(pending) || pending < 0) return null;
-  const names = Array.isArray(status.pending_native_tools) ? status.pending_native_tools
-    .filter((name): name is string => typeof name === 'string' && name.length <= 160).slice(0, 50) : [];
-  return <aside role="status" aria-label="Tool security registry" className="mt-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] p-3 text-xs text-[var(--text-dim)]">
-    <strong className="text-[var(--text)]">Tool security registry</strong>
-    <p className="mb-0 mt-1">{contracts} registered contracts. {pending > 0
-      ? `${pending} tools have contracts pending review. Unreviewed contracts are blocked.`
-      : 'No pending contracts reported.'}</p>
-    {names.length > 0 && <details className="mt-2"><summary className="cursor-pointer">View pending native tools</summary>
-      <ul className="mb-0 mt-2 pl-4">{names.map(name => <li key={name}>{name}</li>)}</ul>
-    </details>}
+  const data = value as Record<string, unknown>;
+  if (typeof data.registered_contracts !== 'number' || !Number.isSafeInteger(data.registered_contracts) || data.registered_contracts < 0
+    || typeof data.pending_tool_count !== 'number' || !Number.isSafeInteger(data.pending_tool_count) || data.pending_tool_count < 0) return null;
+  return { enforced: data.enforced === true, count: data.registered_contracts, pending: data.pending_tool_count, names: Array.isArray(data.pending_native_tools) ? data.pending_native_tools.filter((name): name is string => typeof name === 'string').slice(0, 50) : [] };
+}
+/** Also consumed by the tool registry contract harness. The pending list is always visible. */
+export function ToolSecurityRegistryStatus({ value }: { value: unknown }) {
+  const registry = registryData(value);
+  if (!registry) return null;
+  return <aside role="status" aria-label="Tool security registry" className="mt-4 text-xs leading-relaxed text-[var(--text-dim)]">
+    <h4 className="m-0 font-semibold text-[var(--text)]">Contratos de herramientas del servidor<SecurityHelp topic="registry" /></h4>
+    <p>{registry.count} contratos registrados · {registry.pending} pendientes. {registry.enforced ? 'Control activo: los contratos sin revisar permanecen bloqueados.' : 'Control del registro desactivado: no se puede afirmar ese bloqueo.'}</p>
+    <p>Alcance global del servidor. No se ha comprobado la asignación a este agente.</p>
+    <ul className="m-0 list-none divide-y divide-[var(--border)] p-0">{registry.names.map(name => <li key={name} className="py-2 [overflow-wrap:anywhere]">{safeSecurityText(name)} · pendiente de revisión</li>)}</ul>
+    {registry.pending > registry.names.length && <p>Se muestran {registry.names.length} de {registry.pending} pendientes comunicados.</p>}
   </aside>;
 }
 
-export function AgentSecurity({ agentId, agentName, showSandbox = true, onChanged }: AgentSecurityProps) {
-  const role = useAuthStore((state) => state.user?.role ?? 'user');
-  const [security, setSecurity] = useState<AgentSecurityData | null>(null);
+/** Structured allowlisted presentation. JSON is never the primary explanation. */
+function ReadableFacts({ value, depth = 0 }: { value: unknown; depth?: number }): ReactNode {
+  if (value === null || value === undefined) return <span>Sin dato comprobado</span>;
+  if (typeof value !== 'object') return <span>{safeSecurityText(value)}</span>;
+  if (depth > 2) return <span>Información adicional no resumida</span>;
+  if (Array.isArray(value)) return <ul className="m-0 space-y-1 pl-4">{value.slice(0, 20).map((item, index) => <li key={index}><ReadableFacts value={item} depth={depth + 1} /></li>)}</ul>;
+  return <dl className="m-0 space-y-1">{Object.entries(value).slice(0, 20).map(([key, item]) => <div key={key} className="min-w-0 [overflow-wrap:anywhere]"><dt className="inline text-[var(--text-muted)]">{key.replaceAll('_', ' ')}: </dt><dd className="m-0 inline">{/(?:authorization|cookie|credential|password|private.?key|api.?key|secret|token)/i.test(key) ? '[oculto]' : <ReadableFacts value={item} depth={depth + 1} />}</dd></div>)}</dl>;
+}
+function leaseErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === 'INVALID_SECURITY_PIN') return 'El PIN de seguridad es incorrecto. No se creó un acceso temporal.';
+    if (error.code === 'SECURITY_PIN_REQUIRED') return 'Configura primero un PIN de seguridad en tu cuenta; no se creó un acceso.';
+    if (error.code === 'BREAK_GLASS_REQUIRES_INTERACTIVE_BASE_MODE') return 'La base compilada debe permitir Consultar o Revisión automática.';
+  }
+  return message(error);
+}
+export function AgentSecurity(props: AgentSecurityProps) {
+  const identity = useAuthStore(state => `${state.user?.id ?? 'anonymous'}:${state.user?.role ?? 'user'}`);
+  return <SecurityHelpProvider key={`${props.agentId}:${identity}`}><SecurityEditor {...props} /></SecurityHelpProvider>;
+}
+function SecurityEditor({ agentId, agentName, showSandbox = true, onChanged, embedded = false, profileCatalogRevision = 0, onManageProfiles }: AgentSecurityProps) {
+  const actor = useAuthStore(state => state.user);
+  const prefix = useId().replaceAll(':', '');
+  const id = (name: string) => `${prefix}-${name}`;
+  const sectionId = (name: string) => name === 'isolation' ? `isolation-${agentId}` : id(name);
+  const root = useRef<HTMLDivElement>(null);
+  const confirmationReturn = useRef<HTMLElement | null>(null);
+  const alive = useRef(false), requestSequence = useRef(0), mutationLock = useRef(false), initialized = useRef(false);
+  const authority = useRef(0);
+  const metadataSequence = useRef(0);
+  const securityRef = useRef<SecurityData | null>(null);
+  const [security, setSecurity] = useState<SecurityData | null>(null);
   const [runtime, setRuntime] = useState<AgentSecurityRuntime | null>(null);
-  const [policySettings, setPolicySettings] = useState<SecurityPolicySettings | null>(null);
+  const [settings, setSettings] = useState<SecurityPolicySettings | null>(null);
   const [profiles, setProfiles] = useState<CommandProfileSummary[]>([]);
+  const [categories, setCategories] = useState<ProtectedSecurityCategory[]>([]);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [metadataLoading, setMetadataLoading] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
-  const [runtimeLoading, setRuntimeLoading] = useState(false);
-  const [runtimeRouteAvailable, setRuntimeRouteAvailable] = useState(false);
-  const [mode, setMode] = useState<SecurityExecMode>('deny');
-  const [profileId, setProfileId] = useState('');
-  const [fallback, setFallback] = useState<'deny_and_notify' | 'deny' | 'fail_closed'>('deny_and_notify');
-  const [preview, setPreview] = useState<AgentSecurityPreview | null>(null);
-  const [layersOpen, setLayersOpen] = useState(true);
+  const [receivedAt, setReceivedAt] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [draft, setDraft] = useState<PolicyDraft>({ mode: 'deny', profileId: '', fallback: 'deny_and_notify' });
+  const [preview, setPreview] = useState<{ data: AgentSecurityPreview; input: string; context: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [viewNotice, setViewNotice] = useState(false);
+  const [sandbox, setSandbox] = useState<SandboxViewState>({ status: { color: 'orange', text: 'Aislamiento sin comprobar' }, pending: false, busy: false });
+  const [sandboxRefresh, setSandboxRefresh] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [newEffect, setNewEffect] = useState<SecurityRuleEffect>('block');
   const [newExecutable, setNewExecutable] = useState('');
   const [newArguments, setNewArguments] = useState('');
-  const [breakGlassOpen, setBreakGlassOpen] = useState(false);
-  const [breakGlassDuration, setBreakGlassDuration] = useState<BreakGlassDuration>(5);
-  const [breakGlassReason, setBreakGlassReason] = useState('');
-  const [breakGlassPin, setBreakGlassPin] = useState('');
-  const [breakGlassError, setBreakGlassError] = useState<string | null>(null);
-  const [breakGlassSubmitting, setBreakGlassSubmitting] = useState(false);
-  const [revokingLeaseId, setRevokingLeaseId] = useState<string | null>(null);
+  const [leaseForm, setLeaseForm] = useState(false);
+  const [duration, setDuration] = useState<(typeof durations)[number]>(5);
+  const [reason, setReason] = useState('');
+  const [pin, setPin] = useState('');
+  const [leaseReview, setLeaseReview] = useState(false);
+  const [leaseError, setLeaseError] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
-  const observationRoot = useRef<HTMLDivElement>(null);
-  const refreshObservation = useCallback(async (isCurrent: () => boolean) => {
-    try { const observed = await getAgentSecurityRuntime(agentId); if (!isCurrent()) return; setRuntime(observed); setRuntimeError(null); }
-    catch (error) { if (!isCurrent()) return; setRuntimeError(error instanceof Error ? error.message : 'Runtime refresh failed'); }
-  }, [agentId]);
-  useVisibleSecurityPolling(observationRoot, refreshObservation);
-
-  const hydrate = (next: AgentSecurityData) => {
-    setSecurity(next);
-    setMode(next.desired.mode ?? 'deny');
-    setProfileId(next.desired.profile_id ?? '');
-    setFallback(next.desired.unattended_fallback ?? 'deny_and_notify');
-    if (next.inherited.profile?.extension_policy !== 'allow_unprotected') {
-      setNewEffect((effect) => effect === 'allow' ? 'block' : effect);
-    }
-    setPreview(null);
-  };
-
-  const loadRuntime = useCallback(async () => {
-    setRuntimeLoading(true);
-    setRuntimeError(null);
-    try {
-      setRuntime(await getAgentSecurityRuntime(agentId));
-      setRuntimeRouteAvailable(true);
-    } catch (runtimeLoadError) {
-      setRuntime(null);
-      if (runtimeLoadError instanceof ApiError && runtimeLoadError.status === 404) {
-        // A missing optional route is not an observed runtime failure. The
-        // primary security response remains the only source available.
-        setRuntimeRouteAvailable(false);
-      } else {
-        setRuntimeRouteAvailable(true);
-        setRuntimeError(runtimeLoadError instanceof Error
-          ? runtimeLoadError.message
-          : 'Could not load live runtime security');
+  const discardPrivateState = useCallback((cause: unknown) => {
+    // Invalidate callbacks before releasing the UI for a new authorized read.
+    authority.current++;
+    mutationLock.current = false; initialized.current = false; securityRef.current = null;
+    confirmationReturn.current = null;
+    setSecurity(null); setRuntime(null); setReceivedAt(null); setRuntimeError(null);
+    setDraft({ mode: 'deny', profileId: '', fallback: 'deny_and_notify' });
+    setPreview(null); setConfirmation(null); setNotice(null); setActionError(null); setViewNotice(false);
+    setAddOpen(false); setNewEffect('block'); setNewExecutable(''); setNewArguments('');
+    setLeaseForm(false); setLeaseReview(false); setDuration(5); setReason(''); setPin('');
+    setLeaseError(null); setRevokeError(null);
+    setSandbox({ status: { color: 'orange', text: 'Aislamiento sin comprobar' }, pending: false, busy: false });
+    setError(message(cause)); setBusy(false); setLoading(false); setMetadataLoading(false); setChecking(false);
+  }, []);
+  useEffect(() => { alive.current = true; const timer = setInterval(() => setNow(Date.now()), 1000); return () => { alive.current = false; clearInterval(timer); }; }, []);
+  const refresh = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (mutationLock.current) return;
+    const sequence = ++requestSequence.current;
+    setChecking(true);
+    let accessError: unknown;
+    const read = <T,>(promise: Promise<T>) => promise.catch(cause => {
+      if (alive.current && isCurrent() && sequence === requestSequence.current && forbidden(cause)) {
+        accessError = cause;
+        discardPrivateState(cause);
       }
-    } finally {
-      setRuntimeLoading(false);
-    }
-  }, [agentId]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setPolicySettings(null);
-    try {
-      const [nextSecurity, nextProfiles, nextPolicySettings] = await Promise.all([
-        getAgentSecurity(agentId),
-        listCommandProfiles(),
-        getSecuritySettings(),
-      ]);
-      hydrate(nextSecurity);
-      setPolicySettings(nextPolicySettings);
-      setProfiles(nextProfiles.filter((profile) => profile.status === 'published'));
-      await loadRuntime();
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Could not load agent security');
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId, loadRuntime]);
-
-  // Initial API synchronization; `load` also owns the visible request state.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [load]);
-
-  const selectedProfile = profiles.find((profile) => profile.id === profileId);
-  const policyInput = useMemo(() => security ? {
-    expected_revision: security.desired.revision,
-    requested_exec_mode: mode,
-    profile_id: mode === 'deny' ? (selectedProfile?.id ?? null) : profileId,
-    unattended_fallback: fallback,
-  } : null, [security, mode, profileId, selectedProfile?.id, fallback]);
-
-  const invalidProfile = mode !== 'deny' && !selectedProfile;
-  const ownerMaximum = role === 'owner' ? 'auto' : (security?.inherited.owner_max_user_mode ?? 'deny');
-  const profileMaximum = selectedProfile?.max_exec_mode ?? ownerMaximum;
-  const maximumModeRank = Math.min(MODE_RANK[ownerMaximum], MODE_RANK[profileMaximum]);
-  const modeExceedsLimit = MODE_RANK[mode] > maximumModeRank;
-  const invalidPolicy = invalidProfile || modeExceedsLimit;
-  const canAllowOverrides = security?.inherited.profile?.extension_policy === 'allow_unprotected';
-  const canManageEmergencyAccess = role === 'owner' || role === 'admin';
-  const guardHealth = observedGuardHealth(runtime, security);
-  const allowedBreakGlassDurations = BREAK_GLASS_DURATIONS.filter(
-    (duration) => duration <= (policySettings?.break_glass_max_minutes ?? 0),
-  );
-  const breakGlassUnavailableReason = (() => {
-    if (!canManageEmergencyAccess) return 'Solo el owner o un administrador puede gestionar acceso temporal.';
-    if (!policySettings) return 'No se pudo comprobar la configuración global de seguridad.';
-    if (role === 'admin' && !policySettings.allow_admin_break_glass) return 'El owner no ha habilitado acceso temporal para administradores.';
-    if (security?.desired.mode !== 'ask' && security?.desired.mode !== 'auto') return 'Guarda primero una política base Ask o Automatic.';
-    if (guardHealth !== 'healthy') return `El guard de seguridad no está healthy (${guardHealth}).`;
-    if (allowedBreakGlassDurations.length === 0) return 'El máximo configurado no permite ninguna duración disponible.';
-    return null;
-  })();
-
-  const resetBreakGlassForm = () => {
-    setBreakGlassDuration(5);
-    setBreakGlassReason('');
-    setBreakGlassPin('');
-    setBreakGlassError(null);
-  };
-
-  const openBreakGlass = () => {
-    if (breakGlassUnavailableReason) return;
-    resetBreakGlassForm();
-    setBreakGlassDuration(allowedBreakGlassDurations[0] ?? 5);
-    setBreakGlassOpen(true);
-  };
-
-  const submitBreakGlass = async () => {
-    const reason = breakGlassReason.trim();
-    if (
-      breakGlassUnavailableReason
-      || !allowedBreakGlassDurations.includes(breakGlassDuration)
-      || reason.length < 8
-      || !breakGlassPin
-    ) return;
-    setBreakGlassSubmitting(true);
-    setBreakGlassError(null);
-    try {
-      await requestAgentBreakGlass(agentId, {
-        duration_minutes: breakGlassDuration,
-        reason,
-        pin: breakGlassPin,
+      throw cause;
+    });
+    const results = await Promise.allSettled([read(getAgentSecurity(agentId)), read(getAgentSecurityRuntime(agentId))]);
+    if (!alive.current || !isCurrent() || sequence !== requestSequence.current) return;
+    if (accessError) return; // A fulfilled sibling must not restore data after a denial.
+    const [policy, observed] = results;
+    if (policy.status === 'fulfilled') {
+      const next = policy.value;
+      if (securityRef.current && JSON.stringify({ desired: securityRef.current.desired, rules: securityRef.current.rules }) !== JSON.stringify({ desired: next.desired, rules: next.rules })) {
+        setPreview(null); setConfirmation(null); setLeaseReview(false);
+        setNotice('La configuración guardada ha cambiado. El borrador se conserva; vuelve a revisar antes de guardar.');
+      }
+      const previous = securityRef.current;
+      setDraft(current => {
+        if (!initialized.current || !previous) return savedDraft(next);
+        const old = savedDraft(previous), saved = savedDraft(next);
+        return { mode: current.mode !== old.mode ? current.mode : saved.mode, profileId: current.profileId !== old.profileId ? current.profileId : saved.profileId, fallback: current.fallback !== old.fallback ? current.fallback : saved.fallback };
       });
-      setBreakGlassOpen(false);
-      resetBreakGlassForm();
-      toast.success('Solicitud de acceso temporal procesada; comprobando el estado efectivo del runtime');
-      await load();
-      onChanged?.();
-    } catch (requestError) {
-      const message = breakGlassErrorMessage(requestError);
-      setBreakGlassError(message);
-      setBreakGlassPin('');
-      toast.error(message);
-    } finally {
-      setBreakGlassSubmitting(false);
+      initialized.current = true; securityRef.current = next; setSecurity(next); setError(null);
+    } else {
+      setError(message(policy.reason)); setPreview(null); setConfirmation(null); setLeaseReview(false);
     }
+    if (observed.status === 'fulfilled') { setRuntime(observed.value); setRuntimeError(null); }
+    else { setRuntime(null); setRuntimeError(message(observed.reason)); setLeaseReview(false); }
+    setReceivedAt(policy.status === 'fulfilled' && observed.status === 'fulfilled' ? new Date().toISOString() : null);
+    setLoading(false); setChecking(false); setNow(Date.now());
+  }, [agentId, discardPrivateState]);
+  useVisibleSecurityPolling(root, refresh);
+  const loadMetadata = useCallback(async () => {
+    const sequence = ++metadataSequence.current;
+    setMetadataLoading(true);
+    const [ps, global, protectedList] = await Promise.allSettled([listCommandProfiles(), getSecuritySettings(), listProtectedCategories()]);
+    if (!alive.current || sequence !== metadataSequence.current) return;
+    setMetadataLoading(false);
+    if (ps.status === 'fulfilled') setProfiles(ps.value.filter(profile => profile.status === 'published')); else setProfiles([]);
+    if (global.status === 'fulfilled') setSettings(global.value); else setSettings(null);
+    if (protectedList.status === 'fulfilled') setCategories(protectedList.value); else setCategories([]);
+    setMetadataError([ps, global, protectedList].some(result => result.status === 'rejected') ? 'No se pudieron leer todos los perfiles, límites o protecciones globales. Los controles que dependen de ellos permanecen limitados.' : null);
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void loadMetadata(); }, [loadMetadata, profileCatalogRevision]);
+  const selectedProfile = profiles.find(profile => profile.id === draft.profileId);
+  const context = profileSignature(selectedProfile);
+  const contextRef = useRef(context); useEffect(() => { contextRef.current = context; }, [context]);
+  useEffect(() => { if (preview && preview.context !== context) { setPreview(null); setNotice('La versión publicada o los límites del perfil han cambiado. El borrador se conserva; revisa de nuevo antes de guardar.'); } }, [preview, context]);
+  const input = useMemo<AgentSecurityPolicyInput | null>(() => security ? { expected_revision: security.desired.revision, requested_exec_mode: draft.mode, profile_id: draft.profileId || null, unattended_fallback: draft.fallback } : null, [security, draft]);
+  const inputKey = JSON.stringify(input);
+  const inputRef = useRef(inputKey); useEffect(() => { inputRef.current = inputKey; }, [inputKey]);
+  const dirty = !!security && (security.desired.mode === null || JSON.stringify(draft) !== JSON.stringify(savedDraft(security)));
+  const fresh = !error && !runtimeError && freshTime(receivedAt, now) && freshTime(security?.effective.observed_at, now);
+  const actorMaximum = actor?.role === 'owner' ? 'auto' : security?.inherited.owner_max_user_mode ?? 'deny';
+  const maximumRank = Math.min(modeRank[actorMaximum], modeRank[selectedProfile?.max_exec_mode ?? 'deny']);
+  const invalidPolicy = !security || !!error || (!selectedProfile && draft.mode !== 'deny') || modeRank[draft.mode] > maximumRank;
+  const canRules = !!security?.inherited.profile && !error;
+  const canAllow = security?.inherited.profile?.extension_policy === 'allow_unprotected';
+  const baseReady = !!security && verifiedCommands(security, runtime, fresh);
+  const compiledMode = isExecMode(runtime?.requested_mode) ? runtime.requested_mode : null;
+  const requestLeaseReason = !['owner', 'admin'].includes(actor?.role ?? '') ? 'Solo el owner o un administrador habilitado puede solicitar acceso temporal.'
+    : !settings ? 'No se pudo leer el máximo y la autorización global.'
+    : actor?.role === 'admin' && !settings.allow_admin_break_glass ? 'El owner no ha habilitado solicitudes de administradores.'
+    : security?.break_glass.some(leaseOpen) ? 'Ya hay un acceso temporal abierto para este agente.'
+    : !baseReady ? 'Se requiere una base aplicada y una comprobación vigente del control de comandos.'
+    : !compiledMode || !['ask', 'auto'].includes(compiledMode) ? 'La base compilada debe ser Consultar o Revisión automática.'
+    : !durations.some(value => value <= settings.break_glass_max_minutes) ? 'El máximo global no permite ninguna duración disponible.' : null;
+  const advancedPending = sandbox.pending ? 'isolation' : preview || draft.fallback !== (security?.desired.unattended_fallback ?? 'deny_and_notify') || confirmation?.kind === 'reconcile' ? 'commands'
+    : addOpen || ['tighten', 'remove', 'add'].includes(confirmation?.kind ?? '') ? 'rules' : leaseForm || confirmation?.kind === 'revoke' ? 'temporary' : null;
+  const jump = (name: string) => { if (['rules', 'temporary', 'diagnostics'].includes(name)) setAdvanced(true); focusSecurity(sectionId(name)); };
+  const edit = (patch: Partial<PolicyDraft>) => { setDraft(current => ({ ...current, ...patch })); setPreview(null); setActionError(null); };
+  const beginWrite = () => { if (mutationLock.current || sandbox.busy) return false; mutationLock.current = true; requestSequence.current++; setChecking(false); setBusy(true); setReceivedAt(null); return true; };
+  const isAuthorizedOperation = (epoch: number) => alive.current && epoch === authority.current;
+  const endWrite = (epoch: number) => { if (!isAuthorizedOperation(epoch)) return; mutationLock.current = false; setBusy(false); };
+  const afterWrite = async (text: string, epoch: number) => { if (!isAuthorizedOperation(epoch)) return; setPreview(null); setConfirmation(null); setLeaseReview(false); setNotice(text); toast.success(text); mutationLock.current = false; await refresh(); if (isAuthorizedOperation(epoch)) onChanged?.(); };
+  const checkNow = () => { if (busy || sandbox.busy) return; void refresh(); void loadMetadata(); setSandboxRefresh(value => value + 1); };
+  const reviewPolicy = async () => {
+    if (!input || invalidPolicy || !dirty || mutationLock.current) return;
+    if (!beginWrite()) return;
+    const epoch = authority.current;
+    const snapshot = JSON.stringify(input), reviewedContext = context; setActionError(null);
+    try { const data = await previewAgentSecurity(agentId, input); if (isAuthorizedOperation(epoch) && inputRef.current === snapshot && contextRef.current === reviewedContext) { setPreview({ data, input: snapshot, context: reviewedContext }); focusSecurity(id('policy-review')); } }
+    catch (cause) { if (isAuthorizedOperation(epoch)) { if (forbidden(cause)) { discardPrivateState(cause); return; } setActionError(message(cause)); if (cause instanceof ApiError && cause.status === 409) { mutationLock.current = false; await refresh(); } toast.error('No se pudo revisar la política'); } }
+    finally { endWrite(epoch); }
   };
-
-  const revokeBreakGlass = async (leaseId: string) => {
-    if (!canManageEmergencyAccess || revokingLeaseId) return;
-    setRevokingLeaseId(leaseId);
+  const savePolicy = async () => {
+    if (!input || !preview || preview.input !== inputKey || preview.context !== context || invalidPolicy || !beginWrite()) return;
+    const epoch = authority.current;
+    const submitted = { ...draft };
     try {
-      await revokeAgentBreakGlass(agentId, leaseId);
-      toast.success('Acceso temporal revocado');
-      await load();
-      onChanged?.();
-    } catch (revokeError) {
-      toast.error(revokeError instanceof Error ? revokeError.message : 'No se pudo revocar el acceso temporal');
-    } finally {
-      setRevokingLeaseId(null);
-    }
+      const published = (await listCommandProfiles()).filter(profile => profile.status === 'published');
+      if (!isAuthorizedOperation(epoch)) return;
+      if (profileSignature(published.find(profile => profile.id === draft.profileId)) !== preview.context) { setProfiles(published); setPreview(null); setNotice('La versión publicada del perfil cambió. Revisa de nuevo el borrador antes de guardar.'); return; }
+      const writeInput = preview.data.profile_version_guard === true ? { ...input, expected_profile_version_id: preview.data.after.profile_version_id } : input;
+      const next = await updateAgentSecurity(agentId, writeInput); if (!isAuthorizedOperation(epoch)) return; securityRef.current = next; setSecurity(next); setDraft(submitted); await afterWrite('Política guardada; comprueba su aplicación.', epoch); }
+    catch (cause) { if (isAuthorizedOperation(epoch)) { if (forbidden(cause)) { discardPrivateState(cause); return; } setPreview(null); setActionError(`${message(cause)}. Tu borrador se conserva. Revisa el estado guardado antes de reintentar.`); toast.error('No se pudo confirmar el guardado'); mutationLock.current = false; await refresh(); } }
+    finally { endWrite(epoch); if (isAuthorizedOperation(epoch)) focusSecurity(sectionId('commands')); }
   };
-
-  const showPreview = async () => {
-    if (!policyInput || invalidPolicy) return;
-    setSaving(true);
+  const confirmAction = async () => {
+    if (!confirmation) return;
+    const action = confirmation;
+    const saved = securityRef.current?.desired;
+    if (action.revision !== security?.desired.revision) return;
+    if (action.kind === 'reconcile' && (action.revision !== saved?.revision
+      || action.agentId !== agentId || action.mode !== security?.desired.mode || action.mode !== saved?.mode)) {
+      setConfirmation(null);
+      setActionError('La política guardada cambió. Comprueba de nuevo antes de reaplicarla.');
+      return;
+    }
+    if (!beginWrite()) return;
+    const epoch = authority.current;
+    setActionError(null);
     try {
-      setPreview(await previewAgentSecurity(agentId, policyInput));
-    } catch (previewError) {
-      toast.error(previewError instanceof Error ? previewError.message : 'Could not preview policy');
-    } finally {
-      setSaving(false);
-    }
+      if (action.kind === 'reconcile') await reconcileAgentSecurity(agentId, { expected_revision: action.revision, expected_mode: action.mode });
+      if (action.kind === 'tighten') await addAgentSecurityRule(agentId, { effect: action.effect, base_rule_fingerprint: action.fingerprint });
+      if (action.kind === 'remove') await revokeAgentSecurityRule(agentId, action.id);
+      if (action.kind === 'add') await addAgentSecurityRule(agentId, { effect: newEffect, rule: { effect: newEffect, target: 'gateway', executable_pattern: newExecutable.trim(), argument_matcher: { kind: newArguments.trim() ? 'prefix' : 'exact', value: newArguments.trim() }, cwd_scope: 'agent_workspace', cwd_path: null, description: `Local override for ${agentName}` } });
+      if (action.kind === 'revoke') await revokeAgentBreakGlass(agentId, action.id);
+      if (!isAuthorizedOperation(epoch)) return;
+      if (action.kind === 'add') { setAddOpen(false); setNewExecutable(''); setNewArguments(''); }
+      if (action.kind === 'revoke') setRevokeError(null);
+      await afterWrite(action.kind === 'revoke' ? 'Revocación solicitada. El registro se refresca; el cierre efectivo requiere comprobación del runtime.' : action.kind === 'reconcile' ? 'Reaplicación solicitada. Comprueba el estado efectivo tras la nueva lectura.' : 'Cambio guardado o solicitado. Comprueba su aplicación.', epoch);
+    } catch (cause) {
+      if (!isAuthorizedOperation(epoch)) return;
+      if (forbidden(cause)) { discardPrivateState(cause); return; }
+      const text = message(cause);
+      if (action.kind === 'revoke') setRevokeError(`No se pudo confirmar la revocación. ${text}`);
+      else setActionError(`${text}. El formulario y el borrador se conservan.`);
+      setConfirmation(null); toast.error('No se pudo completar la operación');
+      if (action.kind === 'reconcile' && cause instanceof ApiError && cause.status === 409) {
+        mutationLock.current = false;
+        await refresh();
+      }
+    } finally { endWrite(epoch); if (isAuthorizedOperation(epoch)) focusSecurity(sectionId(action.kind === 'revoke' ? 'temporary' : action.kind === 'reconcile' ? 'commands' : 'rules')); }
+  };
+  const submitLease = async () => {
+    if (!leaseReview || requestLeaseReason || !settings || duration > settings.break_glass_max_minutes || reason.trim().length < 8 || !pin || !beginWrite()) return;
+    const epoch = authority.current;
+    setLeaseError(null);
+    try { await requestAgentBreakGlass(agentId, { duration_minutes: duration, reason: reason.trim(), pin }); if (!isAuthorizedOperation(epoch)) return; setLeaseForm(false); setLeaseReview(false); setReason(''); await afterWrite('Acceso temporal solicitado; su aplicación debe comprobarse.', epoch); }
+    catch (cause) { if (isAuthorizedOperation(epoch)) { const pinRejection = cause instanceof ApiError && ['INVALID_SECURITY_PIN', 'SECURITY_PIN_REQUIRED', 'BREAK_GLASS_REQUIRES_INTERACTIVE_BASE_MODE'].includes(cause.code); if (forbidden(cause) && !pinRejection) { discardPrivateState(cause); return; } setLeaseError(leaseErrorMessage(cause)); setLeaseReview(false); toast.error('Solicitud temporal rechazada o sin confirmar'); } }
+    finally { if (isAuthorizedOperation(epoch)) { setPin(''); focusSecurity(sectionId('temporary')); } endWrite(epoch); }
   };
 
-  const save = async () => {
-    if (!policyInput || invalidPolicy) return;
-    setSaving(true);
-    try {
-      hydrate(await updateAgentSecurity(agentId, policyInput));
-      await loadRuntime();
-      toast.success(`Security policy saved for ${agentName}`);
-      onChanged?.();
-    } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : 'Could not save agent security');
-      await load();
-    } finally {
-      setSaving(false);
-    }
-  };
+  const commands = security ? commandStatus(security, runtime, fresh) : { color: 'orange', text: 'Cargando estado de comandos' } as AspectStatus;
+  const registry = registryData(runtime?.guard.tool_registry);
+  const rulesStatus: AspectStatus = !fresh || !registry ? { color: 'orange', text: 'Registro sin comprobar ahora' } : !registry.enforced ? { color: 'red', text: 'Control del registro no aplicado' }
+    : registry.pending > 0 ? { color: 'orange', text: `${registry.pending} contratos pendientes`, detail: 'Del servidor; asignación al agente sin comprobar.' } : { color: 'green', text: 'Registro del servidor comprobado', detail: 'Sin contratos pendientes en la lectura vigente.' };
+  const temporal = security ? leaseStatus(security, fresh, revokeError) : { color: 'orange', text: 'Acceso temporal sin comprobar' } as AspectStatus;
+  const environments: AspectStatus = fresh && runtime?.guard.health === 'unhealthy' ? { color: 'red', text: 'Fallo del control de comandos' } : { color: 'orange', text: 'Comprobación parcial', detail: fresh ? 'Cada proveedor requiere sus propias evidencias.' : 'No hay una observación vigente.' };
+  const canReconcile = !!security && isExecMode(security.desired.mode) && fresh && runtime?.drift.recovery === 'reconcile' && !baseReady;
+  const rows = [
+    ...(showSandbox ? [['isolation', 'Aislamiento', sandbox.status, 'isolation'] as const] : []),
+    ['commands', 'Comandos', commands, 'commands'] as const,
+    ['temporary', 'Acceso temporal', temporal, 'temporary'] as const,
+  ];
+  const policyChanged = (value: Partial<PolicyDraft>) => edit(value);
+  const startConfirmation = (value: Confirmation) => { confirmationReturn.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setConfirmation(value); setActionError(null); focusSecurity(id(`${value.kind}-review`)); };
+  const confirmationPanel = (kind: Confirmation['kind'], title: string, body: ReactNode) => confirmation?.kind === kind ? <InlineReview id={id(`${kind}-review`)} title={title} onCancel={() => { setConfirmation(null); requestAnimationFrame(() => { if (confirmationReturn.current?.isConnected) confirmationReturn.current.focus(); else focusSecurity(sectionId(kind === 'revoke' ? 'temporary' : kind === 'reconcile' ? 'commands' : 'rules')); }); }} cancelLabel="Cancelar" actions={<SecurityButton variant={kind === 'revoke' || kind === 'remove' ? 'destructive' : 'default'} disabled={busy || !!error || confirmation.revision !== security?.desired.revision || (confirmation.kind === 'reconcile' && (confirmation.agentId !== agentId || confirmation.mode !== security?.desired.mode))} onClick={() => void confirmAction()}>Confirmar {kind === 'revoke' ? 'revocación' : kind === 'remove' ? 'retirada' : kind === 'reconcile' ? 'reaplicación' : 'regla'}</SecurityButton>}>{body}</InlineReview> : null;
 
-  const reconcile = async () => {
-    setReconciling(true);
-    try {
-      await reconcileAgentSecurity(agentId);
-      toast.success('Reconciliation requested');
-      await load();
-    } catch (reconcileError) {
-      toast.error(reconcileError instanceof Error ? reconcileError.message : 'Could not reconcile runtime policy');
-    } finally {
-      setReconciling(false);
-    }
-  };
-
-  const addOverride = async () => {
-    if (!security || !newExecutable.trim() || (newEffect === 'allow' && !canAllowOverrides)) return;
-    setSaving(true);
-    try {
-      await addAgentSecurityRule(agentId, {
-        effect: newEffect,
-        rule: {
-          effect: newEffect,
-          target: 'gateway',
-          executable_pattern: newExecutable.trim(),
-          argument_matcher: { kind: newArguments.trim() ? 'prefix' : 'exact', value: newArguments.trim() },
-          cwd_scope: 'agent_workspace',
-          cwd_path: null,
-          description: `Local override for ${agentName}`,
-        },
-      });
-      setNewExecutable('');
-      setNewArguments('');
-      toast.success('Agent override added');
-      await load();
-    } catch (overrideError) {
-      toast.error(overrideError instanceof Error ? overrideError.message : 'Could not add override');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const tightenInheritedRule = async (fingerprint: string, effect: 'prompt' | 'block') => {
-    setSaving(true);
-    try {
-      await addAgentSecurityRule(agentId, { effect, base_rule_fingerprint: fingerprint });
-      toast.success(`Inherited rule tightened to ${effect}`);
-      await load();
-    } catch (overrideError) {
-      toast.error(overrideError instanceof Error ? overrideError.message : 'Could not tighten inherited rule');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const revokeOverride = async (id: string) => {
-    setSaving(true);
-    try {
-      await revokeAgentSecurityRule(agentId, id);
-      toast.success('Agent override revoked');
-      await load();
-    } catch (overrideError) {
-      toast.error(overrideError instanceof Error ? overrideError.message : 'Could not revoke override');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading && !security) {
-    return <div className="flex items-center gap-2 py-10 text-sm text-[var(--text-muted)]"><Loader2 size={15} className="animate-spin" />Loading agent security…</div>;
-  }
-  if (error && !security) {
-    return <RetryBanner severity="error" title="Agent security unavailable" message={error} onRetry={() => void load()} loading={loading} />;
-  }
-  if (!security) return null;
-
-  const legacy = security.desired.state === 'legacy_unmanaged';
-  const observedDrift = runtime?.drift.state ?? security.drift.state;
-  const effectiveStatus = runtime?.drift.state ?? security.effective.status;
-  const drifted = observedDrift !== 'in_sync' && observedDrift !== 'unavailable' && observedDrift !== 'unmanaged';
-  const runtimeFacts: Record<string, unknown> | null = runtime ? {
-    requested_mode: runtime.requested_mode,
-    effective_mode: runtime.effective_mode,
-    guard: runtime.guard,
-    openclaw_exec: runtime.openclaw_exec,
-    approvals: runtime.approvals,
-  } : security.effective.policy;
-  const adapters = runtime?.adapters ?? security.adapters;
-  const independentOverrides = security.rules.overrides.filter((override) => !override.base_rule_fingerprint);
-  const inheritedOverrides = new Map<string, AgentSecurityData['rules']['overrides']>();
-  for (const override of security.rules.overrides) {
-    if (!override.base_rule_fingerprint) continue;
-    const existing = inheritedOverrides.get(override.base_rule_fingerprint) ?? [];
-    existing.push(override);
-    inheritedOverrides.set(override.base_rule_fingerprint, existing);
-  }
-  // `effective` is an attested Core result. Never infer it in Dash from a
-  // runtime snapshot, provider label, lease dates or the persisted status.
-  const effectiveLeaseCount = security.break_glass.filter(
-    (lease) => breakGlassLeasePresentation(lease).effective,
-  ).length;
-  const pendingLeaseCount = security.break_glass.filter((lease) => lease.status === 'pending_application').length;
-
-  return (
-    <div ref={observationRoot} className="space-y-4">
-      {error && <RetryBanner severity="warn" message={error} onRetry={() => void load()} loading={loading} />}
-      {runtimeError && (
-        <div role="alert">
-          <RetryBanner
-            severity="error"
-            title="Live runtime security unavailable"
-            message={`Desired policy remains visible, but the live runtime endpoint could not be refreshed: ${runtimeError}`}
-            onRetry={() => void loadRuntime()}
-            loading={runtimeLoading}
-          />
+  return <div ref={root} data-testid="agent-security" data-agent-id={agentId} className="@container flex min-w-0 max-w-full flex-col gap-5 [overflow-wrap:anywhere] text-[var(--text)]" aria-busy={busy || loading || metadataLoading}>
+    <header>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">{!embedded && <h2 className="m-0 text-xl font-semibold">Seguridad</h2>}<span className="text-xs text-[var(--text-muted)]">Este agente · {agentName}</span><SecurityButton variant="outline" aria-expanded={advanced} aria-controls={`${id('advanced-sections')} ${sectionId('diagnostics')}`} disabled={!security || busy || sandbox.busy} onClick={() => { if (advanced && advancedPending) { setViewNotice(true); return; } setAdvanced(value => !value); setViewNotice(false); }}>Avanzado<ChevronDown size={13} className={advanced ? 'rotate-180' : ''} /></SecurityButton></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="m-0 text-xs text-[var(--text-muted)]">{checking ? 'Comprobando…' : `Última comprobación: ${displayTime(security?.effective.observed_at)}`}{receivedAt && !fresh ? ' · histórica o sin verificar' : ''}</p><SecurityButton variant="outline" onClick={checkNow} disabled={busy || checking || sandbox.busy}><RefreshCw size={12} />Comprobar ahora</SecurityButton></div>
+    </header>
+    {error && <p role="alert" className="m-0 text-xs text-[var(--error)]">{error}. {security ? 'El borrador se conserva; la observación no está verificada.' : 'No se muestran valores de una visita anterior.'}</p>}
+    {runtimeError && <p role="alert" className="m-0 text-xs text-[var(--amber)]">No se pudo comprobar el runtime. {runtimeError}. Los registros de acceso no demuestran efectividad actual.</p>}
+    {loading && !security && <p role="status" className="text-xs text-[var(--text-muted)]">Cargando seguridad y permisos…</p>}
+    {security && <>
+      {viewNotice && advancedPending && <p role="status" className="m-0 border-l-2 border-[var(--amber)] pl-3 text-xs text-[var(--text-dim)]">Hay cambios o una revisión abierta en Avanzado. Revisa o cancela antes de cerrarlo. <SecurityButton variant="link" onClick={() => jump(advancedPending)}>Ir a los cambios pendientes</SecurityButton></p>}
+      <ul aria-label="Resumen de seguridad" className="m-0 list-none divide-y divide-[var(--border)] border-y border-[var(--border)] p-0">{rows.map(([target, label, status, topic]) => <li key={target} className="grid min-w-0 grid-cols-[minmax(0,1fr)_36px] items-start gap-1">
+        <button type="button" onClick={() => jump(target)} className="flex min-w-0 flex-1 gap-2 border-0 bg-transparent px-0 py-2 text-left text-xs leading-relaxed text-[var(--text)] hover:bg-[var(--card)]"><StatusDot status={status} /><span className="min-w-0"><strong className="text-[13px]">{label}</strong> — <StatusText status={status} />{status.detail && <span className="block text-[var(--text-muted)]">{status.detail}</span>}{target === 'temporary' && security.break_glass.some(leaseOpen) && <span className="block text-[var(--amber)]">Ver y revocar →</span>}</span></button><SecurityHelp topic={topic} />
+      </li>)}</ul>
+      {notice && <p role="status" className="m-0 text-xs leading-relaxed text-[var(--text-dim)]">{notice}</p>}
+      {registry && (!registry.enforced || registry.pending > 0) && <p className="m-0 text-xs text-[var(--amber)]"><StatusText status={rulesStatus} /> · <SecurityButton variant="link" onClick={() => jump('diagnostics')}>Ver estado del registro de herramientas</SecurityButton></p>}
+      {showSandbox && <AgentSandboxConfig agentId={agentId} agentName={agentName} advanced={advanced} refreshKey={sandboxRefresh} onState={setSandbox} showStatus={false} />}
+      <SecuritySection id={sectionId('commands')} title="Comandos" topic="commands">
+        {metadataError && <p role="alert" className="text-xs text-[var(--amber)]">{metadataError}</p>}
+        {security.desired.mode === null && <p className="text-xs text-[var(--amber)]">Sin política gestionada. Seleccionar opciones prepara un borrador; no cambia la política nativa ni bloquea comandos automáticamente.</p>}
+        <p className="text-xs text-[var(--text-muted)]">Controla comandos ejecutados en el equipo; las demás herramientas conservan sus propios permisos.</p>
+        <SecurityFacts rows={[
+          ['Límite del dueño', security.agent.owner_role === 'owner' ? 'Revisión automática · dueño owner' : `${modeCopy[security.inherited.owner_max_user_mode]} · global${security.agent.owner_role ? '' : '; rol del dueño sin comprobar'}`],
+          ['Límite del perfil', selectedProfile ? modeCopy[selectedProfile.max_exec_mode] : 'Sin perfil: solo No ejecutar comandos'],
+        ]} />
+        <fieldset className={settingClass} disabled={busy || !!error}><legend className="text-[13px] font-semibold">Cómo supervisar los comandos<SecurityHelp topic="mode" /></legend>{(Object.keys(modeCopy) as SecurityExecMode[]).map(mode => <RadioChoice key={mode} name={id('mode')} value={mode} label={`${mode === 'allowlist' ? 'allow' : mode} · ${modeCopy[mode]}`} checked={draft.mode === mode} disabled={modeRank[mode] > maximumRank} description={modeRank[mode] > maximumRank ? 'No disponible: supera el máximo del perfil o el límite de tu rol.' : mode === 'auto' ? 'Solo operaciones compatibles; no elude las protecciones ni una confirmación obligatoria.' : undefined} onChange={() => policyChanged({ mode })} />)}</fieldset>
+        <fieldset className={settingClass} disabled={busy || !!error}>
+          <legend className="text-[13px] font-semibold">Perfil asignado<SecurityHelp topic="profile" /></legend>
+          <label htmlFor={id('profile')} className="sr-only">Perfil de comandos de este agente</label>
+          <select id={id('profile')} name={id('profile')} value={draft.profileId} className={`${inputClass} max-w-xl`} onChange={event => policyChanged({ profileId: event.target.value })}>
+            <option value="" disabled={draft.mode !== 'deny'}>Ningún perfil · solo al no ejecutar comandos</option>
+            {draft.profileId && !selectedProfile && <option value={draft.profileId} disabled>Perfil guardado no disponible</option>}
+            {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · versión {profile.published_version}</option>)}
+          </select>
+          {selectedProfile && <p className="text-xs text-[var(--text-muted)]">Publicado y compartido · {selectedProfile.extension_policy === 'allow_unprotected' ? 'permite extensiones no protegidas' : 'solo restricciones locales'}</p>}
+          {draft.profileId && !selectedProfile && <p className="text-xs text-[var(--amber)]">El perfil guardado no está disponible para elegir. Su valor se conserva; elige uno publicado antes de guardar.</p>}
+          <div className="flex flex-wrap gap-2"><SecurityButton variant="link" onClick={() => jump('rules')}>Ver reglas y bloqueos</SecurityButton>{onManageProfiles && <SecurityButton variant="link" onClick={onManageProfiles}>Gestionar perfiles compartidos ↓</SecurityButton>}</div>
+        </fieldset>
+        {actor?.role === 'owner' && security.agent.owner_role && security.agent.owner_role !== 'owner' && <p className="text-xs text-[var(--amber)]">Puedes guardar intención como owner. Al compilar se conserva el límite del dueño de este agente; guardar no lo amplía.</p>}
+        <fieldset hidden={!advanced} className={settingClass} disabled={busy || !!error}><legend className="text-[13px] font-semibold">Sin atención humana<SecurityHelp topic="fallback" /></legend><p className="text-xs text-[var(--text-muted)]">Intención propia guardada: {security.desired.unattended_fallback ? fallbackCopy[security.desired.unattended_fallback] : 'sin dato'}</p>{(Object.keys(fallbackCopy) as Fallback[]).map(value => <RadioChoice key={value} name={id('fallback')} value={value} label={fallbackCopy[value]} checked={draft.fallback === value} onChange={() => policyChanged({ fallback: value })} />)}<p className="text-xs text-[var(--text-muted)]">Implementación parcial: no se han demostrado tres comportamientos distintos ni avisos diferenciados. Las operaciones que necesitan una persona siguen bloqueadas sin su decisión.</p></fieldset>
+        {dirty && <p className="text-xs text-[var(--amber)]">Borrador sin guardar. Guardado y observado permanecen separados.</p>}
+        {actionError && <p role="alert" className="text-xs text-[var(--error)]">{actionError}</p>}
+        <div className="flex flex-wrap gap-2"><SecurityButton variant="outline" disabled={!dirty || busy} onClick={() => { setDraft(savedDraft(security)); setPreview(null); setActionError(null); }}>Cancelar cambios</SecurityButton><SecurityButton id={id('preview')} disabled={!dirty || invalidPolicy || busy || sandbox.busy} onClick={() => void reviewPolicy()}>Revisar cambios</SecurityButton></div>
+        {preview && <InlineReview id={id('policy-review')} title="Revisar supervisión" onCancel={() => { setPreview(null); focusSecurity(id('preview')); }} actions={<SecurityButton disabled={busy || invalidPolicy || preview.input !== inputKey || preview.context !== context} onClick={() => void savePolicy()}>Guardar y solicitar aplicación</SecurityButton>}>
+          <SecurityFacts rows={[
+            ['Modo guardado → propuesto', `${security.desired.mode ? modeCopy[security.desired.mode] : 'Sin política'} → ${modeCopy[draft.mode]}`],
+            ['Perfil', `${security.inherited.profile?.name ?? 'Ninguno'} → ${selectedProfile ? `${selectedProfile.name} v${selectedProfile.published_version}` : 'Ninguno'}`],
+            ['Sin atención humana', `${security.desired.unattended_fallback ? fallbackCopy[security.desired.unattended_fallback] : 'Sin dato'} → ${fallbackCopy[draft.fallback]} (intención)`],
+            ['Reglas de perfil', preview.data.impact.profile_rules], ['Reglas locales', preview.data.impact.local_overrides],
+            ['Se conservan', preview.data.impact.retained_local_overrides ?? 'No detallado por esta versión del servidor'], ['Permisos locales que se revocan', preview.data.impact.revoked_allow_overrides ?? 'No detallado por esta versión del servidor'],
+          ]} />
+          {(preview.data.impact.revoked_allow_overrides ?? 0) > 0 && <ul>{security.rules.overrides.filter(rule => rule.effect === 'allow').map(rule => <li key={rule.id}>{safeSecurityText(rule.rule.executable_pattern)} · {sourceCopy[rule.source]} · {rule.id}</li>)}</ul>}
+          {preview.data.warnings.map(warning => <p key={warning}>{safeSecurityText(warning)}</p>)}{preview.data.profile_version_guard !== true && <p className="text-[var(--amber)]">Si se publica otra versión del perfil durante el guardado, este servidor puede usarla. Vuelve a comprobar el perfil tras guardar.</p>}<p>No se ejecutan comandos en esta revisión. El servidor conserva el límite del dueño y del perfil. Guardar solicita aplicación; debe comprobarse después.</p>
+        </InlineReview>}
+        {(advanced || canReconcile) && <><div className="mt-3"><SecurityButton variant="outline" disabled={!canReconcile || busy} onClick={() => { const mode = security.desired.mode; if (isExecMode(mode)) startConfirmation({ kind: 'reconcile', agentId, revision: security.desired.revision, mode }); }}>Volver a aplicar lo guardado</SecurityButton></div><p className="text-xs text-[var(--text-muted)]">{canReconcile ? 'Reenvía lo guardado. No guarda el borrador ni amplía el límite del dueño.' : 'Disponible ante una discrepancia recuperable con comunicación vigente.'}</p></>}
+        {confirmationPanel('reconcile', 'Confirmar reaplicación', <p>Se solicitará aplicar lo guardado: {confirmation?.kind === 'reconcile' ? `${modeCopy[confirmation.mode]} · revisión ${confirmation.revision}` : 'sin dato'}. El borrador visible se conserva. Esta acción escribe configuración; Comprobar ahora solo consulta. La respuesta no demuestra que la política ya esté aplicada.</p>)}
+        <div id={id('advanced-sections')} hidden={!advanced} className="mt-5 min-w-0 space-y-5">
+        <SecuritySection nested id={sectionId('rules')} title="Reglas y bloqueos" topic="rules">
+          <p className="text-xs leading-relaxed text-[var(--text-muted)]">Procedencia: global, heredada o propia. Las reglas locales no reducen las protecciones globales.<SecurityHelp topic="origins" /></p>
+          {categories.length ? <SecurityFacts rows={categories.filter(category => category.enabled).map(category => [category.label, `${category.floor === 'deny' ? 'Bloquear' : category.floor === 'secure_confirmation' ? 'Confirmación segura' : 'Confirmación humana'} · global${category.immutable ? ' · inmutable' : ''}`])} /> : <p className="text-xs text-[var(--text-muted)]">Valores de categorías globales sin comprobar; no se infiere que estén desactivadas.</p>}
+          <ul aria-label="Reglas del agente" className="m-0 list-none divide-y divide-[var(--border)] p-0">{security.rules.profile.map(rule => {
+            const overrides = security.rules.overrides.filter(item => item.base_rule_fingerprint === rule.fingerprint);
+            const ranks = { allow: 0, prompt: 1, block: 2 };
+            const strongest = Math.max(ranks[rule.effect], ...overrides.map(item => ranks[item.effect]));
+            return <li key={rule.fingerprint} className="py-3"><div className="flex flex-wrap justify-between gap-2 text-xs"><strong className="[overflow-wrap:anywhere]">{safeSecurityText(rule.executable_pattern)} {safeSecurityText(rule.argument_matcher.value)}</strong><span>{effectCopy[rule.effect]} · heredada</span></div><p className="my-2 text-xs text-[var(--text-muted)]">{security.inherited.profile?.name} v{security.inherited.profile?.version ?? 'sin dato'} · {rule.target} · {rule.cwd_scope} · {rule.category}</p><div className="flex flex-wrap gap-2"><SecurityButton variant="outline" disabled={!canRules || busy || strongest >= 1} onClick={() => startConfirmation({ kind: 'tighten', effect: 'prompt', fingerprint: rule.fingerprint, revision: security.desired.revision })}>Pedir confirmación</SecurityButton><SecurityButton variant="outline" disabled={!canRules || busy || strongest >= 2} onClick={() => startConfirmation({ kind: 'tighten', effect: 'block', fingerprint: rule.fingerprint, revision: security.desired.revision })}>Bloquear</SecurityButton></div>{overrides.map(item => <div key={item.id} className="mt-2 text-xs"><span>{effectCopy[item.effect]} · restricción propia</span> <SecurityButton variant="outline" disabled={busy || !!error} onClick={() => startConfirmation({ kind: 'remove', id: item.id, revision: security.desired.revision })}>Quitar restricción</SecurityButton></div>)}</li>;
+          })}{security.rules.overrides.filter(item => !item.base_rule_fingerprint).map(rule => <li key={rule.id} className="py-3 text-xs"><div className="flex flex-wrap justify-between gap-2"><strong>{safeSecurityText(rule.rule.executable_pattern)} {safeSecurityText(rule.rule.argument_matcher?.value)}</strong><span>{effectCopy[rule.effect]}</span></div><p className="my-2 text-[var(--text-muted)]">{sourceCopy[rule.source]} · {rule.rule.target} · {rule.rule.cwd_scope}</p><SecurityButton variant="outline" disabled={busy || !!error} onClick={() => startConfirmation({ kind: 'remove', id: rule.id, revision: security.desired.revision })}>Quitar regla</SecurityButton></li>)}</ul>
+          {!security.rules.profile.length && !security.rules.overrides.length && <p className="text-xs text-[var(--text-muted)]">Sin reglas gestionadas devueltas. No demuestra qué permite la política nativa.</p>}
+          {confirmationPanel('tighten', 'Revisar restricción de regla', <p>{confirmation?.kind === 'tighten' && <><strong>{safeSecurityText(security.rules.profile.find(rule => rule.fingerprint === confirmation.fingerprint)?.executable_pattern)} · {confirmation.fingerprint}</strong> → {effectCopy[confirmation.effect]}. </>}Se añade una restricción propia; no cambia la coincidencia ni las protecciones heredadas.</p>)}
+          {confirmationPanel('remove', 'Revisar retirada de regla', <p>{confirmation?.kind === 'remove' && <><strong>{safeSecurityText(security.rules.overrides.find(rule => rule.id === confirmation.id)?.rule.executable_pattern)} · {confirmation.id}</strong> → retirar regla local. </>}Retirar una restricción puede ampliar lo permitido; las reglas compartidas y las protecciones siguen vigentes.</p>)}
+          <div className="mt-3"><SecurityButton id={id('add-rule-trigger')} variant="outline" disabled={!canRules || busy || addOpen} onClick={() => { setAddOpen(true); focusSecurity(id('new-rule')); }}>Añadir regla</SecurityButton></div>
+          {!canRules && <p className="text-xs text-[var(--text-muted)]">Hace falta un perfil gestionado y acceso de escritura para añadir o endurecer reglas.</p>}
+          {addOpen && <div className="mt-3 border-l-2 border-[var(--border)] pl-3" onKeyDown={event => { if (event.key === 'Escape' && !confirmation && !busy) { event.preventDefault(); setAddOpen(false); focusSecurity(id('add-rule-trigger')); } }}><h4 id={id('new-rule')} tabIndex={-1}>Nueva regla de este agente<SecurityHelp topic="rule" /></h4><fieldset className={settingClass} disabled={busy || !canRules}><legend>Efecto</legend>{(['block', 'prompt', 'allow'] as const).map(effect => <RadioChoice key={effect} name={id('new-effect')} value={effect} label={effectCopy[effect]} checked={newEffect === effect} disabled={effect === 'allow' && !canAllow} description={effect === 'allow' && !canAllow ? 'El perfil no admite permisos locales.' : undefined} onChange={() => { setNewEffect(effect); setConfirmation(null); }} />)}</fieldset><label className="block text-xs">Ejecutable<input className={inputClass} value={newExecutable} disabled={busy} maxLength={160} onChange={event => { setNewExecutable(event.target.value); setConfirmation(null); }} /></label><label className="mt-3 block text-xs">Prefijo de argumentos<input className={inputClass} value={newArguments} disabled={busy} maxLength={500} onChange={event => { setNewArguments(event.target.value); setConfirmation(null); }} /></label><p className="text-xs text-[var(--text-muted)]">Target: Gateway · carpeta de este agente. Argumentos vacíos: coincidencia exacta; con texto: prefijo. El servidor valida categoría y protecciones.</p><div className="flex flex-wrap gap-2"><SecurityButton variant="outline" disabled={busy} onClick={() => { setAddOpen(false); setConfirmation(null); focusSecurity(id('add-rule-trigger')); }}>Cancelar regla</SecurityButton><SecurityButton disabled={!canRules || !newExecutable.trim() || busy || (newEffect === 'allow' && !canAllow)} onClick={() => startConfirmation({ kind: 'add', revision: security.desired.revision })}>Revisar regla</SecurityButton></div>{confirmationPanel('add', 'Revisar nueva regla', <p>{effectCopy[newEffect]}: {safeSecurityText(newExecutable)} {safeSecurityText(newArguments)}. No puede eludir una protección o una regla heredada.</p>)}</div>}
+          {actionError && <p role="alert" className="text-xs text-[var(--error)]">{actionError}</p>}
+        </SecuritySection>
+        <SecuritySection nested id={sectionId('temporary')} title="Acceso temporal" topic="temporary">
+          <SecurityFacts rows={[
+            ['Registros devueltos', `${security.break_glass.length} · ${security.break_glass.some(lease => effectiveLease(lease, runtime, fresh, now)) ? 'hay efectividad atestada en la lectura vigente' : 'efectividad o ausencia sin comprobar'}`],
+            ['Máximo global', settings ? `${settings.break_glass_max_minutes} minutos · servidor` : 'Sin dato'],
+            ['Administradores', settings ? settings.allow_admin_break_glass ? 'Habilitados por owner · global' : 'No habilitados por owner · global' : 'Sin dato'],
+            ['Base compilada', fresh && compiledMode ? modeCopy[compiledMode] : 'Sin comprobación vigente'],
+          ]} />
+          {requestLeaseReason && <p className="text-xs text-[var(--text-muted)]">{requestLeaseReason}</p>}
+          <SecurityButton id={id('request-lease-trigger')} variant="outline" disabled={!!requestLeaseReason || busy || leaseForm} onClick={() => { setLeaseForm(true); setLeaseReview(false); setLeaseError(null); setDuration(durations.find(value => value <= (settings?.break_glass_max_minutes ?? 0)) ?? 5); focusSecurity(id('lease-form')); }}>Solicitar acceso temporal</SecurityButton>
+          {security.break_glass.map(lease => <div key={lease.id} className="my-3 border-t border-[var(--border)] pt-3"><SecurityFacts rows={[
+            ['Estado del registro', ({ active: 'Activo', pending_application: 'Aplicación pendiente', application_failed: 'Falló aplicación', expired: 'Caducado', revoked: 'Revocado' })[lease.status]],
+            ['Alcance', `${lease.adapter_id} · comandos elegibles; no concede herramientas`], ['Motivo', safeSecurityText(lease.reason)], ['Vencimiento', displayTime(lease.expires_at)],
+            ['Efectividad', effectiveLease(lease, runtime, fresh, now) ? 'Atestada por Core y vigente para el control de esta lectura' : 'Sin comprobar ahora. Registro y reloj no demuestran aplicación ni cierre'],
+            ['Aplicación del proveedor', `${lease.provider_application} · guard ${lease.guard_policy_version ?? 'sin versión'}`],
+          ]} />{leaseOpen(lease) && <SecurityButton variant="destructive" disabled={busy || !!error} onClick={() => startConfirmation({ kind: 'revoke', id: lease.id, revision: security.desired.revision })}>Revocar acceso temporal</SecurityButton>}</div>)}
+          {confirmationPanel('revoke', 'Confirmar revocación', <p>{confirmation?.kind === 'revoke' && <><strong>{confirmation.id}</strong> · {security.break_glass.find(lease => lease.id === confirmation.id)?.adapter_id} · vence {displayTime(security.break_glass.find(lease => lease.id === confirmation.id)?.expires_at)} → revocar. </>}Se conserva la política base. Se puede intentar aunque el runtime esté desconectado. El cierre efectivo no se deduce de la respuesta ni del reloj.</p>)}
+          {leaseForm && <div className="mt-3 border-l-2 border-[var(--amber)] pl-3" onKeyDown={event => { if (event.key === 'Escape' && !leaseReview && !busy) { event.preventDefault(); setLeaseForm(false); setPin(''); focusSecurity(id('request-lease-trigger')); } }}><h4 id={id('lease-form')} tabIndex={-1}>Solicitar para este agente</h4><fieldset className={settingClass} disabled={busy}><legend>Duración<SecurityHelp topic="duration" /></legend>{durations.map(value => <RadioChoice key={value} name={id('duration')} value={String(value)} label={`${value} minutos`} checked={duration === value} disabled={value > (settings?.break_glass_max_minutes ?? 0)} description={value > (settings?.break_glass_max_minutes ?? 0) ? 'Supera el máximo global.' : undefined} onChange={() => { setDuration(value); setLeaseReview(false); }} />)}</fieldset><label className="block text-xs">Motivo<textarea className={inputClass} minLength={8} maxLength={500} value={reason} disabled={busy} onChange={event => { setReason(event.target.value); setLeaseReview(false); }} /><span className="text-[var(--text-muted)]">Entre 8 y 500 caracteres.</span></label><label className="mt-3 block text-xs">PIN de seguridad<input type="password" autoComplete="off" inputMode="numeric" maxLength={128} className={inputClass} value={pin} disabled={busy} onChange={event => { setPin(event.target.value); setLeaseReview(false); }} /></label><p className="text-xs text-[var(--text-muted)]">Se verifica el PIN propio en el servidor. No se guarda en esta vista ni en el navegador.</p>{leaseError && <p role="alert" className="text-xs text-[var(--error)]">{leaseError}</p>}<div className="flex flex-wrap gap-2"><SecurityButton variant="outline" disabled={busy} onClick={() => { setLeaseForm(false); setLeaseReview(false); setPin(''); setLeaseError(null); focusSecurity(id('request-lease-trigger')); }}>Cancelar solicitud</SecurityButton><SecurityButton id={id('lease-preview')} disabled={!!requestLeaseReason || busy || reason.trim().length < 8 || !pin} onClick={() => { setLeaseReview(true); focusSecurity(id('lease-review')); }}>Revisar acceso temporal</SecurityButton></div>{leaseReview && <InlineReview id={id('lease-review')} title="Confirmar acceso temporal" onCancel={() => { setLeaseReview(false); focusSecurity(id('lease-preview')); }} actions={<SecurityButton variant="destructive" disabled={!!requestLeaseReason || busy || !pin} onClick={() => void submitLease()}>Confirmar con PIN</SecurityButton>}><p>{duration} minutos · {safeSecurityText(reason)}. Amplía comandos elegibles y mantiene protecciones. La solicitud no demuestra aplicación; el estado se comprobará después.</p></InlineReview>}</div>}
+          {revokeError && <p role="alert" className="text-xs text-[var(--error)]">{revokeError}</p>}
+        </SecuritySection>
         </div>
-      )}
-      {legacy && (
-        <div className="flex gap-3 rounded-[var(--radius-md)] border border-[color:rgba(245,158,11,.4)] bg-[color:rgba(245,158,11,.07)] p-4">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-[var(--amber)]" />
-          <div><div className="text-sm font-semibold text-[var(--text)]">Legacy unmanaged policy</div><p className="mt-1 text-xs leading-5 text-[var(--text-dim)]">Choose a managed mode and published command profile. Until then Core cannot describe or reconcile the agent's desired command policy.</p></div>
-        </div>
-      )}
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby={`desired-security-${agentId}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><h3 id={`desired-security-${agentId}`} className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text)]"><Shield size={16} className="text-[var(--amber)]" />Desired policy</h3><p className="mt-1 text-xs text-[var(--text-muted)]">Revision {security.desired.revision} · applied {security.desired.applied_revision ?? 'not observed'}</p></div>
-            <StatePill state={security.desired.state} />
-          </div>
-          <div className="mt-4 grid gap-3">
-            <label className="text-xs font-medium text-[var(--text-dim)]">Execution mode<select value={mode} onChange={(event) => { setMode(event.target.value as SecurityExecMode); setPreview(null); }} className={`mt-1 h-9 w-full rounded-[var(--radius-sm)] border bg-[var(--card)] px-3 text-sm text-[var(--text)] ${modeExceedsLimit ? 'border-[var(--error)]' : 'border-[var(--border)]'}`}>{(Object.keys(MODE_LABELS) as SecurityExecMode[]).map((value) => <option key={value} value={value} disabled={MODE_RANK[value] > maximumModeRank}>{MODE_LABELS[value].label} — {MODE_LABELS[value].description}</option>)}</select>{modeExceedsLimit && <span className="mt-1 block text-[11px] text-[var(--error)]">Choose a mode at or below {MODE_LABELS[profileMaximum].label.toLowerCase()}{role === 'owner' ? '' : ` and the owner limit ${MODE_LABELS[ownerMaximum].label.toLowerCase()}`}.</span>}</label>
-            <label className="text-xs font-medium text-[var(--text-dim)]">Command profile<select value={profileId} onChange={(event) => { setProfileId(event.target.value); setPreview(null); }} className={`mt-1 h-9 w-full rounded-[var(--radius-sm)] border bg-[var(--card)] px-3 text-sm text-[var(--text)] ${invalidProfile ? 'border-[var(--error)]' : 'border-[var(--border)]'}`}><option value="">{mode === 'deny' ? 'No profile' : 'Select a published profile'}</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · v{profile.published_version} · max {profile.max_exec_mode}</option>)}</select>{invalidProfile && <span className="mt-1 block text-[11px] text-[var(--error)]">This mode requires a published command profile.</span>}{selectedProfile && <span className="mt-1 block text-[11px] text-[var(--text-muted)]">Local extensions: {selectedProfile.extension_policy.replaceAll('_', ' ')}</span>}</label>
-            <label className="text-xs font-medium text-[var(--text-dim)]">Unattended fallback<select value={fallback} onChange={(event) => { setFallback(event.target.value as typeof fallback); setPreview(null); }} className="mt-1 h-9 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]"><option value="deny_and_notify">Deny and notify</option><option value="deny">Deny</option><option value="fail_closed">Fail closed</option></select></label>
-          </div>
-          <div className="mt-4 flex flex-wrap justify-end gap-2"><Button type="button" size="sm" variant="outline" onClick={() => void showPreview()} disabled={saving || invalidPolicy}>Preview</Button><Button type="button" size="sm" onClick={() => void save()} disabled={saving || invalidPolicy}>{saving && <Loader2 size={13} className="animate-spin" />}Save policy</Button></div>
-          {preview && (
-            <div className="mt-4 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] p-3 text-xs text-[var(--text-dim)]">
-              <div className="font-semibold text-[var(--text)]">Preview · desired revision {preview.after.desired_revision}</div>
-              <div className="mt-1">{preview.impact.profile_rules} profile rules · {preview.impact.local_overrides} local overrides</div>
-              {preview.warnings.map((warning) => <div key={warning} className="mt-2 text-[var(--amber)]">{warning}</div>)}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby={`effective-security-${agentId}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><h3 id={`effective-security-${agentId}`} className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--text)]"><Activity size={16} className="text-[var(--amber)]" />Effective policy</h3><p className="mt-1 text-xs text-[var(--text-muted)]">{security.effective.observed_at ? `Observed ${new Date(security.effective.observed_at).toLocaleString()}` : 'No runtime observation'}</p></div>
-            <StatePill state={effectiveStatus} />
-          </div>
-          {security.effective.reason && <div className="mt-3 rounded-[var(--radius-sm)] bg-[var(--card)] p-3 text-xs text-[var(--text-dim)]">{security.effective.reason.replaceAll('_', ' ')}</div>}
-          <SecurityRecoveryStatus recovery={runtime?.recovery ?? security.recovery} />
-          <ToolSecurityRegistryStatus value={runtime?.guard.tool_registry} />
-          <div className="mt-4"><JsonFacts value={runtimeFacts} /></div>
-          {drifted && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-[color:rgba(245,158,11,.35)] bg-[color:rgba(245,158,11,.06)] p-3">
-              <span className="text-xs text-[var(--text-dim)]">Desired and observed state need reconciliation.</span>
-              {runtimeRouteAvailable && <Button type="button" size="sm" variant="outline" onClick={() => void reconcile()} disabled={reconciling}>{reconciling ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />}Reconcile</Button>}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)]" aria-labelledby={`security-layers-${agentId}`}>
-        <button type="button" onClick={() => setLayersOpen((open) => !open)} aria-expanded={layersOpen} className="flex w-full items-center gap-2 border-0 bg-transparent p-4 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-hover)]">{layersOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<Layers3 size={15} className="text-[var(--amber)]" /><span id={`security-layers-${agentId}`}>Policy layers</span></button>
-        {layersOpen && (
-          <>
-            <div className="grid gap-3 border-t border-[var(--border)] p-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-[var(--radius-sm)] bg-[var(--card)] p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Server bound</div><div className="mt-2 text-sm text-[var(--text)]">Default {security.inherited.server_default_mode}</div><div className="mt-1 text-xs text-[var(--text-muted)]">User maximum {security.inherited.owner_max_user_mode}</div></div>
-              <div className="rounded-[var(--radius-sm)] bg-[var(--card)] p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Published profile</div><div className="mt-2 text-sm text-[var(--text)]">{security.inherited.profile?.name ?? 'None'}</div><div className="mt-1 text-xs text-[var(--text-muted)]">{security.rules.profile.length} rules{security.inherited.profile?.version ? ` · v${security.inherited.profile.version}` : ''}</div></div>
-              <div className="rounded-[var(--radius-sm)] bg-[var(--card)] p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Agent overrides</div><div className="mt-2 text-sm text-[var(--text)]">{security.rules.overrides.length}</div><div className="mt-1 text-xs text-[var(--text-muted)]">Local block, prompt or permitted extensions</div></div>
-              <div className="rounded-[var(--radius-sm)] bg-[var(--card)] p-3"><div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Effective emergency leases</div><div className="mt-2 text-sm text-[var(--text)]">{effectiveLeaseCount}</div><div className="mt-1 text-xs text-[var(--text-muted)]">{pendingLeaseCount > 0 ? `${pendingLeaseCount} pending runtime application · ` : ''}{security.break_glass.length} lease record{security.break_glass.length === 1 ? '' : 's'} returned</div></div>
-            </div>
-            {(runtime?.layers.length ?? 0) > 0 && (
-              <div className="border-t border-[var(--border)] px-4 py-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Observed runtime layers</div>
-                <div className="flex flex-wrap gap-2">{runtime!.layers.map((layer, index) => <span key={`${layer.source}-${index}`} className="max-w-full rounded-full border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-[11px] text-[var(--text-dim)]"><b>{layer.source.replaceAll('_', ' ')}</b> · <span className="break-all font-mono">{typeof layer.value === 'object' ? JSON.stringify(layer.value) : String(layer.value)}</span></span>)}</div>
-              </div>
-            )}
-          </>
-        )}
-      </section>
-
-      <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby={`agent-overrides-${agentId}`}>
-        <div><h3 id={`agent-overrides-${agentId}`} className="m-0 text-sm font-semibold text-[var(--text)]">Agent overrides</h3><p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">Protected categories stay protected. Profile extension policy decides whether a local allow rule is valid.</p></div>
-        {security.rules.profile.length > 0 && (
-          <div className="mt-4">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Inherited profile rules</div>
-            <div className="space-y-2">{security.rules.profile.map((rule) => {
-              const overrides = inheritedOverrides.get(rule.fingerprint) ?? [];
-              const strongestRank = Math.max(
-                rule.effect === 'block' ? 2 : rule.effect === 'prompt' ? 1 : 0,
-                ...overrides.map((override) => override.effect === 'block' ? 2 : override.effect === 'prompt' ? 1 : 0),
-              );
-              return (
-                <div key={rule.fingerprint} className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] p-3">
-                  <div className="flex flex-wrap items-start gap-3">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${rule.effect === 'allow' ? 'bg-green-500/10 text-green-400' : rule.effect === 'block' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>Base · {rule.effect}</span>
-                    <div className="min-w-0 flex-1"><code className="break-all text-xs text-[var(--text)]">{rule.executable_pattern}{rule.argument_matcher.value ? ` ${rule.argument_matcher.value}` : ''}</code><div className="mt-1 text-[10px] text-[var(--text-muted)]">{rule.target} · {rule.cwd_scope.replaceAll('_', ' ')} · {rule.category}</div></div>
-                    <div className="flex flex-wrap gap-2">
-                      {strongestRank < 1 && <Button type="button" size="sm" variant="outline" onClick={() => void tightenInheritedRule(rule.fingerprint, 'prompt')} disabled={saving}>Require prompt</Button>}
-                      {strongestRank < 2 && <Button type="button" size="sm" variant="outline" onClick={() => void tightenInheritedRule(rule.fingerprint, 'block')} disabled={saving}>Block</Button>}
-                    </div>
-                  </div>
-                  {overrides.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{overrides.map((override) => <span key={override.id} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--text-dim)]">Local {override.effect}<button type="button" aria-label={`Revoke ${override.effect} override for ${rule.executable_pattern}`} onClick={() => void revokeOverride(override.id)} disabled={saving} className="inline-flex h-5 w-5 items-center justify-center rounded-full border-0 bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--error)]"><Trash2 size={11} /></button></span>)}</div>}
-                </div>
-              );
-            })}</div>
-          </div>
-        )}
-        {!legacy && security.inherited.profile && (
-          <div className="mt-4 grid gap-2 rounded-[var(--radius-sm)] bg-[var(--card)] p-3 sm:grid-cols-[110px_minmax(120px,1fr)_minmax(140px,1fr)_auto]">
-            <select aria-label="Override effect" value={newEffect} onChange={(event) => setNewEffect(event.target.value as SecurityRuleEffect)} className="h-9 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-2 text-sm text-[var(--text)]"><option value="block">Block</option><option value="prompt">Prompt</option>{canAllowOverrides && <option value="allow">Allow</option>}</select>
-            <input aria-label="Override executable" placeholder="Executable" value={newExecutable} onChange={(event) => setNewExecutable(event.target.value)} className="h-9 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
-            <input aria-label="Override argument prefix" placeholder="Argument prefix" value={newArguments} onChange={(event) => setNewArguments(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addOverride(); }} className="h-9 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]" />
-            <Button type="button" variant="secondary" onClick={() => void addOverride()} disabled={!newExecutable.trim() || saving}><Plus size={13} />Add</Button>
-          </div>
-        )}
-        <div className="mt-3 space-y-2">
-          {independentOverrides.length === 0 ? <div className="py-5 text-center text-sm text-[var(--text-muted)]">No independent local rules.</div> : independentOverrides.map((override) => (
-            <div key={override.id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--card)] p-3">
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${override.effect === 'allow' ? 'bg-green-500/10 text-green-400' : override.effect === 'block' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>{override.effect}</span>
-              <code className="min-w-0 flex-1 break-all text-xs text-[var(--text)]">{override.rule.executable_pattern}{override.rule.argument_matcher?.value ? ` ${override.rule.argument_matcher.value}` : ''}</code>
-              <span className="text-[10px] text-[var(--text-muted)]">{override.source.replaceAll('_', ' ')}</span>
-              <button type="button" aria-label="Revoke override" onClick={() => void revokeOverride(override.id)} disabled={saving} className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--error)]"><Trash2 size={13} /></button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Runtime adapters are shown only when the API reports one. The model
-          assigned to the agent never determines or labels an adapter. */}
-      {adapters.length > 0 && (
-        <section className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] p-4" aria-labelledby={`runtime-adapters-${agentId}`}>
-          <h3 id={`runtime-adapters-${agentId}`} className="m-0 text-sm font-semibold text-[var(--text)]">Runtime adapters</h3>
-          <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">Only adapters reported by Core are shown. Expand one to compare requested and observed runtime policy.</p>
-          <div className="mt-3 space-y-3">{adapters.map((adapter) => <AdapterCard key={adapter.id} adapter={adapter} />)}</div>
-        </section>
-      )}
-
-      {(canManageEmergencyAccess || security.break_glass.length > 0) && (
-        <section className="rounded-[var(--radius-md)] border border-[color:rgba(239,68,68,.35)] bg-[color:rgba(239,68,68,.05)] p-4" aria-labelledby={`emergency-access-${agentId}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 id={`emergency-access-${agentId}`} className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--error)]"><ShieldAlert size={16} />Emergency access</h3>
-              <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--text-muted)]">Temporary full access resolves eligible command approvals without changing the persisted base policy. Immutable protected categories remain enforced.</p>
-            </div>
-            {canManageEmergencyAccess && (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={openBreakGlass}
-                disabled={Boolean(breakGlassUnavailableReason) || breakGlassSubmitting}
-                aria-describedby={`emergency-access-availability-${agentId}`}
-              >
-                <KeyRound size={13} />Acceso completo temporal…
-              </Button>
-            )}
-          </div>
-
-          {canManageEmergencyAccess && (
-            <div id={`emergency-access-availability-${agentId}`} className={`mt-3 rounded-[var(--radius-sm)] p-3 text-xs ${breakGlassUnavailableReason ? 'bg-[var(--card)] text-[var(--amber)]' : 'bg-[color:rgba(34,197,94,.08)] text-[var(--text-dim)]'}`} aria-live="polite">
-              {breakGlassUnavailableReason ?? `Base ${security.desired.mode} · guard healthy · máximo ${policySettings?.break_glass_max_minutes ?? '—'} minutos.`}
-            </div>
-          )}
-
-          <div className="mt-3 space-y-2">
-            {security.break_glass.length === 0 ? (
-              <div className="rounded-[var(--radius-sm)] border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--text-muted)]">No emergency lease records returned.</div>
-            ) : security.break_glass.map((lease) => (
-              <div key={lease.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-[var(--card)] p-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-[var(--text)]"><Clock3 size={13} className="text-[var(--error)]" />Expires {new Date(lease.expires_at).toLocaleString()}</div>
-                  <div className="mt-1 break-words text-[11px] text-[var(--text-muted)]">{BREAK_GLASS_STATUS_COPY[lease.status]} · {lease.reason} · {lease.adapter_id}</div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <BreakGlassLeaseState lease={lease} />
-                  {canManageEmergencyAccess && breakGlassLeasePresentation(lease).revocable && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void revokeBreakGlass(lease.id)}
-                      disabled={revokingLeaseId !== null}
-                      aria-label={`Revocar ahora el acceso temporal que caduca ${new Date(lease.expires_at).toLocaleString()}`}
-                    >
-                      {revokingLeaseId === lease.id ? <Loader2 size={13} className="animate-spin" /> : <ShieldOff size={13} />}Revocar ahora
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {canManageEmergencyAccess && (
-        <Dialog open={breakGlassOpen} onOpenChange={(open) => { setBreakGlassOpen(open); if (!open) resetBreakGlassForm(); }}>
-          <DialogContent style={{ maxWidth: 560, width: '94vw', maxHeight: '90vh', overflowY: 'auto' }}>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><ShieldAlert size={18} className="text-[var(--error)]" />Acceso completo temporal…</DialogTitle>
-              <DialogDescription>Activa una lease excepcional y con caducidad para {agentName}.</DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={(event) => { event.preventDefault(); void submitBreakGlass(); }} className="mt-4 space-y-4">
-              <div className="rounded-[var(--radius-sm)] border border-[color:rgba(239,68,68,.35)] bg-[color:rgba(239,68,68,.07)] p-3 text-xs leading-5 text-[var(--text-dim)]" role="note">
-                <div className="font-semibold text-[var(--error)]">Acceso excepcional, no una nueva política</div>
-                <ul className="mb-0 mt-1 list-disc space-y-1 pl-4">
-                  <li>No se guarda como acceso permanente y caduca automáticamente.</li>
-                  <li>No atraviesa categorías protegidas inmutables ni sus confirmaciones obligatorias.</li>
-                  <li>Puedes revocarlo inmediatamente desde esta pantalla.</li>
-                </ul>
-              </div>
-
-              <fieldset disabled={breakGlassSubmitting} className="border-0 p-0">
-                <legend className="text-xs font-semibold text-[var(--text-dim)]">Duración · máximo {policySettings?.break_glass_max_minutes ?? '—'} minutos</legend>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {allowedBreakGlassDurations.map((duration) => (
-                    <label key={duration} className={`flex cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-sm)] border px-3 py-2 text-sm ${breakGlassDuration === duration ? 'border-[var(--error)] bg-[color:rgba(239,68,68,.08)] text-[var(--text)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-dim)]'}`}>
-                      <input type="radio" name={`break-glass-duration-${agentId}`} value={duration} checked={breakGlassDuration === duration} onChange={() => setBreakGlassDuration(duration)} className="accent-[var(--error)]" />
-                      {duration} min
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              <label htmlFor={`break-glass-reason-${agentId}`} className="block text-xs font-semibold text-[var(--text-dim)]">
-                Motivo obligatorio
-                <textarea
-                  id={`break-glass-reason-${agentId}`}
-                  value={breakGlassReason}
-                  onChange={(event) => setBreakGlassReason(event.target.value)}
-                  minLength={8}
-                  maxLength={500}
-                  required
-                  autoFocus
-                  disabled={breakGlassSubmitting}
-                  aria-describedby={`break-glass-reason-help-${agentId}`}
-                  className="mt-1 min-h-24 w-full resize-y rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-normal text-[var(--text)] focus:border-[var(--error)] focus:outline-none"
-                  placeholder="Describe por qué es necesario y qué operación se va a realizar"
-                />
-                <span id={`break-glass-reason-help-${agentId}`} className="mt-1 flex justify-between text-[11px] font-normal text-[var(--text-muted)]"><span>Entre 8 y 500 caracteres.</span><span>{breakGlassReason.length}/500</span></span>
-              </label>
-
-              <label htmlFor={`break-glass-pin-${agentId}`} className="block text-xs font-semibold text-[var(--text-dim)]">
-                PIN de seguridad
-                <input
-                  id={`break-glass-pin-${agentId}`}
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={breakGlassPin}
-                  onChange={(event) => setBreakGlassPin(event.target.value)}
-                  maxLength={128}
-                  required
-                  disabled={breakGlassSubmitting}
-                  className="mt-1 h-9 w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-normal text-[var(--text)] focus:border-[var(--error)] focus:outline-none"
-                />
-              </label>
-
-              {breakGlassError && <div role="alert" className="rounded-[var(--radius-sm)] bg-[color:rgba(239,68,68,.1)] p-3 text-xs text-[var(--error)]">{breakGlassError}</div>}
-
-              <DialogFooter>
-                <Button type="button" variant="ghost" onClick={() => { setBreakGlassOpen(false); resetBreakGlassForm(); }} disabled={breakGlassSubmitting}>Cancelar</Button>
-                <Button type="submit" variant="destructive" disabled={Boolean(breakGlassUnavailableReason) || breakGlassSubmitting || !allowedBreakGlassDurations.includes(breakGlassDuration) || breakGlassReason.trim().length < 8 || !breakGlassPin}>
-                  {breakGlassSubmitting ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}Activar acceso temporal
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {showSandbox && <AgentSandboxConfig agentId={agentId} agentName={agentName} />}
-    </div>
-  );
+      </SecuritySection>
+      <SecuritySection id={sectionId('diagnostics')} title="Estado y diagnóstico" topic="diagnostics" status={environments} hidden={!advanced}>
+          <h4 className="text-sm">Comandos del equipo · OpenClaw<SecurityHelp topic="guard" /></h4>
+          <SecurityFacts rows={[
+            ['Comprobación', fresh ? `Vigente · ${displayTime(security.effective.observed_at)}` : 'Sin evidencia vigente'],
+            ['Revisiones', `Guardada ${security.desired.revision} / aplicada ${security.desired.applied_revision ?? 'sin dato'}`],
+            ['Modo guardado', security.desired.mode ? modeCopy[security.desired.mode] : 'Sin política gestionada'],
+            ['Modo observado', fresh && isExecMode(runtime?.effective_mode) ? modeCopy[runtime.effective_mode] : 'Sin comprobación vigente'],
+            ['Perfil guardado', security.inherited.profile ? `${security.inherited.profile.name} v${security.inherited.profile.version ?? 'sin dato'} · compartido y publicado` : 'Ninguno'],
+            ['Predeterminado global', `${modeCopy[security.inherited.server_default_mode]} · solo nuevas políticas`],
+            ['Modo compilado', compiledMode ? `${modeCopy[compiledMode]}${fresh ? '' : ' · última lectura, sin comprobar ahora'}` : 'Sin dato'],
+            ['Control de comandos', runtime ? <ReadableFacts value={runtime.guard.health} /> : 'Sin dato'],
+            ['Sustrato host', <ReadableFacts value={runtime?.openclaw_exec} />], ['Confirmaciones', <ReadableFacts value={runtime?.approvals} />],
+          ]} />
+          {(runtime?.adapters ?? security.adapters).map(adapter => <div key={adapter.id} className="border-t border-[var(--border)] py-3"><h4 className="m-0 text-sm">{adapter.label ?? adapter.id}</h4><SecurityFacts rows={[
+            ['Disponibilidad', `${adapter.availability}${fresh ? '' : ' · lectura sin verificar ahora'}`],
+            ['Configuración solicitada', <ReadableFacts value={adapter.requested_policy} />], ['Observación propia', <ReadableFacts value={adapter.effective_policy} />], ['Capas', <ReadableFacts value={adapter.source_layers} />],
+            ...('apply_effect' in adapter ? [['Aplicación', adapter.apply_effect], ['Confirmación humana', adapter.approval_transport], ['Capacidades comunicadas', <ReadableFacts value={adapter.guard_capabilities} />], ['Notas', <ReadableFacts value={adapter.notes} />]] as Array<[string, ReactNode]> : []),
+          ]} /><p className="text-xs text-[var(--text-muted)]">Disponibilidad y salud del equipo no demuestran los permisos nativos de un proveedor. Solo se muestran entornos comunicados por Core.</p></div>)}
+          {!runtime?.adapters.length && <p className="text-xs text-[var(--text-muted)]">No se han comunicado entornos nativos activos. No se deducen del modelo elegido.</p>}
+          <SecurityFacts rows={(runtime?.layers ?? []).map(layer => [layer.source.replaceAll('_', ' '), <ReadableFacts value={layer.value} />])} />
+          {registry ? <ToolSecurityRegistryStatus value={runtime?.guard.tool_registry} /> : <p className="mt-3 text-xs text-[var(--text-muted)]">Registro de herramientas: sin comprobación de enforcement. No se conceden permisos desde esta lista.</p>}
+          <h4 className="text-sm">Recuperación y límites<SecurityHelp topic="layers" /></h4><SecurityFacts rows={[
+            ['Recuperación', (runtime?.recovery ?? security.recovery) ? <ReadableFacts value={runtime?.recovery ?? security.recovery} /> : 'Sin episodio de recuperación comunicado'],
+            ['Efecto de guardar', 'Solicita aplicación y lectura posterior; no revierte acciones ya ejecutadas. El sandbox no se confirma por configurar sus valores.'],
+            ['Errores de comunicación', error || runtimeError || 'Ninguno comunicado en la última consulta'],
+          ]} />
+      </SecuritySection>
+    </>}
+  </div>;
 }

@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { Route, Routes } from 'react-router';
 import { ClawMailApiProvider } from './ClawMailApiProvider';
 import { MailServerSidebar } from './MailServerSidebar';
+import { useI18n } from '@/i18n';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Domains = lazy(() => import('./pages/Domains'));
@@ -24,12 +25,13 @@ const SmtpRelay = lazy(() => import('./pages/SmtpRelay'));
 const SmtpSettings = lazy(() => import('./pages/SmtpSettings'));
 
 export function Component() {
+  const { t } = useI18n();
   return (
     <ClawMailApiProvider>
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <MailServerSidebar />
         <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--bg)', position: 'relative' }}>
-          <Suspense fallback={<div style={{ padding: 24, color: 'var(--text-dim)' }}>Cargando...</div>}>
+          <Suspense fallback={<div style={{ padding: 24, color: 'var(--text-dim)' }}>{t('mailServer.loading')}</div>}>
             <Routes>
               <Route index element={<Dashboard />} />
               <Route path="domains" element={<Domains />} />

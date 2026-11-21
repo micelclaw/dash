@@ -14,6 +14,7 @@
 
 import { useState } from 'react';
 import { useStorageStore } from '@/stores/storage.store';
+import { useI18n } from '@/i18n';
 import { InfoTip } from '../ZfsHelp';
 import { ZfsButton } from './ZfsModal';
 import { CreatePoolWizard } from './CreatePoolWizard';
@@ -22,26 +23,27 @@ import { CreateZvolForm } from './CreateZvolForm';
 
 export function ZfsManageBar() {
   const caps = useStorageStore((s) => s.zfs_capabilities);
+  const { t } = useI18n();
   const [open, setOpen] = useState<null | 'pool' | 'dataset' | 'zvol'>(null);
   if (!caps) return null;
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {caps.can_create_pool && (
         <ZfsButton primary onClick={() => setOpen('pool')}>
-          + Crear almacén
-          <span style={{ marginLeft: 4 }}><InfoTip text="Crea un nuevo almacén (pool) juntando varios discos con protección ante fallos. Es el primer paso para usar el NAS." /></span>
+          {t('storage.manage.createPool')}
+          <span style={{ marginLeft: 4 }}><InfoTip text={t('storage.manage.createPoolHint')} /></span>
         </ZfsButton>
       )}
       {caps.can_create_dataset && (
         <ZfsButton onClick={() => setOpen('dataset')}>
-          + Carpeta
-          <span style={{ marginLeft: 4 }}><InfoTip text="Crea una carpeta gestionada (dataset) con sus propios ajustes de compresión, cuota e instantáneas. Es lo que usarás para organizar tus datos." /></span>
+          {t('storage.manage.dataset')}
+          <span style={{ marginLeft: 4 }}><InfoTip text={t('storage.manage.datasetHint')} /></span>
         </ZfsButton>
       )}
       {caps.can_create_zvol && (
         <ZfsButton onClick={() => setOpen('zvol')}>
-          + Disco virtual
-          <span style={{ marginLeft: 4 }}><InfoTip text="Crea un disco virtual (zvol). Solo lo necesitas para máquinas virtuales o iSCSI; para archivos usa una carpeta." /></span>
+          {t('storage.manage.zvol')}
+          <span style={{ marginLeft: 4 }}><InfoTip text={t('storage.manage.zvolHint')} /></span>
         </ZfsButton>
       )}
       {open === 'pool' && <CreatePoolWizard onClose={() => setOpen(null)} />}

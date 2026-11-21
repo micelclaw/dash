@@ -18,14 +18,15 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import type { InventoryItem, InventoryLocation } from '@/modules/inventory/types';
 import { recordCountWithOptionalEvidence } from './count-evidence';
+import { useI18n } from '@/i18n';
 
 export type ScanIntent = 'locate' | 'count' | 'move' | 'checkinout';
 
 export const SCAN_INTENTS: { id: ScanIntent; label: string; hint: string; Icon: typeof MapPin }[] = [
-  { id: 'locate', label: 'Locate', hint: 'Open the scanned item or bin', Icon: MapPin },
-  { id: 'count', label: 'Count', hint: 'Adjust quantity (stock count)', Icon: ClipboardCheck },
-  { id: 'move', label: 'Move to bin', hint: 'Transfer the item to a location', Icon: ArrowRightLeft },
-  { id: 'checkinout', label: 'Check in / out', hint: 'Return a loan (or open to lend)', Icon: LogIn },
+  { id: 'locate', label: 'inventory.scan.intent.locate', hint: 'inventory.scan.hint.locate', Icon: MapPin },
+  { id: 'count', label: 'inventory.scan.intent.count', hint: 'inventory.scan.hint.count', Icon: ClipboardCheck },
+  { id: 'move', label: 'inventory.scan.intent.move', hint: 'inventory.scan.hint.move', Icon: ArrowRightLeft },
+  { id: 'checkinout', label: 'inventory.scan.intent.checkinout', hint: 'inventory.scan.hint.checkinout', Icon: LogIn },
 ];
 
 const overlay: CSSProperties = {
@@ -68,6 +69,7 @@ function parseCode(raw: string): ParsedCode {
 }
 
 export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose: () => void }) {
+  const { t, locale } = useI18n();
   const meta = SCAN_INTENTS.find(i => i.id === intent)!;
   const selectItem = useInventoryStore(s => s.selectItem);
   const recordMove = useInventoryStore(s => s.recordMove);
@@ -121,7 +123,7 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
         } else {
           const it = await resolveByText(parsed.raw);
           if (it) { selectItem(it.id); onClose(); }
-          else { toast.error('Code not recognized'); handledRef.current = false; }
+          else { toast.error(t('inventory.scan.codeNotRecognized')); handledRef.current = false; }
         }
         return;
       }
@@ -129,17 +131,17 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
       let it: InventoryItem | null = null;
       if (parsed.kind === 'item') it = await resolveItem(parsed.id);
       else if (parsed.kind === 'unknown') it = await resolveByText(parsed.raw);
-      else { toast.error('Scan an item, not a bin'); handledRef.current = false; return; }
-      if (!it) { toast.error('Item not found'); handledRef.current = false; return; }
+      else { toast.error(t('inventory.scan.itemNotBin')); handledRef.current = false; return; }
+      if (!it) { toast.error(t('inventory.scan.itemNotFound')); handledRef.current = false; return; }
 
       if (intent === 'checkinout') {
         if (it.lent_to_contact_id || it.status === 'lent') {
           await returnItem(it.id);
-          toast.success(`${it.name} checked in (returned)`);
+          toast.success(t('inventory.scan.returned', { name: it.name }));
           onClose();
         } else {
           selectItem(it.id);
-          toast.info('Use “Lend” in the item panel to check it out');
+          toast.info(t('inventory.scan.useLendAction'));
           onClose();
         }
         return;
@@ -150,7 +152,7 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
     } finally {
       setBusy(false);
     }
-  }, [intent, selectItem, onClose, resolveItem, resolveByText, returnItem]);
+  }, [intent, selectItem, onClose, resolveItem, resolveByText, returnItem, t]);
 
   // Cámara (html5-qrcode). Best-effort: si falla el permiso o no hay cámara,
   // queda el fallback manual. El flag `started` evita el throw síncrono de
@@ -182,9 +184,9 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
   const doCount = async () => {
     if (!item) return;
     const target = parseFloat(countValue);
-    if (!Number.isFinite(target) || target < 0) { toast.error('Enter a valid count'); return; }
+    if (!Number.isFinite(target) || target < 0) { toast.error(t('inventory.scan.validCount')); return; }
     const delta = Math.round((target - parseFloat(String(item.quantity ?? 0))) * 1000) / 1000;
-    if (delta === 0) { toast.info('Count matches — no change'); onClose(); return; }
+    if (delta === 0) { toast.info(t('inventory.scan.countMatches')); onClose(); return; }
     setBusy(true);
     try {
       await recordCountWithOptionalEvidence({
@@ -196,20 +198,21 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
         remember_upload: setCountPhotoFileId,
         record: recordMove,
       });
-      toast.success(`Count adjusted (${delta > 0 ? '+' : ''}${delta})`);
+      const formattedDelta = new Intl.NumberFormat(locale === 'es' ? 'es-ES' : 'en-US', { maximumFractionDigits: 3 }).format(delta);
+      toast.success(t('inventory.scan.countAdjusted', { delta: `${delta > 0 ? '+' : ''}${formattedDelta}` }));
       onClose();
-    } catch { toast.error('Could not adjust count'); }
+    } catch { toast.error(t('inventory.scan.adjustCountFailed')); }
     finally { setBusy(false); }
   };
 
   const doMove = async () => {
-    if (!item || !destLocation) { toast.error('Pick a destination bin'); return; }
+    if (!item || !destLocation) { toast.error(t('inventory.scan.pickDestination')); return; }
     setBusy(true);
     try {
       await recordMove({ item_id: item.id, type: 'transfer', to_location_id: destLocation, from_location_id: item.location_id ?? null });
-      toast.success(`${item.name} moved`);
+      toast.success(t('inventory.scan.itemMoved', { name: item.name }));
       onClose();
-    } catch { toast.error('Could not move item'); }
+    } catch { toast.error(t('inventory.scan.moveFailed')); }
     finally { setBusy(false); }
   };
 
@@ -219,34 +222,34 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <meta.Icon size={16} style={{ color: 'var(--mod-inventory, var(--amber))' }} />
-            <span style={{ fontWeight: 600, color: 'var(--text)' }}>Scan · {meta.label}</span>
+            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{t('inventory.scan.title', { intent: t(meta.label) })}</span>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><X size={18} /></button>
+          <button onClick={onClose} aria-label={t('inventory.scan.close')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* Paso 1: escanear/resolver (oculto cuando ya hay item para count/move) */}
           {!item && (
             <>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{meta.hint}</div>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t(meta.hint)}</div>
               <div id={REGION_ID} style={{ width: '100%', minHeight: cameraOn ? 220 : 0, borderRadius: 'var(--radius-md)', overflow: 'hidden', background: cameraOn ? '#000' : 'transparent' }} />
               {!cameraOn && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', color: cameraError ? 'var(--danger, #f43f5e)' : 'var(--text-dim)' }}>
                   <Camera size={13} />
-                  {cameraError ? 'Camera unavailable — type or paste the code below' : 'Starting camera…'}
+                  {cameraError ? t('inventory.scan.cameraUnavailable') : t('inventory.scan.startingCamera')}
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Keyboard size={14} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
                 <input
                   style={inputStyle}
-                  placeholder="Paste QR link, asset tag (INV-…) or id"
+                  placeholder={t('inventory.scan.manualCodePlaceholder')}
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitManual(); }}
-                  aria-label="Manual code"
+                  aria-label={t('inventory.scan.manualCode')}
                 />
-                <button style={btnSecondary} disabled={busy || !manual.trim()} onClick={submitManual}>Use</button>
+                <button style={btnSecondary} disabled={busy || !manual.trim()} onClick={submitManual}>{t('inventory.scan.useCode')}</button>
               </div>
             </>
           )}
@@ -255,11 +258,11 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
           {item && intent === 'count' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <ItemBadge item={item} />
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Counted quantity (was {String(item.quantity ?? 0)})</label>
-              <input style={inputStyle} type="number" min="0" value={countValue} onChange={(e) => setCountValue(e.target.value)} autoFocus aria-label="Counted quantity" />
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('inventory.scan.countedQuantity', { quantity: String(item.quantity ?? 0) })}</label>
+              <input style={inputStyle} type="number" min="0" value={countValue} onChange={(e) => setCountValue(e.target.value)} autoFocus aria-label={t('inventory.scan.countedQuantity', { quantity: String(item.quantity ?? 0) })} />
               <label style={{ ...btnSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: busy ? 'default' : 'pointer' }}>
                 <Camera size={14} />
-                {countPhoto ? `Evidence: ${countPhoto.name}` : 'Add optional count photo'}
+                {countPhoto ? t('inventory.scan.evidence', { name: countPhoto.name }) : t('inventory.scan.addPhoto')}
                 <input
                   type="file"
                   accept="image/*"
@@ -274,12 +277,12 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
               </label>
               {countPhoto && (
                 <button type="button" style={{ ...btnSecondary, alignSelf: 'flex-start', padding: '4px 8px' }} disabled={busy} onClick={() => { setCountPhoto(null); setCountPhotoFileId(null); }}>
-                  Remove photo
+                  {t('inventory.scan.removePhoto')}
                 </button>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                <button style={btnSecondary} onClick={onClose}>Cancel</button>
-                <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void doCount()}>Adjust count</button>
+                <button style={btnSecondary} onClick={onClose}>{t('inventory.cancel')}</button>
+                <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void doCount()}>{t('inventory.scan.adjustCount')}</button>
               </div>
             </div>
           )}
@@ -288,14 +291,14 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
           {item && intent === 'move' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <ItemBadge item={item} />
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Move to bin</label>
-              <select style={inputStyle} value={destLocation} onChange={(e) => setDestLocation(e.target.value)} aria-label="Destination bin">
-                <option value="">— pick a location —</option>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('inventory.scan.destinationBin')}</label>
+              <select style={inputStyle} value={destLocation} onChange={(e) => setDestLocation(e.target.value)} aria-label={t('inventory.scan.destinationBin')}>
+                <option value="">{t('inventory.scan.pickLocation')}</option>
                 {locations.map((l: InventoryLocation) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                <button style={btnSecondary} onClick={onClose}>Cancel</button>
-                <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void doMove()}>Move</button>
+                <button style={btnSecondary} onClick={onClose}>{t('inventory.cancel')}</button>
+                <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void doMove()}>{t('inventory.scan.move')}</button>
               </div>
             </div>
           )}

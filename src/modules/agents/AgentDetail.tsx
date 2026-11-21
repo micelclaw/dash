@@ -11,12 +11,13 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ArrowRight, ChevronRight, Loader2, Trash2, Package } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { ArrowRight, ChevronRight, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { updateAgentModel } from '@/services/agents-admin.service';
 import { ModelSelect } from './ModelSelect';
-import { downloadAgentarExport } from '@/services/agentar.service';
+import { ClawsShareSection } from './ClawsShareSection';
 import { useAgentDetail } from './hooks/use-agent-detail';
 import { useContextBudget } from './hooks/use-context-budget';
 import { AgentIdentity } from './AgentIdentity';
@@ -33,6 +34,7 @@ import { AgentDoctor } from './AgentDoctor';
 import { AgentActivityCenter } from './AgentActivityCenter';
 import { AgentSharedFolderAccess } from './AgentSharedFolderAccess';
 import { AgentDecisionModel } from './AgentDecisionModel';
+import { AgentHostedRuntime } from './AgentHostedRuntime';
 import { getAgentColor, AGENT_PALETTE, AGENT_COLOR_NAMES } from './agent-colors';
 import type { ManagedAgent, AgentDetailTab } from './types';
 
@@ -45,7 +47,7 @@ interface AgentDetailProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'var(--success)',
+  active: 'var(--text-muted)',
   idle: '#EAB308',
   error: 'var(--error)',
 };
@@ -64,6 +66,7 @@ function formatRelativeTime(dateStr: string | null): string {
 }
 
 export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrowseFiles }: AgentDetailProps) {
+  const navigate = useNavigate();
   const { agent, loading, refetch } = useAgentDetail(agentId);
   // Context budget (Overview bar + per-app token badges). Refetches when the
   // agent's skill_modes change (toggling an app núcleo↔completo shifts its tools).
@@ -345,7 +348,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
             borderRadius: 'var(--radius-full)',
             background: STATUS_COLORS[agent.status] || 'var(--text-muted)',
           }} />
-          <span style={{ color: 'var(--text)' }}>{agent.status}</span>
+          <span style={{ color: 'var(--text)' }}>{agent.status === 'active' ? 'Habilitado · disponibilidad sin comprobar' : agent.status}</span>
           <span style={{ color: 'var(--text-muted)' }}>
             {' '} — last active {formatRelativeTime(agent.last_active_at)}
           </span>
@@ -392,6 +395,12 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
           <AgentIdentity agentId={agentId} />
 
           <AgentDecisionModel agentId={agent.id} />
+          <AgentHostedRuntime agentId={agent.id} onNewConversation={() => {
+            const chat = useChatStore.getState();
+            chat.startNewConversation();
+            chat.selectAgent(agent.name);
+            navigate('/chat');
+          }} />
 
           {/* Context budget bar (sits between Identity and Apps, replacing the divider) */}
           <ContextBudgetBars budget={contextBudget} loading={budgetLoading} />
@@ -547,69 +556,10 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   );
 }
 
-// ─── Share & distribute (Agentar export) ──────────────────────────
+// ─── Share & distribute (portable Claws) ──────────────────────────
 
 function ShareSection({ agent }: { agent: ManagedAgent }) {
-  const [embedSkills, setEmbedSkills] = useState(false);
-  const [exporting, setExporting] = useState(false);
-
-  const handleExport = useCallback(async () => {
-    setExporting(true);
-    try {
-      const blob = await downloadAgentarExport(agent.id, embedSkills);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${agent.name}.claw-agent.tar.gz`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success(`Exported ${agent.display_name}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
-    } finally {
-      setExporting(false);
-    }
-  }, [agent.id, agent.name, agent.display_name, embedSkills]);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-        Share &amp; distribute
-      </h4>
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-        Export this agent as a <code style={{ fontFamily: 'var(--font-mono)' }}>.claw-agent</code> package — manifest, identity, soul, memory templates and (optionally) bundled skills.
-      </p>
-      <label style={{
-        display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', color: 'var(--text-dim)',
-        cursor: 'pointer', userSelect: 'none',
-      }}>
-        <input
-          type="checkbox"
-          checked={embedSkills}
-          onChange={e => setEmbedSkills(e.target.checked)}
-          style={{ accentColor: 'var(--amber)' }}
-        />
-        Embed skills (heavier but self-contained)
-      </label>
-      <button
-        onClick={handleExport}
-        disabled={exporting}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)', color: 'var(--text)',
-          fontSize: '0.8125rem', fontWeight: 500, padding: '8px 16px',
-          cursor: exporting ? 'wait' : 'pointer', transition: 'var(--transition-fast)',
-          fontFamily: 'var(--font-sans)', width: '100%',
-        }}
-      >
-        {exporting ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Package size={14} />}
-        {exporting ? 'Preparing…' : 'Export as .claw-agent'}
-      </button>
-    </div>
-  );
+  return <ClawsShareSection key={agent.id} agent={agent} />;
 }
 
 // ─── Danger zone (delete agent) ───────────────────────────────────

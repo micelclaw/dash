@@ -13,8 +13,10 @@
 import { useState, useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 
 export function TabBar() {
+  const { t } = useI18n();
   const pages = useDiagramsStore((s) => s.pages);
   const activePageId = useDiagramsStore((s) => s.activePageId);
   const addPage = useDiagramsStore((s) => s.addPage);
@@ -84,6 +86,7 @@ export function TabBar() {
             {isEditing ? (
               <input
                 autoFocus
+                aria-label={t('sketches.pages.rename', { page: page.name })}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onBlur={confirmRename}
@@ -110,6 +113,7 @@ export function TabBar() {
 
             {pages.length > 1 && (
               <button
+                aria-label={t('sketches.pages.remove', { page: page.name })}
                 onClick={(e) => {
                   e.stopPropagation();
                   removePage(page.id);
@@ -142,7 +146,8 @@ export function TabBar() {
       {/* Add page button */}
       <button
         onClick={() => addPage()}
-        title="Add page"
+        title={t('sketches.pages.add')}
+        aria-label={t('sketches.pages.add')}
         style={{
           display: 'flex',
           alignItems: 'center',

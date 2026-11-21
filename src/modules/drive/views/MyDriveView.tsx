@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { documentsEditorPath } from '../documents-editor';
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { FolderInput, Download, Trash2, Star, StarOff, Tags, UserPlus } from 'lucide-react';
@@ -185,12 +186,12 @@ export function MyDriveView() {
       navigate(`/office/pdf/${file.id}`);
       return;
     }
-    if (isTextPreviewable(file)) {
-      setTextPreviewFile(file);
+    if (isOfficeFile(file)) {
+      navigate(documentsEditorPath(file) ?? `/office/edit/${file.id}`);
       return;
     }
-    if (isOfficeFile(file)) {
-      navigate(`/office/edit/${file.id}`);
+    if (isTextPreviewable(file)) {
+      setTextPreviewFile(file);
       return;
     }
     // No dedicated viewer → inspector details.

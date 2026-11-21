@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, FolderOpen, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useI18n } from '@/i18n';
 
 interface AddLocalSourceDialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ interface AddLocalSourceDialogProps {
 }
 
 export function AddLocalSourceDialog({ open, onClose, onCreated }: AddLocalSourceDialogProps) {
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [fsPath, setFsPath] = useState('');
   const [creating, setCreating] = useState(false);
@@ -44,19 +46,19 @@ export function AddLocalSourceDialog({ open, onClose, onCreated }: AddLocalSourc
         config: { rootPath: fsPath.trim() },
         read_only: false,
       });
-      toast.success(`"${name.trim()}" added`);
+      toast.success(t('explorer.local.added', { name: name.trim() }));
       onCreated();
     } catch (err: any) {
       const code = err?.code;
       if (code === 'CONFLICT') {
-        toast.error('A source with this name already exists');
+        toast.error(t('explorer.local.conflict'));
       } else {
-        toast.error(err?.message || 'Failed to create source');
+        toast.error(err?.message || t('explorer.local.createError'));
       }
     } finally {
       setCreating(false);
     }
-  }, [canCreate, name, slug, fsPath, onCreated]);
+  }, [canCreate, name, slug, fsPath, onCreated, t]);
 
   if (!open) return null;
 
@@ -81,10 +83,12 @@ export function AddLocalSourceDialog({ open, onClose, onCreated }: AddLocalSourc
         }}>
           <FolderOpen size={16} style={{ color: 'var(--amber)', marginRight: 8 }} />
           <span style={{ flex: 1, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            Add Local Folder
+            {t('explorer.local.title')}
           </span>
           <button
             onClick={onClose}
+            title={t('shared.action.close')}
+            aria-label={t('shared.action.close')}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, display: 'flex' }}
           >
             <X size={16} />
@@ -94,33 +98,35 @@ export function AddLocalSourceDialog({ open, onClose, onCreated }: AddLocalSourc
         {/* Form */}
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label style={labelStyle}>Name</label>
+            <label style={labelStyle}>{t('explorer.local.name')}</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. Documents"
+              aria-label={t('explorer.local.name')}
+              placeholder={t('explorer.local.namePlaceholder')}
               style={inputStyle}
               autoFocus
             />
           </div>
 
           <div>
-            <label style={labelStyle}>Filesystem Path</label>
+            <label style={labelStyle}>{t('explorer.local.path')}</label>
             <input
               type="text"
               value={fsPath}
               onChange={e => setFsPath(e.target.value)}
-              placeholder="e.g. /home/victor/Documents"
+              aria-label={t('explorer.local.path')}
+              placeholder={t('explorer.local.pathPlaceholder')}
               style={inputStyle}
             />
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-              Absolute path on the server filesystem
+              {t('explorer.local.pathHelp')}
             </span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
-            <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+            <button onClick={onClose} style={cancelBtnStyle}>{t('explorer.local.cancel')}</button>
             <button
               onClick={handleCreate}
               disabled={!canCreate || creating}
@@ -131,7 +137,7 @@ export function AddLocalSourceDialog({ open, onClose, onCreated }: AddLocalSourc
               }}
             >
               {creating && <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />}
-              Add Source
+              {t('explorer.local.create')}
             </button>
           </div>
         </div>

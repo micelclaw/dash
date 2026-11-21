@@ -14,6 +14,7 @@ import { memo, useState } from 'react';
 import type { NodeProps } from '@xyflow/react';
 import { Handle, Position, NodeResizer } from '@xyflow/react';
 import { icons } from 'lucide-react';
+import { useI18n } from '@/i18n';
 import type { DiagramNodeData } from '../types';
 
 const TYPE_ICONS: Record<string, string> = {
@@ -23,6 +24,7 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 function TableShapeInner({ data: _d, selected }: NodeProps) {
+  const { t } = useI18n();
   const data = _d as unknown as DiagramNodeData;
   const color = data.color || '#3b82f6';
   const rows = (data.rows || []) as Array<{ key: string; value: string; type?: string }>;
@@ -116,7 +118,7 @@ function TableShapeInner({ data: _d, selected }: NodeProps) {
           ))
         ) : (
           <div style={{ padding: '4px 10px', fontSize: 10, color: '#475569', fontStyle: 'italic' }}>
-            {data.description || 'No columns'}
+            {data.description || t('sketches.tableShape.noColumns')}
           </div>
         )}
       </div>

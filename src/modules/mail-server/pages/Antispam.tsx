@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useBlockAllowLists } from '@micelclaw/mail-admin-ui';
 import { Plus, Trash2, RefreshCw, Info, ShieldBan, ShieldCheck, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { useI18n } from '@/i18n';
 
-const targetLabels: Record<string, string> = { email: 'Email', domain: 'Dominio', ip: 'IP' };
 const targetColors: Record<string, string> = { email: '#3b82f6', domain: '#8b5cf6', ip: '#22c55e' };
 
 export default function Antispam() {
+  const { t } = useI18n();
   const { available, blockList: blockListRaw, allowList: allowListRaw, loading, error, refetch, addEntry, removeEntry } = useBlockAllowLists();
   // El hook devuelve blockList/allowList = undefined cuando el fetch falla (rspamd/Mailu
   // caído → 503). Sin defaultear, los `.length`/`.map` de abajo lanzan TypeError → error
@@ -28,7 +29,7 @@ export default function Antispam() {
           alignItems: 'center', gap: 12, color: 'var(--text-dim)', fontSize: '0.875rem',
         }}>
           <Info size={16} style={{ color: '#3b82f6' }} />
-          Esta funcionalidad requiere Claw Core
+          {t('mailServer.coreRequired')}
         </div>
       </div>
     );
@@ -36,16 +37,16 @@ export default function Antispam() {
 
   const handleAdd = async (type: 'block' | 'allow') => {
     const form = type === 'block' ? blockForm : allowForm;
-    if (!form.value.trim()) { toast.error('El valor es obligatorio'); return; }
+    if (!form.value.trim()) { toast.error(t('mailServer.requiredValue')); return; }
     setSubmitting(true);
     try {
       await addEntry({ type, target: form.target, value: form.value.trim(), comment: form.comment.trim() });
-      toast.success(`Entrada añadida a la lista de ${type === 'block' ? 'bloqueo' : 'permitidos'}`);
+      toast.success(t(type === 'block' ? 'mailServer.blockListAdded' : 'mailServer.allowListAdded'));
       if (type === 'block') setBlockForm({ value: '', target: 'email', comment: '' });
       else setAllowForm({ value: '', target: 'email', comment: '' });
       refetch();
     } catch {
-      toast.error('Error al añadir la entrada');
+      toast.error(t('mailServer.addFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -54,11 +55,11 @@ export default function Antispam() {
   const handleDelete = async (id: string) => {
     try {
       await removeEntry(id);
-      toast.success('Entrada eliminada');
+      toast.success(t('mailServer.deleteEntry'));
       setDeleteConfirm(null);
       refetch();
     } catch {
-      toast.error('Error al eliminar');
+      toast.error(t('mailServer.deleteFailed'));
     }
   };
 
@@ -107,7 +108,7 @@ export default function Antispam() {
         display: 'flex', gap: 8, alignItems: 'center', background: 'var(--bg)',
       }}>
         <input
-          placeholder="Valor (email, dominio o IP)"
+          placeholder={t('mailServer.valuePlaceholder')}
           value={form.value}
           onChange={e => setForm({ ...form, value: e.target.value })}
           style={{ ...inputStyle, flex: 1 }}
@@ -117,12 +118,12 @@ export default function Antispam() {
           onChange={e => setForm({ ...form, target: e.target.value as 'email' | 'domain' | 'ip' })}
           style={selectStyle}
         >
-          <option value="email">Email</option>
-          <option value="domain">Dominio</option>
-          <option value="ip">IP</option>
+          <option value="email">{t('mailServer.email')}</option>
+          <option value="domain">{t('mailServer.domainType')}</option>
+          <option value="ip">{t('mailServer.ip')}</option>
         </select>
         <input
-          placeholder="Comentario (opcional)"
+          placeholder={t('mailServer.commentPlaceholder')}
           value={form.comment}
           onChange={e => setForm({ ...form, comment: e.target.value })}
           style={{ ...inputStyle, width: 180 }}
@@ -139,7 +140,7 @@ export default function Antispam() {
           }}
         >
           <Plus size={14} />
-          Añadir
+          {t('mailServer.add')}
         </button>
       </div>
 
@@ -151,16 +152,16 @@ export default function Antispam() {
         textTransform: 'uppercase', letterSpacing: '0.04em',
         borderBottom: '1px solid var(--border)',
       }}>
-        <span>Valor</span>
-        <span>Tipo</span>
-        <span>Comentario</span>
+        <span>{t('mailServer.value')}</span>
+        <span>{t('mailServer.type')}</span>
+        <span>{t('mailServer.comment')}</span>
         <span />
       </div>
 
       {/* Entries */}
       {entries.length === 0 ? (
         <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-          No hay entradas
+          {t('mailServer.noEntries')}
         </div>
       ) : (
         entries.map(entry => (
@@ -185,7 +186,7 @@ export default function Antispam() {
                 fontSize: '0.6875rem', fontWeight: 500,
                 padding: '2px 8px', borderRadius: 'var(--radius-md)',
               }}>
-                {targetLabels[entry.target]}
+                {t(entry.target === 'email' ? 'mailServer.email' : entry.target === 'domain' ? 'mailServer.domainType' : 'mailServer.ip')}
               </span>
             </span>
             <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
@@ -286,8 +287,8 @@ export default function Antispam() {
         </div>
       )}
 
-      {renderSection('Lista de bloqueo', ShieldBan, blockList, blockForm, setBlockForm, 'block')}
-      {renderSection('Lista de permitidos', ShieldCheck, allowList, allowForm, setAllowForm, 'allow')}
+      {renderSection(t('mailServer.blockList'), ShieldBan, blockList, blockForm, setBlockForm, 'block')}
+      {renderSection(t('mailServer.allowList'), ShieldCheck, allowList, allowForm, setAllowForm, 'allow')}
     </div>
   );
 }

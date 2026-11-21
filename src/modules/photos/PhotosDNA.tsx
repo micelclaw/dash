@@ -17,10 +17,12 @@ import { useAuthStore } from '@/stores/auth.store';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
 import type { PhotoDNASnapshot, PhotoDNAComparison } from './types';
+import { useI18n } from '@/i18n';
 
 type PeriodType = 'month' | 'quarter' | 'year';
 
 export function PhotosDNA() {
+  const { t, locale } = useI18n();
   const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const [snapshots, setSnapshots] = useState<PhotoDNASnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,7 @@ export function PhotosDNA() {
   if (!isPro) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <ProUpsellPanel feature="Photo DNA" description="Track your visual profile over time — aesthetics, people, locations, and mood." />
+        <ProUpsellPanel feature={t('photos.extra.dna')} description={t('photos.extra.dnaUpsell')} />
       </div>
     );
   }
@@ -99,8 +101,8 @@ export function PhotosDNA() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>Photo DNA</div>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Your visual profile over time</div>
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>{t('photos.extra.dna')}</div>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('photos.extra.dnaDescription')}</div>
         </div>
 
         {/* Period toggle */}
@@ -124,7 +126,7 @@ export function PhotosDNA() {
                 fontWeight: periodType === pt ? 600 : 400,
               }}
             >
-              {pt === 'month' ? 'Monthly' : pt === 'quarter' ? 'Quarterly' : 'Yearly'}
+              {pt === 'month' ? t('photos.extra.monthly') : pt === 'quarter' ? t('photos.extra.quarterly') : t('photos.extra.yearly')}
             </button>
           ))}
         </div>
@@ -141,7 +143,7 @@ export function PhotosDNA() {
               opacity: compareLoading ? 0.6 : 1,
             }}
           >
-            {compareLoading ? 'Comparing...' : 'Compare'}
+            {compareLoading ? t('photos.extra.comparing') : t('photos.extra.compare')}
           </button>
         )}
       </div>
@@ -149,8 +151,8 @@ export function PhotosDNA() {
       {snapshots.length === 0 ? (
         <EmptyState
           icon={Dna}
-          title="No Photo DNA yet"
-          description="Snapshots are generated monthly from your processed photos."
+          title={t('photos.extra.noDna')}
+          description={t('photos.extra.dnaEmpty')}
         />
       ) : (
         <>
@@ -192,21 +194,21 @@ export function PhotosDNA() {
                   )}
 
                   <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
-                    {formatPeriodKey(snap.period_type, snap.period_key)}
+                    {formatPeriodKey(snap.period_type, snap.period_key, locale)}
                   </div>
 
                   <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', marginBottom: 8 }}>
-                    {snap.photo_count} photos
-                    {snap.avg_aesthetic != null && ` · ★ ${snap.avg_aesthetic.toFixed(1)} avg`}
+                    {snap.photo_count === 1 ? t('photos.extra.photosCountOne') : t('photos.extra.photosCount', { count: snap.photo_count })}
+                    {snap.avg_aesthetic != null && ` · ★ ${snap.avg_aesthetic.toFixed(1)} ${t('photos.extra.average')}`}
                   </div>
 
                   {/* Top faces */}
                   {snap.top_faces.length > 0 && (
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 4 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>People: </span>
+                      <span style={{ color: 'var(--text-muted)' }}>{t('photos.extra.people')}: </span>
                       {snap.top_faces.slice(0, 3).map((f, i) => (
                         <span key={f.cluster_id}>
-                          {i > 0 && ', '}{f.name || 'Unknown'} ({f.count})
+                          {i > 0 && ', '}{f.name || t('photos.extra.unknown')} ({f.count})
                         </span>
                       ))}
                     </div>
@@ -247,6 +249,7 @@ export function PhotosDNA() {
 }
 
 function ComparisonCard({ comparison }: { comparison: PhotoDNAComparison }) {
+  const { t } = useI18n();
   return (
     <div style={{
       background: 'var(--surface)',
@@ -256,14 +259,14 @@ function ComparisonCard({ comparison }: { comparison: PhotoDNAComparison }) {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <BarChart3 size={16} style={{ color: 'var(--amber)' }} />
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>Comparison</span>
+        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{t('photos.extra.comparison')}</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
         {/* Visual similarity */}
         {comparison.visual_similarity != null && (
           <StatItem
-            label="Visual similarity"
+            label={t('photos.extra.visualSimilarity')}
             value={`${Math.round(comparison.visual_similarity * 100)}%`}
           />
         )}
@@ -271,7 +274,7 @@ function ComparisonCard({ comparison }: { comparison: PhotoDNAComparison }) {
         {/* Aesthetic delta */}
         {comparison.aesthetic_delta != null && (
           <StatItem
-            label="Aesthetic"
+            label={t('photos.extra.aesthetic')}
             value={comparison.aesthetic_delta > 0 ? `+${comparison.aesthetic_delta.toFixed(2)}` : comparison.aesthetic_delta.toFixed(2)}
             icon={comparison.aesthetic_delta > 0 ? ArrowUp : comparison.aesthetic_delta < 0 ? ArrowDown : Minus}
             iconColor={comparison.aesthetic_delta > 0 ? 'var(--success)' : comparison.aesthetic_delta < 0 ? 'var(--error)' : 'var(--text-dim)'}
@@ -281,13 +284,13 @@ function ComparisonCard({ comparison }: { comparison: PhotoDNAComparison }) {
         {/* Face changes */}
         {comparison.face_changes.appeared.length > 0 && (
           <StatItem
-            label="New faces"
+            label={t('photos.extra.newFaces')}
             value={comparison.face_changes.appeared.join(', ')}
           />
         )}
         {comparison.face_changes.disappeared.length > 0 && (
           <StatItem
-            label="Less seen"
+            label={t('photos.extra.lessSeen')}
             value={comparison.face_changes.disappeared.join(', ')}
           />
         )}
@@ -295,8 +298,8 @@ function ComparisonCard({ comparison }: { comparison: PhotoDNAComparison }) {
         {/* Location changes */}
         {(comparison.location_changes.new_locations > 0 || comparison.location_changes.dropped_locations > 0) && (
           <StatItem
-            label="Locations"
-            value={`+${comparison.location_changes.new_locations} new, -${comparison.location_changes.dropped_locations} dropped`}
+            label={t('photos.extra.locations')}
+            value={t('photos.extra.locationDelta', { newCount: comparison.location_changes.new_locations, droppedCount: comparison.location_changes.dropped_locations })}
           />
         )}
       </div>
@@ -352,11 +355,11 @@ function MoodBar({ moods }: { moods: Record<string, number> }) {
   );
 }
 
-function formatPeriodKey(type: string, key: string): string {
+function formatPeriodKey(type: string, key: string, locale: string): string {
   if (type === 'month') {
     const [year, month] = key.split('-');
     const date = new Date(Number(year), Number(month) - 1);
-    return date.toLocaleDateString('en', { month: 'long', year: 'numeric' });
+    return date.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   }
   if (type === 'quarter') return key; // "2026-Q1"
   return key; // year

@@ -16,12 +16,15 @@
 // X-Frame-Options; NO la URL interna 127.0.0.1:8090 (la bloquearía el navegador).
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { ArrowLeft, Database, Loader2, AlertTriangle, Minimize2 } from 'lucide-react';
+import { useSearchParams } from 'react-router';
+import { Loader2 } from 'lucide-react';
+import { OfficeErrorState } from './OfficeErrorState';
+import { OFFICE_COLORS } from '@/config/office-colors';
 import { api } from '@/services/api';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
+import {useI18n} from '@/i18n';
 
 // URL same-origin del proxy de Core hacia Mathesar (ver core/src/routes/databases.ts).
 const MATHESAR_UI = '/api/v1/databases/ui/';
@@ -37,11 +40,10 @@ interface MathesarStatus {
 type Phase = 'loading' | 'starting' | 'ready' | 'error';
 
 export function Component() {
-  const navigate = useNavigate();
+  const {t}=useI18n();const tRef=useRef(t);useEffect(()=>{tRef.current=t;},[t]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
-  const [status, setStatus] = useState<MathesarStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Deep-link: ?db=<id> → abrir esa base en la SPA (en vez de su home). Lo pone la rejilla
@@ -78,9 +80,8 @@ export function Component() {
 
   const checkAndStart = useCallback(async () => {
     try {
-      const res = await api.get<{ data: { mathesar: MathesarStatus } }>('/office/status');
-      const ms = res.data.mathesar;
-      setStatus(ms);
+      const res = await api.get<{ data: MathesarStatus }>('/databases/status');
+      const ms = res.data;
 
       if (ms.running) {
         setPhase('ready');
@@ -89,15 +90,14 @@ export function Component() {
 
       // Auto-start
       setPhase('starting');
-      await api.post('/office/start/mathesar');
+      await api.post('/services/mathesar/start');
 
       // Poll until ready (Mathesar tarda: migraciones Django + 2 contenedores)
       let resolved = false;
       const poll = setInterval(async () => {
         try {
-          const r2 = await api.get<{ data: { mathesar: MathesarStatus } }>('/office/status');
-          const s2 = r2.data.mathesar;
-          setStatus(s2);
+          const r2 = await api.get<{ data: MathesarStatus }>('/databases/status');
+          const s2 = r2.data;
           if (s2.running) {
             resolved = true;
             clearInterval(poll);
@@ -109,12 +109,12 @@ export function Component() {
       setTimeout(() => {
         clearInterval(poll);
         if (!resolved) {
-          setError('Mathesar failed to start within timeout');
+          setError(tRef.current('office.external.dbTimeout'));
           setPhase('error');
         }
       }, 150_000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check Databases');
+      setError(err instanceof Error ? err.message : tRef.current('office.external.dbCheckError'));
       setPhase('error');
     }
   }, []);
@@ -124,51 +124,19 @@ export function Component() {
   if (phase === 'ready') {
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
-        {/* Header con controles. En fullscreen (abrir-en-pestaña ?fullscreen=1) se colapsa
-            (height 0) → Mathesar ocupa toda la pestaña, igual que el editor Office. */}
-        <div style={{
-          height: fullscreen ? 0 : 36, overflow: 'hidden', display: 'flex', alignItems: 'center',
-          padding: fullscreen ? 0 : '0 12px', borderBottom: fullscreen ? 'none' : '1px solid var(--border)',
-          background: 'var(--surface)', gap: 8, fontSize: 12,
-          color: 'var(--text-dim)', flexShrink: 0,
-        }}>
-          <button onClick={() => navigate('/office')} style={iconBtn}>
-            <ArrowLeft size={14} />
-          </button>
-          <Database size={14} style={{ color: '#a855f7' }} />
-          <span style={{ fontWeight: 500, color: 'var(--text)' }}>Databases</span>
-          <span style={{ color: 'var(--text-muted)' }}>Mathesar</span>
-          <div style={{ flex: 1 }} />
-          <EmbedActions
-            slug="mathesar" fallbackUrl={MATHESAR_UI} ramMb={status?.ram_mb}
-            openUrl={`${dashOrigin}/office/databases?fullscreen=1`}
-            fullscreen={fullscreen} onToggleFullscreen={toggle}
-          />
-        </div>
         <iframe
           ref={iframeRef}
           src={MATHESAR_UI}
           onLoad={handleIframeLoad}
-          title="Mathesar Databases"
+          title={t('office.external.dbFrame')}
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"
         />
-        {/* Salir de pantalla completa (visible solo en fullscreen; ESC también sale). */}
-        <button
-          onClick={toggle}
-          style={{
-            position: 'fixed', top: 8, right: 8, zIndex: 60,
-            opacity: fullscreen ? 1 : 0, pointerEvents: fullscreen ? 'auto' : 'none',
-            transition: 'opacity 0.15s ease',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)', padding: '4px 8px',
-            cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 11,
-          }}
-          title="Salir de pantalla completa (ESC)"
-        >
-          <Minimize2 size={12} /> ESC
-        </button>
+        <div data-embed-floating-actions style={{position:'absolute',top:8,right:8,zIndex:10,background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--radius-md)',padding:'3px 8px',boxShadow:'0 1px 4px rgba(0,0,0,.28)'}}>
+          <EmbedActions slug="mathesar" fallbackUrl={MATHESAR_UI}
+            openUrl={`${dashOrigin}/office/databases?${new URLSearchParams({fullscreen:'1',...(dbParam?{db:dbParam}:{})})}`}
+            fullscreen={fullscreen} onToggleFullscreen={toggle}/>
+        </div>
       </div>
     );
   }
@@ -182,41 +150,20 @@ export function Component() {
       {phase === 'loading' && (
         <>
           <Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} />
-          <span style={{ fontSize: 14 }}>Checking Databases...</span>
+          <span style={{ fontSize: 14 }}>{t('office.external.dbCheck')}</span>
         </>
       )}
       {phase === 'starting' && (
         <>
           <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--amber)' }} />
-          <span style={{ fontSize: 14 }}>Starting Mathesar...</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>This may take up to 90 seconds on first launch</span>
+          <span style={{ fontSize: 14 }}>{t('office.external.dbStart')}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('office.external.dbFirst')}</span>
         </>
       )}
-      {phase === 'error' && (
-        <>
-          <AlertTriangle size={32} style={{ color: 'var(--error)' }} />
-          <span style={{ fontSize: 14 }}>Error with Databases</span>
-          {error && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{error}</span>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => navigate('/office')} style={retryBtn}>Back to Office</button>
-            <button onClick={() => { setError(null); checkAndStart(); }} style={{ ...retryBtn, background: '#a855f7', color: '#fff', border: 'none' }}>
-              Retry
-            </button>
-          </div>
-        </>
-      )}
+      {phase === 'error' && <OfficeErrorState title={t('office.external.dbError')} message={error??undefined}
+        color={OFFICE_COLORS.databases} onRetry={()=>{setError(null);void checkAndStart();}} />}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-const iconBtn: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  color: 'var(--text-dim)', display: 'flex', alignItems: 'center',
-};
-
-const retryBtn: React.CSSProperties = {
-  padding: '6px 16px', background: 'var(--surface)',
-  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-  color: 'var(--text)', cursor: 'pointer', fontSize: 13,
-};

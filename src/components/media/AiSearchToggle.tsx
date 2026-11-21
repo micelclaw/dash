@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { AI_MEDIA_ENABLED } from './flags';
+import { useI18n } from '@/i18n';
 
 interface AiSearchToggleProps {
   active?: boolean;
@@ -25,6 +26,7 @@ interface AiSearchToggleProps {
  * AI_MEDIA_ENABLED is false.
  */
 export function AiSearchToggle({ active = false, onToggle }: AiSearchToggleProps) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   if (!AI_MEDIA_ENABLED) return null;
 
@@ -33,7 +35,9 @@ export function AiSearchToggle({ active = false, onToggle }: AiSearchToggleProps
       onClick={onToggle}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title="AI search"
+      title={t('media.ai.search')}
+      aria-label={t('media.ai.search')}
+      aria-pressed={active}
       style={{
         display: 'flex',
         alignItems: 'center',

@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useI18n } from '@/i18n';
 import { Loader2, Copy, Check, Upload, Download, Shield, AlertTriangle } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
@@ -24,6 +25,7 @@ interface MultisigStatus {
 type SetupStep = 'prepare' | 'make' | 'exchange' | 'done';
 
 export function MultisigTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [status, setStatus] = useState<MultisigStatus | null>(null);
@@ -76,16 +78,16 @@ export function MultisigTab() {
       setMyInfo(result.multisig_info);
       setSetupStep('make');
     } else {
-      setSetupError(rpc.error || 'Failed to prepare multisig');
+      setSetupError(rpc.error || t('crypto.wallet.prepareMultisigFailed'));
     }
     setSetupLoading(false);
-  }, [call, rpc.error]);
+  }, [call, rpc.error, t]);
 
   // Step 2: make_multisig
   const makeMultisig = useCallback(async () => {
     const infoArr = othersInfo.split('\n').map((s) => s.trim()).filter(Boolean);
     if (infoArr.length < 1) {
-      setSetupError('Paste at least one other participant\'s info');
+      setSetupError(t('crypto.wallet.participantInfoRequired'));
       return;
     }
     setSetupLoading(true);
@@ -113,16 +115,16 @@ export function MultisigTab() {
         fetchStatus();
       }
     } else {
-      setSetupError(rpc.error || 'make_multisig failed');
+      setSetupError(rpc.error || t('crypto.wallet.makeMultisigFailed'));
     }
     setSetupLoading(false);
-  }, [call, othersInfo, threshold, fetchStatus]);
+  }, [call, othersInfo, threshold, fetchStatus, t]);
 
   // Step 3: exchange_multisig_keys (may need multiple rounds)
   const exchangeKeys = useCallback(async () => {
     const infoArr = othersInfo.split('\n').map((s) => s.trim()).filter(Boolean);
     if (infoArr.length < 1) {
-      setSetupError('Paste other participants\' info for this round');
+      setSetupError(t('crypto.wallet.exchangeInfoRequired'));
       return;
     }
     setSetupLoading(true);
@@ -149,10 +151,10 @@ export function MultisigTab() {
         setExchangeRoundsLeft((prev) => prev + 1);
       }
     } else {
-      setSetupError(rpc.error || 'exchange_multisig_keys failed');
+      setSetupError(rpc.error || t('crypto.wallet.exchangeMultisigFailed'));
     }
     setSetupLoading(false);
-  }, [call, othersInfo, fetchStatus]);
+  }, [call, othersInfo, fetchStatus, t]);
 
   // Export multisig info
   const exportMultisigInfo = useCallback(async () => {
@@ -196,10 +198,10 @@ export function MultisigTab() {
     if (result?.tx_data_hex) {
       setSignResult(result.tx_data_hex);
     } else {
-      setSigningError(rpc.error || 'Signing failed');
+      setSigningError(rpc.error || t('crypto.wallet.signingFailed'));
     }
     setSigningLoading(false);
-  }, [call, signingData]);
+  }, [call, signingData, t]);
 
   // Submit signed multisig tx
   const submitMultisig = useCallback(async () => {
@@ -220,24 +222,24 @@ export function MultisigTab() {
       setSigningError(null);
       setSignResult(null);
       setSigningData('');
-      alert(`Submitted! TX hash(es): ${result.tx_hash_list.join(', ')}`);
+      alert(t('crypto.wallet.submittedTxHashes', { hashes: result.tx_hash_list.join(', ') }));
     } else {
-      setSigningError(rpc.error || 'Submission failed');
+      setSigningError(rpc.error || t('crypto.wallet.submissionFailed'));
     }
     setSigningLoading(false);
-  }, [call, signResult]);
+  }, [call, signResult, t]);
 
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
-        <Loader2 size={16} className="spin" /> Checking multisig status...
+        <Loader2 size={16} className="spin" /> {t('crypto.wallet.checkingMultisig')}
       </div>
     );
   }
 
   return (
     <div className="ms-root">
-      <h3 className="ms-title">Multisig</h3>
+      <h3 className="ms-title">{t('crypto.wallet.multisig')}</h3>
 
       {/* Status */}
       <div className="ms-status-card">
@@ -246,17 +248,17 @@ export function MultisigTab() {
           {status?.multisig ? (
             <>
               <div className="ms-status-text">
-                {status.threshold}-of-{status.total} Multisig
-                {status.ready ? ' (Ready)' : ' (Setup incomplete)'}
+                {status.threshold}-of-{status.total} {t('crypto.wallet.multisig')}
+                {status.ready ? ` (${t('crypto.wallet.ready')})` : ` (${t('crypto.wallet.setupIncomplete')})`}
               </div>
               <div className="ms-status-sub">
-                Requires {status.threshold} signatures out of {status.total} participants
+                {t('crypto.wallet.requiresSignatures', { threshold: status.threshold, total: status.total })}
               </div>
             </>
           ) : (
             <>
-              <div className="ms-status-text">Standard Wallet</div>
-              <div className="ms-status-sub">This wallet is not configured for multisig</div>
+              <div className="ms-status-text">{t('crypto.wallet.standardWallet')}</div>
+              <div className="ms-status-sub">{t('crypto.wallet.notConfiguredMultisig')}</div>
             </>
           )}
         </div>
@@ -265,7 +267,7 @@ export function MultisigTab() {
       {/* Warning */}
       <div className="ms-warning">
         <AlertTriangle size={13} />
-        <span>Multisig setup is irreversible. Once converted, a wallet cannot be changed back. Use a dedicated wallet for multisig.</span>
+        <span>{t('crypto.wallet.multisigWarning')}</span>
       </div>
 
       {/* If already multisig: show signing + export/import */}
@@ -273,16 +275,16 @@ export function MultisigTab() {
         <>
           {/* Export/Import info for signing rounds */}
           <div className="ms-section">
-            <div className="ms-section-title">Sync Multisig Info</div>
+            <div className="ms-section-title">{t('crypto.wallet.syncMultisigInfo')}</div>
             <div className="ms-section-desc">
-              Before creating or signing transactions, sync info with other participants.
+              {t('crypto.wallet.syncBeforeSign')}
             </div>
             <div className="ms-btn-row">
               <button className="ms-btn ms-btn-secondary" onClick={exportMultisigInfo}>
-                <Download size={12} /> Export Info
+                <Download size={12} /> {t('crypto.wallet.exportInfo')}
               </button>
               <button className="ms-btn ms-btn-secondary" onClick={() => fileRef.current?.click()}>
-                <Upload size={12} /> Import Info
+                <Upload size={12} /> {t('crypto.wallet.importInfo')}
               </button>
               <input ref={fileRef} type="file" accept=".txt" hidden onChange={(e) => e.target.files?.[0] && importMultisigInfo(e.target.files[0])} />
             </div>
@@ -290,12 +292,12 @@ export function MultisigTab() {
 
           {/* Sign multisig tx */}
           <div className="ms-section">
-            <div className="ms-section-title">Sign Transaction</div>
+            <div className="ms-section-title">{t('crypto.wallet.signTransaction')}</div>
             <div className="ms-field">
-              <label className="ms-label">Transaction Data (hex)</label>
+              <label className="ms-label">{t('crypto.wallet.transactionDataHex')}</label>
               <textarea
                 className="ms-textarea"
-                placeholder="Paste unsigned or partially-signed multisig tx hex..."
+                placeholder={t('crypto.wallet.multisigTxPlaceholder')}
                 value={signingData}
                 onChange={(e) => setSigningData(e.target.value)}
                 rows={4}
@@ -304,11 +306,11 @@ export function MultisigTab() {
             </div>
             <div className="ms-btn-row">
               <button className="ms-btn ms-btn-primary" onClick={signMultisig} disabled={signingLoading || !signingData.trim()}>
-                {signingLoading ? <><Loader2 size={12} className="spin" /> Signing...</> : 'Sign'}
+                {signingLoading ? <><Loader2 size={12} className="spin" /> {t('crypto.wallet.signing')}</> : t('crypto.wallet.sign')}
               </button>
               {signResult && (
                 <button className="ms-btn ms-btn-primary" onClick={submitMultisig} disabled={signingLoading}>
-                  Submit to Network
+                  {t('crypto.wallet.submitNetwork')}
                 </button>
               )}
             </div>
@@ -316,9 +318,9 @@ export function MultisigTab() {
             {signResult && (
               <div className="ms-result">
                 <div className="ms-result-header">
-                  <span>Signed Transaction</span>
+                  <span>{t('crypto.wallet.signedTransaction')}</span>
                   <button className="ms-copy-btn" onClick={() => handleCopy(signResult)}>
-                    {copied ? <><Check size={11} style={{ color: '#22c55e' }} /> Copied</> : <><Copy size={11} /> Copy</>}
+                    {copied ? <><Check size={11} style={{ color: '#22c55e' }} /> {t('crypto.wallet.copied')}</> : <><Copy size={11} /> {t('crypto.wallet.copy')}</>}
                   </button>
                 </div>
                 <div className="ms-result-text">{signResult.slice(0, 200)}...</div>
@@ -337,18 +339,18 @@ export function MultisigTab() {
         <>
           {!setupActive ? (
             <button className="ms-btn ms-btn-primary" onClick={() => setSetupActive(true)}>
-              Begin Multisig Setup
+              {t('crypto.wallet.beginMultisigSetup')}
             </button>
           ) : (
             <div className="ms-setup">
-              <div className="ms-section-title">Setup Wizard</div>
+              <div className="ms-section-title">{t('crypto.wallet.setupWizard')}</div>
 
               {/* Step indicators */}
               <div className="ms-steps">
                 {(['prepare', 'make', 'exchange', 'done'] as SetupStep[]).map((s, i) => (
                   <div key={s} className={`ms-step ${setupStep === s ? 'ms-step-active' : i < ['prepare', 'make', 'exchange', 'done'].indexOf(setupStep) ? 'ms-step-done' : ''}`}>
                     <div className="ms-step-num">{i + 1}</div>
-                    <span>{s === 'prepare' ? 'Prepare' : s === 'make' ? 'Create' : s === 'exchange' ? 'Exchange' : 'Done'}</span>
+                    <span>{s === 'prepare' ? t('crypto.wallet.prepare') : s === 'make' ? t('crypto.wallet.create') : s === 'exchange' ? t('crypto.wallet.exchange') : t('crypto.wallet.done')}</span>
                   </div>
                 ))}
               </div>
@@ -356,18 +358,18 @@ export function MultisigTab() {
               {setupStep === 'prepare' && (
                 <div className="ms-setup-content">
                   <div className="ms-field">
-                    <label className="ms-label">Threshold (M)</label>
+                    <label className="ms-label">{t('crypto.wallet.thresholdM')}</label>
                     <input className="ms-input ms-input-sm" type="number" min={2} max={totalSigners} value={threshold} onChange={(e) => setThreshold(parseInt(e.target.value) || 2)} />
                   </div>
                   <div className="ms-field">
-                    <label className="ms-label">Total Signers (N)</label>
+                    <label className="ms-label">{t('crypto.wallet.totalSignersN')}</label>
                     <input className="ms-input ms-input-sm" type="number" min={2} max={16} value={totalSigners} onChange={(e) => setTotalSigners(parseInt(e.target.value) || 3)} />
                   </div>
                   <div className="ms-section-desc">
-                    This creates a {threshold}-of-{totalSigners} multisig wallet. You need {threshold} out of {totalSigners} signatures to spend.
+                    {t('crypto.wallet.multisigWalletDescription', { threshold, total: totalSigners })}
                   </div>
                   <button className="ms-btn ms-btn-primary" onClick={prepareMultisig} disabled={setupLoading}>
-                    {setupLoading ? <><Loader2 size={12} className="spin" /> Preparing...</> : 'Prepare Multisig Info'}
+                    {setupLoading ? <><Loader2 size={12} className="spin" /> {t('crypto.wallet.preparing')}</> : t('crypto.wallet.prepareMultisigInfo')}
                   </button>
                 </div>
               )}
@@ -375,10 +377,10 @@ export function MultisigTab() {
               {setupStep === 'make' && (
                 <div className="ms-setup-content">
                   <div className="ms-section-desc">
-                    Share your info string below with all other participants. Then paste their info strings (one per line).
+                    {t('crypto.wallet.shareInfo')}
                   </div>
                   <div className="ms-field">
-                    <label className="ms-label">Your Multisig Info</label>
+                    <label className="ms-label">{t('crypto.wallet.yourMultisigInfo')}</label>
                     <div className="ms-info-box">
                       <div className="ms-info-text">{myInfo}</div>
                       <button className="ms-copy-btn" onClick={() => handleCopy(myInfo)}>
@@ -387,10 +389,10 @@ export function MultisigTab() {
                     </div>
                   </div>
                   <div className="ms-field">
-                    <label className="ms-label">Other Participants' Info (one per line)</label>
+                    <label className="ms-label">{t('crypto.wallet.otherParticipantInfo')}</label>
                     <textarea
                       className="ms-textarea"
-                      placeholder="Paste each participant's info on a separate line..."
+                      placeholder={t('crypto.wallet.participantInfoPlaceholder')}
                       value={othersInfo}
                       onChange={(e) => setOthersInfo(e.target.value)}
                       rows={4}
@@ -398,7 +400,7 @@ export function MultisigTab() {
                     />
                   </div>
                   <button className="ms-btn ms-btn-primary" onClick={makeMultisig} disabled={setupLoading}>
-                    {setupLoading ? <><Loader2 size={12} className="spin" /> Creating...</> : 'Create Multisig'}
+                    {setupLoading ? <><Loader2 size={12} className="spin" /> {t('crypto.wallet.creating')}</> : t('crypto.wallet.createMultisig')}
                   </button>
                 </div>
               )}
@@ -406,10 +408,10 @@ export function MultisigTab() {
               {setupStep === 'exchange' && (
                 <div className="ms-setup-content">
                   <div className="ms-section-desc">
-                    Additional key exchange round {exchangeRoundsLeft} required. Share the updated info and paste others' responses.
+                    {t('crypto.wallet.additionalExchangeRound', { rounds: exchangeRoundsLeft })}
                   </div>
                   <div className="ms-field">
-                    <label className="ms-label">Your Updated Info</label>
+                    <label className="ms-label">{t('crypto.wallet.yourUpdatedInfo')}</label>
                     <div className="ms-info-box">
                       <div className="ms-info-text">{myInfo}</div>
                       <button className="ms-copy-btn" onClick={() => handleCopy(myInfo)}>
@@ -418,10 +420,10 @@ export function MultisigTab() {
                     </div>
                   </div>
                   <div className="ms-field">
-                    <label className="ms-label">Others' Updated Info (one per line)</label>
+                    <label className="ms-label">{t('crypto.wallet.otherUpdatedInfo')}</label>
                     <textarea
                       className="ms-textarea"
-                      placeholder="Paste each participant's info..."
+                      placeholder={t('crypto.wallet.updatedInfoPlaceholder')}
                       value={othersInfo}
                       onChange={(e) => setOthersInfo(e.target.value)}
                       rows={4}
@@ -429,7 +431,7 @@ export function MultisigTab() {
                     />
                   </div>
                   <button className="ms-btn ms-btn-primary" onClick={exchangeKeys} disabled={setupLoading}>
-                    {setupLoading ? <><Loader2 size={12} className="spin" /> Exchanging...</> : 'Exchange Keys'}
+                    {setupLoading ? <><Loader2 size={12} className="spin" /> {t('crypto.wallet.exchanging')}</> : t('crypto.wallet.exchangeKeys')}
                   </button>
                 </div>
               )}
@@ -437,9 +439,9 @@ export function MultisigTab() {
               {setupStep === 'done' && (
                 <div className="ms-setup-content" style={{ textAlign: 'center', padding: '24px 0' }}>
                   <Shield size={32} style={{ color: '#22c55e', margin: '0 auto 12px' }} />
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>Multisig Setup Complete</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>{t('crypto.wallet.multisigSetupComplete')}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    Your wallet is now a {threshold}-of-{totalSigners} multisig wallet.
+                    {t('crypto.wallet.multisigSetupCompleteHelp', { threshold, total: totalSigners })}
                   </div>
                 </div>
               )}

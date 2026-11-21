@@ -18,29 +18,28 @@ import { Camera } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
 import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, ZfsInput, Field } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function CreateSnapshotForm({ target, onClose }: { target: string; onClose: () => void }) {
+  const { t } = useI18n();
   const create = useStorageStore((s) => s.zfsCreateSnapshot);
   const demo = useStorageStore((s) => s.zfs_demo);
   const [snap, setSnap] = useState('manual-' + new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { await create(target, snap); toast.success(`Snapshot ${target}@${snap} creado${demo ? ' (demo)' : ''}`); onClose(); }
-    catch (e) { toast.error(`Error: ${e instanceof Error ? e.message : String(e)}`); } finally { setBusy(false); }
+    try { await create(target, snap); toast.success(t('storage.snapshot.created', { target, name: snap, demo: demo ? t('storage.common.demoSuffix') : '' })); onClose(); }
+    catch (e) { toast.error(t('storage.snapshot.createError', { error: e instanceof Error ? e.message : String(e) })); } finally { setBusy(false); }
   };
   return (
-    <ZfsModal title={`Instantánea (snapshot) de ${target}`} icon={<Camera size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton primary disabled={busy || !snap} onClick={submit}>{busy ? 'Creando…' : 'Crear instantánea'}</ZfsButton></>}>
+    <ZfsModal title={t('storage.snapshot.title', { target })} icon={<Camera size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton primary disabled={busy || !snap} onClick={submit}>{busy ? t('storage.common.creating') : t('storage.snapshot.create')}</ZfsButton></>}>
       <SectionIntro>
-        Una instantánea (snapshot) congela el estado de esta carpeta en este instante, casi sin ocupar espacio.
-        Si más tarde borras o estropeas archivos, puedes volver a este punto. Es tu red de seguridad ante errores.
+        {t('storage.snapshot.intro')}
       </SectionIntro>
       <div>
-        <Field hint="Un nombre que te ayude a recordar este punto en el tiempo (p. ej. antes-de-migrar). Quedará como carpeta@nombre.">
-          Nombre de la instantánea
-        </Field>
-        <ZfsInput value={snap} onChange={(e) => setSnap(e.target.value)} />
+        <Field hint={t('storage.snapshot.nameHint')}>{t('storage.snapshot.name')}</Field>
+        <ZfsInput aria-label={t('storage.snapshot.name')} value={snap} onChange={(e) => setSnap(e.target.value)} />
       </div>
     </ZfsModal>
   );

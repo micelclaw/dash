@@ -312,7 +312,7 @@ export function AgentBootstrapConfig({ agentId, agentName }: AgentBootstrapConfi
           lineHeight: 1.5,
         }}
       >
-        Tune how SOUL.md / USER.md / TOOLS.md / MEMORY.md get injected into the agent's
+        Tune how AGENTS.md / SOUL.md / USER.md / MEMORY.md get injected into the agent's
         system prompt. Empty (italic) = inherits from <code>agents.defaults</code>. Char
         limits trim each bootstrap file before injection — lower values save tokens but
         may cut context the agent needs to behave correctly.

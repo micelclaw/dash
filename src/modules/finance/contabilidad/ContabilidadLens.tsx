@@ -10,6 +10,7 @@
 // asientos manuales, plan de cuentas gestionable, navegación encadenada).
 
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { LayoutDashboard, BookOpen, FolderKanban, FileBarChart, Settings, Plus, Wallet, Scale, Receipt, ArrowRight } from 'lucide-react';
@@ -22,19 +23,19 @@ import { GestionArea, ConfiguracionArea } from './GestionConfigArea';
 import { fmt, Money, Tip } from './shared';
 
 type Area = 'resumen' | 'contabilidad' | 'gestion' | 'informes' | 'config';
-const AREAS = [
-  { id: 'resumen', label: 'Overview', icon: LayoutDashboard },
-  { id: 'contabilidad', label: 'Accounting', icon: BookOpen },
-  { id: 'gestion', label: 'Management', icon: FolderKanban },
-  { id: 'informes', label: 'Reports', icon: FileBarChart },
-  { id: 'config', label: 'Settings', icon: Settings },
-];
-
 export function ContabilidadLens() {
+  const { t } = useI18n();
   const [params, setParams] = useSearchParams();
   const [area, setArea] = useState<Area>('resumen');
   const [ledgerAccountId, setLedgerAccountId] = useState<string | null>(null);
   const [deepEntry, setDeepEntry] = useState<JournalEntry | null>(null);
+  const areas = [
+    { id: 'resumen', label: t('finance.accounting.overview'), icon: LayoutDashboard },
+    { id: 'contabilidad', label: t('finance.accounting.title'), icon: BookOpen },
+    { id: 'gestion', label: t('finance.accounting.management'), icon: FolderKanban },
+    { id: 'informes', label: t('finance.accounting.reports'), icon: FileBarChart },
+    { id: 'config', label: t('finance.accounting.settings'), icon: Settings },
+  ];
 
   const openLedger = (id: string) => { setLedgerAccountId(id); setArea('contabilidad'); };
   const openDocument = (docId: string) => setParams((p) => { p.set('tab', 'facturacion'); p.set('doc', docId); p.delete('contact'); return p; }, { replace: true });
@@ -51,7 +52,7 @@ export function ContabilidadLens() {
     let cancelled = false;
     void api.get<{ data: JournalEntry }>(`/finance/journal-entries/${entryParam}`)
       .then((r) => { if (!cancelled) setDeepEntry(r.data); })
-      .catch(() => { if (!cancelled) toast.error('Entry not found'); });
+      .catch(() => { if (!cancelled) toast.error(t('finance.accounting.entryNotFound')); });
     return () => { cancelled = true; };
   }, [entryParam]);
 
@@ -68,7 +69,7 @@ export function ContabilidadLens() {
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-3 px-6 pt-1 pb-2 flex-wrap border-b border-[var(--border)]">
-        <Tabs className="cont-subtabs" tabs={AREAS} activeTab={area} onChange={(a) => goArea(a as Area)} variant="underline" />
+        <Tabs className="cont-subtabs" tabs={areas} activeTab={area} onChange={(a) => goArea(a as Area)} variant="underline" />
         <div className="flex-1" />
         {area !== 'config' && <PeriodControl />}
       </div>
@@ -106,6 +107,7 @@ interface WalletAccount { id: string; subtype: string | null; balance: string; }
 interface BalanceSheet { total_assets: string; total_liabilities_equity: string; result: string; equity: { amount: string }[]; balanced: boolean; }
 
 function ResumenArea({ onGo }: { onGo: (a: Area) => void; onOpenLedger: (id: string) => void }) {
+  const { t } = useI18n();
   const { range, title } = useFinancePeriod();
   const [pl, setPl] = useState<PL | null>(null);
   const [vat, setVat] = useState<Vat | null>(null);
@@ -136,33 +138,33 @@ function ResumenArea({ onGo }: { onGo: (a: Area) => void; onOpenLedger: (id: str
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Result" sub={title} value={`${fmt(result)} €`} color={result >= 0 ? 'var(--green)' : 'var(--red)'} icon={TrendingIcon(result)} />
-        <KpiCard label="Cash" sub="banks and cash" value={tesoreria != null ? `${fmt(tesoreria)} €` : '—'} icon={<Wallet size={16} />} />
-        <KpiCard label={toSettle >= 0 ? 'VAT payable' : 'VAT refundable'} sub="form 303" value={`${fmt(Math.abs(toSettle))} €`} icon={<Receipt size={16} />} />
-        <KpiCard label="Net worth" sub="capital + result" value={`${fmt(netWorth)} €`} icon={<Scale size={16} />} />
+        <KpiCard label={t('finance.accounting.result')} sub={title} value={`${fmt(result)} €`} color={result >= 0 ? 'var(--green)' : 'var(--red)'} icon={TrendingIcon(result)} />
+        <KpiCard label={t('finance.accounting.cash')} sub={t('finance.accounting.banksAndCash')} value={tesoreria != null ? `${fmt(tesoreria)} €` : '—'} icon={<Wallet size={16} />} />
+        <KpiCard label={t(toSettle >= 0 ? 'finance.accounting.vatPayable' : 'finance.accounting.vatRefundable')} sub={t('finance.accounting.form303')} value={`${fmt(Math.abs(toSettle))} €`} icon={<Receipt size={16} />} />
+        <KpiCard label={t('finance.accounting.netWorth')} sub={t('finance.accounting.capitalPlusResult')} value={`${fmt(netWorth)} €`} icon={<Scale size={16} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="text-[13px] font-semibold mb-3 flex items-center gap-1.5">Profit and loss <Tip k="resultados" /></div>
+          <div className="text-[13px] font-semibold mb-3 flex items-center gap-1.5">{t('finance.accounting.profitLoss')} <Tip k="resultados" /></div>
           <div className="flex flex-col gap-2 text-sm">
-            <div className="flex justify-between"><span className="text-[var(--text-dim)]">Income</span><Money v={pl?.total_income ?? 0} /></div>
-            <div className="flex justify-between"><span className="text-[var(--text-dim)]">Expenses</span><Money v={pl?.total_expense ?? 0} /></div>
-            <div className="flex justify-between font-bold pt-2 border-t border-[var(--border)]"><span>Result</span><span className="font-mono" style={{ color: result >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(pl?.result ?? 0)} €</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-dim)]">{t('finance.accounting.income')}</span><Money v={pl?.total_income ?? 0} /></div>
+            <div className="flex justify-between"><span className="text-[var(--text-dim)]">{t('finance.accounting.expenses')}</span><Money v={pl?.total_expense ?? 0} /></div>
+            <div className="flex justify-between font-bold pt-2 border-t border-[var(--border)]"><span>{t('finance.accounting.result')}</span><span className="font-mono" style={{ color: result >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(pl?.result ?? 0)} €</span></div>
           </div>
-          <button type="button" onClick={() => onGo('informes')} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--mod-finance)] hover:underline">See reports <ArrowRight size={13} /></button>
+          <button type="button" onClick={() => onGo('informes')} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--mod-finance)] hover:underline">{t('finance.accounting.seeReports')} <ArrowRight size={13} /></button>
         </div>
 
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col gap-3">
-          <div className="text-[13px] font-semibold">Quick actions</div>
+          <div className="text-[13px] font-semibold">{t('finance.accounting.quickActions')}</div>
           <div className="grid grid-cols-2 gap-2">
-            <Quick label="New entry" icon={<Plus size={15} />} onClick={() => onGo('contabilidad')} />
-            <Quick label="Journal" icon={<BookOpen size={15} />} onClick={() => onGo('contabilidad')} />
-            <Quick label="Chart of accounts" icon={<FolderKanban size={15} />} onClick={() => onGo('contabilidad')} />
-            <Quick label="Tax forms" icon={<Receipt size={15} />} onClick={() => onGo('informes')} />
+            <Quick label={t('finance.accounting.newEntry')} icon={<Plus size={15} />} onClick={() => onGo('contabilidad')} />
+            <Quick label={t('finance.accounting.journal')} icon={<BookOpen size={15} />} onClick={() => onGo('contabilidad')} />
+            <Quick label={t('finance.accounting.chartOfAccounts')} icon={<FolderKanban size={15} />} onClick={() => onGo('contabilidad')} />
+            <Quick label={t('finance.accounting.taxForms')} icon={<Receipt size={15} />} onClick={() => onGo('informes')} />
           </div>
-          {bs && !bs.balanced && <div className="text-xs text-[var(--red)] mt-1">⚠ The balance sheet does not balance — check the entries in the Journal.</div>}
-          {bs && bs.balanced && <div className="text-xs text-[var(--green)] mt-1">✓ The books balance.</div>}
+          {bs && !bs.balanced && <div className="text-xs text-[var(--red)] mt-1">⚠ {t('finance.accounting.booksUnbalancedWarning')}</div>}
+          {bs && bs.balanced && <div className="text-xs text-[var(--green)] mt-1">✓ {t('finance.accounting.booksBalanced')}</div>}
         </div>
       </div>
     </div>

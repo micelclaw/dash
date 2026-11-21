@@ -20,6 +20,7 @@
 import { createElement } from 'react';
 import { lucideLookup } from '@/config/lucide-lookup';
 import type { AppManifest } from '@/types/apps';
+import { officeColor } from '@/config/office-colors';
 
 export interface AppIconProps {
   icon: string;
@@ -61,15 +62,16 @@ export function AppIcon({ icon, icon_kind, color, size = 20, className }: AppIco
 export function resolveManifestIcon(
   manifest?: Partial<AppManifest> | null,
 ): { icon: string; icon_kind: 'emoji' | 'lucide'; color?: string } {
+  const color = officeColor(manifest?.ui?.module?.app_key ?? manifest?.name?.toLowerCase()) ?? manifest?.color ?? manifest?.ui?.module?.color;
   if (manifest?.icon_kind) {
-    return { icon: manifest.icon ?? '📦', icon_kind: manifest.icon_kind, color: manifest.color };
+    return { icon: manifest.icon ?? '📦', icon_kind: manifest.icon_kind, color };
   }
   if (manifest?.icon) {
-    return { icon: manifest.icon, icon_kind: 'emoji', color: manifest.color };
+    return { icon: manifest.icon, icon_kind: 'emoji', color };
   }
   const lucide = manifest?.ui?.module?.icon;
   if (lucide) {
-    return { icon: lucide, icon_kind: 'lucide', color: manifest.color };
+    return { icon: lucide, icon_kind: 'lucide', color };
   }
   return { icon: '📦', icon_kind: 'emoji' };
 }

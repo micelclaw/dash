@@ -16,6 +16,7 @@ import { api } from '@/services/api';
 import { CryptoLogs } from '../shared/CryptoLogs';
 import { formatBytes, formatEta, formatUptime, formatHashRate, formatDifficulty, formatSatVB, formatRelativeTime, formatTraffic } from '../shared/crypto-formatters';
 import { UpdateCheck } from '../shared/UpdateCheck';
+import { useI18n } from '@/i18n';
 
 interface BtcSync {
   chain: string;
@@ -86,20 +87,20 @@ interface Props {
   onConfigure: () => void;
 }
 
-function getPhaseLabel(phase: string, sync: BtcSync | null, running: boolean): string {
-  if (!running) return phase === 'stopped' ? 'Stopped' : phase;
-  if (!sync) return 'Starting...';
-  if (sync.synced) return 'Synced';
-  return 'Initial Block Download';
+function getPhaseLabel(phase: string, sync: BtcSync | null, running: boolean, t: (key: string) => string): string {
+  if (!running) return phase === 'stopped' ? t('crypto.status.stopped') : phase;
+  if (!sync) return t('crypto.phase.starting');
+  if (sync.synced) return t('crypto.phase.synced');
+  return t('crypto.phase.initialDownload');
 }
 
-function formatBlockDate(sync: BtcSync): string | null {
+function formatBlockDate(sync: BtcSync, t: (key: string) => string): string | null {
   if (sync.synced) return null;
   const pct = sync.verification_progress * 100;
-  if (pct < 1) return 'Processing historical blocks';
-  if (pct < 50) return 'Downloading & verifying blockchain';
-  if (pct < 95) return 'Catching up to chain tip';
-  return 'Almost synced';
+  if (pct < 1) return t('crypto.sync.processingHistory');
+  if (pct < 50) return t('crypto.sync.downloading');
+  if (pct < 95) return t('crypto.sync.catchingUp');
+  return t('crypto.sync.almost');
 }
 
 function formatVersion(v: number): string {
@@ -110,11 +111,13 @@ function formatVersion(v: number): string {
 }
 
 export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
+  const { t, locale } = useI18n();
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
   const phase = svc?.phase ?? 'stopped';
   const progress = sync ? Math.round(sync.verification_progress * 100 * 100) / 100 : 0;
-  const phaseLabel = getPhaseLabel(phase, sync, running);
+  const phaseLabel = getPhaseLabel(phase, sync, running, t);
+  const formatCount = (value: number) => value.toLocaleString(locale === 'es' ? 'es-ES' : 'en-US');
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [peers, setPeers] = useState<BtcPeerInfo[] | null>(null);
@@ -170,12 +173,12 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
         {!loading && <span className="crypto-card-phase">{phaseLabel}</span>}
         <div style={{ flex: 1 }} />
         {!loading && installed && (
-          <button className="crypto-btn-sm" onClick={onConfigure} title="Settings"><Wrench size={12} /></button>
+          <button className="crypto-btn-sm" onClick={onConfigure} title={t('crypto.configure')} aria-label={t('crypto.configure')}><Wrench size={12} /></button>
         )}
         {!loading && installed && (running ? (
-          <button className="crypto-btn-sm" onClick={onStop} title="Stop"><Square size={12} /></button>
+          <button className="crypto-btn-sm" onClick={onStop} title={t('crypto.stop')} aria-label={t('crypto.stop')}><Square size={12} /></button>
         ) : (
-          <button className="crypto-btn-sm" onClick={onStart} title="Start">
+          <button className="crypto-btn-sm" onClick={onStart} title={t('crypto.start')} aria-label={t('crypto.start')}>
             <Play size={12} />
           </button>
         ))}
@@ -184,7 +187,7 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
       {!loading && !installed && (
         <div className="crypto-card-body">
           <button className="crypto-install-btn" onClick={onInstall}>
-            <Download size={14} /> Install Bitcoin Core
+            <Download size={14} /> {t('crypto.installBitcoin')}
           </button>
         </div>
       )}
@@ -194,7 +197,7 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
           <div className="btc-ibd-banner">
             <div className="btc-ibd-title">
               <Loader2 size={13} className="spin" style={{ color: '#f59e0b' }} />
-              <span>{formatBlockDate(sync) ?? 'Syncing blockchain'}</span>
+              <span>{formatBlockDate(sync, t) ?? t('crypto.syncingChain')}</span>
             </div>
             <div className="btc-ibd-pct">{progress}%</div>
           </div>
@@ -202,15 +205,15 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
             <div className="crypto-progress-bar" style={{ width: `${Math.min(progress, 100)}%` }} />
           </div>
           <div className="crypto-card-stats" style={{ marginTop: 10 }}>
-            <div><span className="dim">Block</span> {sync.blocks.toLocaleString()} / {sync.headers.toLocaleString()}</div>
-            <div><span className="dim">Peers</span> {sync.peers}</div>
-            <div><span className="dim">Chain</span> {sync.chain}</div>
-            <div><span className="dim">Disk</span> {formatBytes(sync.size_on_disk_bytes)}</div>
-            <div><span className="dim">Mode</span> {sync.pruned ? `Pruned (${sync.prune_target_mb} MB)` : 'Full Node'}</div>
+            <div><span className="dim">{t('crypto.block')}</span> {formatCount(sync.blocks)} / {formatCount(sync.headers)}</div>
+            <div><span className="dim">{t('crypto.peers')}</span> {formatCount(sync.peers)}</div>
+            <div><span className="dim">{t('crypto.chain')}</span> {sync.chain}</div>
+            <div><span className="dim">{t('crypto.disk')}</span> {formatBytes(sync.size_on_disk_bytes, locale)}</div>
+            <div><span className="dim">{t('crypto.mode')}</span> {sync.pruned ? t('crypto.pruned', { size: sync.prune_target_mb ?? 0 }) : t('crypto.fullNode')}</div>
             {sync.estimated_time_remaining_s != null && (
-              <div><span className="dim">ETA</span> {formatEta(sync.estimated_time_remaining_s)}</div>
+              <div><span className="dim">{t('crypto.eta')}</span> {formatEta(sync.estimated_time_remaining_s, locale)}</div>
             )}
-            <div><span className="dim">Up</span> {formatUptime(sync.uptime_seconds)}</div>
+            <div><span className="dim">{t('crypto.uptime')}</span> {formatUptime(sync.uptime_seconds, locale)}</div>
           </div>
           {svc?.ram_mb != null && (
             <div className="crypto-card-ram">
@@ -224,12 +227,12 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
       {sync && sync.synced && (
         <div className="crypto-card-body">
           <div className="crypto-card-stats">
-            <div><span className="dim">Block</span> {sync.blocks.toLocaleString()} / {sync.headers.toLocaleString()}</div>
-            <div><span className="dim">Peers</span> {sync.peers}</div>
-            <div><span className="dim">Chain</span> {sync.chain}</div>
-            <div><span className="dim">Disk</span> {formatBytes(sync.size_on_disk_bytes)}</div>
-            <div><span className="dim">Mode</span> {sync.pruned ? `Pruned (${sync.prune_target_mb} MB)` : 'Full Node'}</div>
-            <div><span className="dim">Up</span> {formatUptime(sync.uptime_seconds)}</div>
+            <div><span className="dim">{t('crypto.block')}</span> {formatCount(sync.blocks)} / {formatCount(sync.headers)}</div>
+            <div><span className="dim">{t('crypto.peers')}</span> {formatCount(sync.peers)}</div>
+            <div><span className="dim">{t('crypto.chain')}</span> {sync.chain}</div>
+            <div><span className="dim">{t('crypto.disk')}</span> {formatBytes(sync.size_on_disk_bytes, locale)}</div>
+            <div><span className="dim">{t('crypto.mode')}</span> {sync.pruned ? t('crypto.pruned', { size: sync.prune_target_mb ?? 0 }) : t('crypto.fullNode')}</div>
+            <div><span className="dim">{t('crypto.uptime')}</span> {formatUptime(sync.uptime_seconds, locale)}</div>
           </div>
           {svc?.ram_mb != null && (
             <div className="crypto-card-ram">
@@ -243,9 +246,9 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
       {hasExtended && (
         <div className="btc-ext-summary">
           {ext.fee_rate_sat_vb != null && (
-            <span>Fee: {formatSatVB(ext.fee_rate_sat_vb)}</span>
+            <span>{t('crypto.fee')}: {formatSatVB(ext.fee_rate_sat_vb, locale)}</span>
           )}
-          <span>Mempool: {ext.mempool_tx_count.toLocaleString()} txs ({formatBytes(ext.mempool_size_bytes)})</span>
+          <span>{t('crypto.mempool')}: {formatCount(ext.mempool_tx_count)} {t('crypto.transactionsShort')} ({formatBytes(ext.mempool_size_bytes, locale)})</span>
         </div>
       )}
 
@@ -254,25 +257,25 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
         <div className="btc-ext-section">
           <button className="btc-ext-toggle" onClick={() => { toggleSection('network'); if (!expandedSections.has('network') && !peers) fetchPeers(); }}>
             {expandedSections.has('network') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <Network size={12} /> Network
+            <Network size={12} /> {t('crypto.network')}
           </button>
           {expandedSections.has('network') && (
             <div className="btc-ext-content">
               <div className="crypto-card-stats">
-                <div><span className="dim">Version</span> {formatVersion(ext.version)}</div>
-                <div><span className="dim">Agent</span> {ext.subversion}</div>
-                <div><span className="dim">In</span> {ext.connections_in}</div>
-                <div><span className="dim">Out</span> {ext.connections_out}</div>
+                <div><span className="dim">{t('crypto.version')}</span> {formatVersion(ext.version)}</div>
+                <div><span className="dim">{t('crypto.agent')}</span> {ext.subversion}</div>
+                <div><span className="dim">{t('crypto.inbound')}</span> {formatCount(ext.connections_in)}</div>
+                <div><span className="dim">{t('crypto.outbound')}</span> {formatCount(ext.connections_out)}</div>
               </div>
 
               {/* Peer list */}
               <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Peers {peers ? `(${peers.length})` : ''}
+                  {t('crypto.peers')} {peers ? `(${formatCount(peers.length)})` : ''}
                 </span>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="btc-ext-action-btn" onClick={() => setAddPeerVisible(!addPeerVisible)} title="Add peer"><Plus size={11} /></button>
-                  <button className="btc-ext-action-btn" onClick={fetchPeers} title="Refresh"><RefreshCw size={11} /></button>
+                  <button className="btc-ext-action-btn" onClick={() => setAddPeerVisible(!addPeerVisible)} title={t('crypto.addPeer')} aria-label={t('crypto.addPeer')}><Plus size={11} /></button>
+                  <button className="btc-ext-action-btn" onClick={fetchPeers} title={t('crypto.refresh')} aria-label={t('crypto.refresh')}><RefreshCw size={11} /></button>
                 </div>
               </div>
 
@@ -281,15 +284,16 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
                   <input
                     className="btc-ext-input"
                     placeholder="IP:port"
+                    aria-label={t('crypto.addPeer')}
                     value={addPeerInput}
                     onChange={e => setAddPeerInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleAddPeer()}
                   />
-                  <button className="btc-ext-action-btn" onClick={handleAddPeer} style={{ padding: '0 8px', fontSize: 11 }}>Add</button>
+                  <button className="btc-ext-action-btn" onClick={handleAddPeer} style={{ padding: '0 8px', fontSize: 11 }}>{t('crypto.add')}</button>
                 </div>
               )}
 
-              {peersLoading && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}><Loader2 size={11} className="spin" /> Loading...</div>}
+              {peersLoading && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}><Loader2 size={11} className="spin" /> {t('crypto.loadingEllipsis')}</div>}
 
               {peers && peers.length > 0 && (
                 <div className="btc-peer-list">
@@ -299,7 +303,7 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
                       <span className="btc-peer-tag">{p.inbound ? 'in' : 'out'}</span>
                       {p.pingtime != null && <span className="btc-peer-ping">{(p.pingtime * 1000).toFixed(0)}ms</span>}
                       <span className="btc-peer-ver">{p.subver.replace(/\//g, '')}</span>
-                      <button className="btc-peer-ban" onClick={() => handleBanPeer(p.addr.split(':')[0] ?? '')} title="Ban"><Ban size={10} /></button>
+                      <button className="btc-peer-ban" onClick={() => handleBanPeer(p.addr.split(':')[0] ?? '')} title={t('crypto.ban')} aria-label={t('crypto.ban')}><Ban size={10} /></button>
                     </div>
                   ))}
                 </div>
@@ -314,25 +318,25 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
         <div className="btc-ext-section">
           <button className="btc-ext-toggle" onClick={() => toggleSection('chain')}>
             {expandedSections.has('chain') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <BarChart3 size={12} /> Chain
+            <BarChart3 size={12} /> {t('crypto.chain')}
           </button>
           {expandedSections.has('chain') && (
             <div className="btc-ext-content">
               <div className="crypto-card-stats">
-                <div><span className="dim">Difficulty</span> {formatDifficulty(ext.difficulty)}</div>
-                <div><span className="dim">Hashrate</span> {formatHashRate(ext.network_hashps)}</div>
-                <div><span className="dim">Last Block</span> {formatRelativeTime(ext.latest_block_time)}</div>
-                <div><span className="dim">Block Txs</span> {ext.latest_block_tx_count.toLocaleString()}</div>
-                <div><span className="dim">Block Size</span> {formatBytes(ext.latest_block_size)}</div>
-                <div><span className="dim">Min Fee</span> {(ext.mempool_min_fee * 1e5).toFixed(1)} sat/vB</div>
+                <div><span className="dim">{t('crypto.difficulty')}</span> {formatDifficulty(ext.difficulty, locale)}</div>
+                <div><span className="dim">{t('crypto.hashrate')}</span> {formatHashRate(ext.network_hashps, locale)}</div>
+                <div><span className="dim">{t('crypto.lastBlock')}</span> {formatRelativeTime(ext.latest_block_time, locale)}</div>
+                <div><span className="dim">{t('crypto.blockTransactions')}</span> {formatCount(ext.latest_block_tx_count)}</div>
+                <div><span className="dim">{t('crypto.blockSize')}</span> {formatBytes(ext.latest_block_size, locale)}</div>
+                <div><span className="dim">{t('crypto.minimumFee')}</span> {(ext.mempool_min_fee * 1e5).toLocaleString(locale === 'es' ? 'es-ES' : 'en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} sat/vB</div>
               </div>
               {Object.keys(ext.indexes).length > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Indexes</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t('crypto.indexes')}</span>
                   {Object.entries(ext.indexes).map(([name, info]) => (
                     <div key={name} style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', gap: 6, marginTop: 2 }}>
                       <span>{name}</span>
-                      <span style={{ color: info.synced ? '#22c55e' : '#f59e0b' }}>{info.synced ? 'synced' : `height ${info.best_block_height}`}</span>
+                      <span style={{ color: info.synced ? '#22c55e' : '#f59e0b' }}>{info.synced ? t('crypto.synced') : t('crypto.heightValue', { height: formatCount(info.best_block_height) })}</span>
                     </div>
                   ))}
                 </div>
@@ -347,13 +351,13 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
         <div className="btc-ext-section">
           <button className="btc-ext-toggle" onClick={() => toggleSection('traffic')}>
             {expandedSections.has('traffic') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            <Activity size={12} /> Traffic
+            <Activity size={12} /> {t('crypto.traffic')}
           </button>
           {expandedSections.has('traffic') && (
             <div className="btc-ext-content">
               <div className="crypto-card-stats">
-                <div><span className="dim">Received</span> {formatTraffic(ext.total_bytes_recv)}</div>
-                <div><span className="dim">Sent</span> {formatTraffic(ext.total_bytes_sent)}</div>
+                <div><span className="dim">{t('crypto.received')}</span> {formatTraffic(ext.total_bytes_recv, locale)}</div>
+                <div><span className="dim">{t('crypto.sent')}</span> {formatTraffic(ext.total_bytes_sent, locale)}</div>
               </div>
             </div>
           )}
@@ -365,7 +369,7 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
       {loading && !svc && (
         <div className="crypto-card-body">
           <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Loader2 size={12} className="spin" /> Checking...
+            <Loader2 size={12} className="spin" /> {t('crypto.checking')}
           </span>
         </div>
       )}

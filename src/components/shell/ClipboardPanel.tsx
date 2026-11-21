@@ -15,23 +15,26 @@ import { Copy, Trash2, ClipboardX } from 'lucide-react';
 import { toast } from 'sonner';
 import { useClipboardStore } from '@/stores/clipboard.store';
 import { useIsPhone } from '@/hooks/use-media-query';
+import { useI18n } from '@/i18n';
 
 interface ClipboardPanelProps {
   open: boolean;
   onClose: () => void;
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: 'en' | 'es', justNow: string): string {
   const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return justNow;
+  const formatter = new Intl.RelativeTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { numeric: 'auto', style: 'short' });
   const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return formatter.format(-mins, 'minute');
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return formatter.format(-hours, 'hour');
+  return formatter.format(-Math.floor(hours / 24), 'day');
 }
 
 export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
+  const { t, locale } = useI18n();
   const entries = useClipboardStore((s) => s.entries);
   const loading = useClipboardStore((s) => s.loading);
   const copyToClipboard = useClipboardStore((s) => s.copyToClipboard);
@@ -71,12 +74,12 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
 
   const handleCopy = async (id: string) => {
     await copyToClipboard(id);
-    toast.success('Copied to clipboard');
+    toast.success(t('shell.clipboard.copied'));
   };
 
   const handleClearAll = async () => {
     await clearAll();
-    toast.success('Clipboard cleared');
+    toast.success(t('shell.clipboard.cleared'));
   };
 
   return (
@@ -126,7 +129,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
         }}
       >
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-          Portapapeles
+          {t('shell.clipboard.title')}
         </span>
         {entries.length > 0 && (
           <button
@@ -145,7 +148,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
               gap: 4,
             }}
           >
-            <ClipboardX size={12} /> Clear all
+            <ClipboardX size={12} /> {t('shell.clipboard.clearAll')}
           </button>
         )}
       </div>
@@ -154,11 +157,11 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {loading && entries.length === 0 ? (
           <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
-            Loading...
+            {t('shell.clipboard.loading')}
           </div>
         ) : entries.length === 0 ? (
           <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
-            Los elementos que envíes desde CrawlMicel o MiniMicel aparecerán aquí
+            {t('shell.clipboard.empty')}
           </div>
         ) : (
           entries.map((entry) => (
@@ -189,7 +192,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-                    {timeAgo(entry.created_at)}
+                    {timeAgo(entry.created_at, locale, t('shell.clipboard.justNow'))}
                   </span>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
                     {entry.source}
@@ -201,14 +204,16 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
               <div style={{ display: 'flex', gap: 2, flexShrink: 0, alignItems: 'center' }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleCopy(entry.id); }}
-                  title="Copy"
+                  title={t('shell.clipboard.copy')}
+                  aria-label={t('shell.clipboard.copy')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)' }}
                 >
                   <Copy size={14} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteEntry(entry.id); }}
-                  title="Delete"
+                  title={t('shell.clipboard.delete')}
+                  aria-label={t('shell.clipboard.delete')}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)' }}
                 >
                   <Trash2 size={14} />

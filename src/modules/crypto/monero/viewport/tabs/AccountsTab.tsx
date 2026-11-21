@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Plus, Loader2, Edit3, Check, X, Tag } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
@@ -34,6 +35,7 @@ function picoToXmr(p: number): string {
 }
 
 export function AccountsTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [accounts, setAccounts] = useState<AccountInfo[]>([]);
@@ -92,25 +94,25 @@ export function AccountsTab() {
   return (
     <div className="ac-root">
       <div className="ac-header">
-        <h3 className="ac-title">Accounts</h3>
+        <h3 className="ac-title">{t('crypto.wallet.accountsTitle')}</h3>
         <div style={{ flex: 1 }} />
         <button className="ac-add-btn" onClick={() => setShowCreate(!showCreate)}>
-          <Plus size={12} /> New Account
+          <Plus size={12} /> {t('crypto.wallet.newAccount')}
         </button>
       </div>
 
       {/* Totals */}
       <div className="ac-totals">
         <div className="ac-total-item">
-          <span className="ac-total-label">Total Balance</span>
+          <span className="ac-total-label">{t('crypto.wallet.totalBalance')}</span>
           <span className="ac-total-value">{picoToXmr(totalBalance)} XMR</span>
         </div>
         <div className="ac-total-item">
-          <span className="ac-total-label">Total Unlocked</span>
+          <span className="ac-total-label">{t('crypto.wallet.totalUnlocked')}</span>
           <span className="ac-total-value">{picoToXmr(totalUnlocked)} XMR</span>
         </div>
         <div className="ac-total-item">
-          <span className="ac-total-label">Accounts</span>
+          <span className="ac-total-label">{t('crypto.wallet.accountsTitle')}</span>
           <span className="ac-total-value">{accounts.length}</span>
         </div>
       </div>
@@ -120,13 +122,13 @@ export function AccountsTab() {
         <div className="ac-create-row">
           <input
             className="ac-input"
-            placeholder="Account label (optional)"
+            placeholder={t('crypto.account.labelOptional')}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && createAccount()}
           />
           <button className="ac-btn ac-btn-primary" onClick={createAccount} disabled={creating}>
-            {creating ? <Loader2 size={12} className="spin" /> : 'Create'}
+            {creating ? <Loader2 size={12} className="spin" /> : t('crypto.wallet.create')}
           </button>
           <button className="ac-btn ac-btn-ghost" onClick={() => setShowCreate(false)}>
             <X size={12} />
@@ -136,7 +138,7 @@ export function AccountsTab() {
 
       {/* Account list */}
       {loading ? (
-        <div className="ac-loading"><Loader2 size={16} className="spin" /> Loading accounts...</div>
+        <div className="ac-loading"><Loader2 size={16} className="spin" /> {t('crypto.wallet.loadingAccounts')}</div>
       ) : (
         <div className="ac-list">
           {accounts.map((a) => (
@@ -164,8 +166,8 @@ export function AccountsTab() {
                   </div>
                 ) : (
                   <>
-                    <span className="ac-account-label">{a.label || 'Unnamed'}</span>
-                    <button className="ac-entry-btn" onClick={() => startEdit(a.account_index, a.label)} title="Rename">
+                    <span className="ac-account-label">{a.label || t('crypto.wallet.unnamed')}</span>
+                    <button className="ac-entry-btn" onClick={() => startEdit(a.account_index, a.label)} title={t('crypto.wallet.rename')}>
                       <Edit3 size={11} />
                     </button>
                   </>
@@ -178,11 +180,11 @@ export function AccountsTab() {
               <div className="ac-account-balances">
                 <div className="ac-account-bal">
                   <span className="ac-bal-value">{picoToXmr(a.balance)}</span>
-                  <span className="ac-bal-label">Balance</span>
+                  <span className="ac-bal-label">{t('crypto.wallet.balanceLabel')}</span>
                 </div>
                 <div className="ac-account-bal">
                   <span className="ac-bal-value">{picoToXmr(a.unlocked_balance)}</span>
-                  <span className="ac-bal-label">Unlocked</span>
+                  <span className="ac-bal-label">{t('crypto.wallet.unlockedLabel')}</span>
                 </div>
               </div>
               <div className="ac-account-addr">
@@ -196,14 +198,14 @@ export function AccountsTab() {
       {/* Tags section */}
       {tags.length > 0 && (
         <div className="ac-tags-section">
-          <div className="ac-tags-title">Account Tags</div>
+          <div className="ac-tags-title">{t('crypto.wallet.accountTags')}</div>
           <div className="ac-tags-list">
-            {tags.map((t) => (
-              <div key={t.tag} className="ac-tag-item">
+            {tags.map((tag) => (
+              <div key={tag.tag} className="ac-tag-item">
                 <Tag size={11} style={{ color: '#ff6600' }} />
-                <span className="ac-tag-name">{t.tag}</span>
-                {t.label && <span className="ac-tag-desc">{t.label}</span>}
-                <span className="ac-tag-accounts">{t.accounts.length} accounts</span>
+                <span className="ac-tag-name">{tag.tag}</span>
+                {tag.label && <span className="ac-tag-desc">{tag.label}</span>}
+                <span className="ac-tag-accounts">{t('crypto.wallet.accountsCount', { count: tag.accounts.length })}</span>
               </div>
             ))}
           </div>

@@ -28,6 +28,7 @@ import { ApiError } from '@/services/api';
 import { STATUS_COLUMNS, PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_ORDER, STATUS_LABEL, laneOf, canManualMove, friendlyMove } from './lanes';
 import type { WorkboardCard, WorkboardPriority, WorkboardDiagnostic, WorkboardRunAttempt } from './types';
 import type { ManagedAgent } from '../types';
+import { WorkboardRecoveryPanel } from './WorkboardRecoveryPanel';
 
 interface Props {
   card: WorkboardCard | null;
@@ -344,6 +345,7 @@ export function CardDetailModal({ card, agents, diagnostics, open, onClose, onCh
           </div>
         )}
 
+        <WorkboardRecoveryPanel key={card.id} cardId={card.id} onChanged={onChanged} />
         {/* Historial de intentos */}
         <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

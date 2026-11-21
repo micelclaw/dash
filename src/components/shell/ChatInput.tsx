@@ -1,3 +1,4 @@
+import { useMcpAppComposer } from '@/hooks/use-mcp-app-composer';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -63,11 +64,13 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   // (a stream in flight always shows red/cancel regardless of gateway).
   const gatewayDown = !isProcessing && gwHealth?.status === 'down';
   const gatewayDegraded = !isProcessing && gwHealth?.status === 'degraded';
+  const gatewayUnknown = !isProcessing && (!gwHealth || gwHealth.stale || gwHealth.status === 'unknown' || gwHealth.status === 'loading');
   const moduleContext = useModuleContext();
   const voice = useVoice();
   const voiceStream = useVoiceStream();
   const isFullDuplex = true; // Always use streaming voice mode
   const conversationId = useChatStore((s) => s.activeConversationId);
+  useMcpAppComposer(conversationId, setText);
   const collaborationAccess = useChatStore((s) => {
     const id = s.activeConversationId;
     return id ? s.conversations.find((conversation) => conversation.id === id)?.access : undefined;
@@ -564,7 +567,8 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           - red (#ef4444) when processing — clickable to cancel
           - dim red (#7f1d1d) when Gateway is down — chat won't go through
           - amber (#f59e0b) when Gateway is degraded — may fail
-          - green (#22c55e) when ready */}
+          - amber when Gateway has no current observation
+          - green (#22c55e) only with a current healthy Gateway */}
       {(() => {
         let color = '#22c55e';
         let title = 'Ready';
@@ -573,6 +577,9 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           color = '#ef4444';
           title = 'Click to cancel';
           cursor = 'pointer';
+        } else if (gatewayUnknown) {
+          color = '#f59e0b';
+          title = 'Gateway sin comprobar — la conversación y el borrador se conservan';
         } else if (gatewayDown) {
           color = '#7f1d1d';
           const why = gwHealth?.error ?? gwHealth?.checks?.find(c => c.status === 'fail')?.message ?? 'unknown reason';

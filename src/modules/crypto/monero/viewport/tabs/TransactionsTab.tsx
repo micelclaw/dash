@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Loader2, RefreshCw, ArrowDownLeft, ArrowUpRight, Clock, Filter, Download } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 import { TxDetailModal, type TxEntry } from '../components/TxDetailModal';
@@ -30,6 +31,7 @@ function truncHash(h: string): string {
 }
 
 export function TransactionsTab() {
+  const { t, locale } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [txs, setTxs] = useState<TxEntry[]>([]);
@@ -92,12 +94,12 @@ export function TransactionsTab() {
   return (
     <div className="tt-root">
       <div className="tt-header">
-        <h3 className="tt-title">Transactions</h3>
+        <h3 className="tt-title">{t('crypto.wallet.transactions')}</h3>
         <div style={{ flex: 1 }} />
-        <button className="tt-icon-btn" onClick={exportCsv} title="Export CSV">
+        <button className="tt-icon-btn" onClick={exportCsv} title={t('crypto.wallet.exportCsv')}>
           <Download size={13} />
         </button>
-        <button className="tt-icon-btn" onClick={() => { setVisibleCount(PAGE_SIZE); fetchTransactions(); }} title="Refresh">
+        <button className="tt-icon-btn" onClick={() => { setVisibleCount(PAGE_SIZE); fetchTransactions(); }} title={t('crypto.wallet.refresh')}>
           <RefreshCw size={13} />
         </button>
       </div>
@@ -111,30 +113,30 @@ export function TransactionsTab() {
             className={`tt-filter-btn ${filter === f ? 'tt-filter-active' : ''}`}
             onClick={() => { setFilter(f); setVisibleCount(PAGE_SIZE); }}
           >
-            {f === 'all' ? 'All' : f === 'in' ? 'Received' : f === 'out' ? 'Sent' : 'Pending'}
+            {f === 'all' ? t('crypto.wallet.all') : f === 'in' ? t('crypto.received') : f === 'out' ? t('crypto.sent') : t('crypto.wallet.pending')}
           </button>
         ))}
-        <span className="tt-count">{filtered.length} transactions</span>
+        <span className="tt-count">{t('crypto.wallet.transactionsCount', { count: filtered.length })}</span>
       </div>
 
       {loading ? (
         <div className="tt-loading">
-          <Loader2 size={16} className="spin" /> Loading transactions...
+          <Loader2 size={16} className="spin" /> {t('crypto.wallet.loadingTransactions')}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="tt-empty">No transactions found</div>
+        <div className="tt-empty">{t('crypto.wallet.noTransactionsFound')}</div>
       ) : (
         <>
           {/* Table (scrolls horizontally inside its own box on narrow screens) */}
           <div className="tt-scroll"><div className="tt-table">
           {/* Table header */}
           <div className="tt-table-head">
-            <span className="tt-th tt-th-type">Type</span>
-            <span className="tt-th tt-th-hash">TX Hash</span>
-            <span className="tt-th tt-th-amount">Amount</span>
-            <span className="tt-th tt-th-fee">Fee</span>
-            <span className="tt-th tt-th-conf">Conf</span>
-            <span className="tt-th tt-th-date">Date</span>
+            <span className="tt-th tt-th-type">{t('crypto.wallet.type')}</span>
+            <span className="tt-th tt-th-hash">{t('crypto.wallet.txHash')}</span>
+            <span className="tt-th tt-th-amount">{t('crypto.wallet.amount')}</span>
+            <span className="tt-th tt-th-fee">{t('crypto.fee')}</span>
+            <span className="tt-th tt-th-conf">{t('crypto.wallet.confShort')}</span>
+            <span className="tt-th tt-th-date">{t('crypto.wallet.date')}</span>
           </div>
 
           {/* Rows */}
@@ -159,10 +161,10 @@ export function TransactionsTab() {
                   </span>
                   <span className="tt-td tt-th-fee">{picoToXmr(tx.fee)}</span>
                   <span className="tt-td tt-th-conf">
-                    {isPending ? <Clock size={10} style={{ color: 'var(--text-muted)' }} /> : tx.confirmations.toLocaleString()}
+                    {isPending ? <Clock size={10} style={{ color: 'var(--text-muted)' }} /> : tx.confirmations.toLocaleString(locale)}
                   </span>
                   <span className="tt-td tt-th-date">
-                    {tx.timestamp ? formatRelativeTime(tx.timestamp) : 'pending'}
+                    {tx.timestamp ? formatRelativeTime(tx.timestamp, locale) : t('crypto.wallet.pending')}
                   </span>
                 </button>
               );
@@ -172,7 +174,7 @@ export function TransactionsTab() {
 
           {hasMore && (
             <button className="tt-load-more" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}>
-              Load more ({filtered.length - visibleCount} remaining)
+              {t('crypto.wallet.loadMore', { count: filtered.length - visibleCount })}
             </button>
           )}
         </>

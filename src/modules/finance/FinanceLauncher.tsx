@@ -26,16 +26,18 @@ import { ContabilidadLens } from './contabilidad/ContabilidadLens';
 import { ProfileSelector } from '@/components/profiles/ProfileSelector';
 import { useProfileStore } from '@/stores/profile.store';
 import { FinancePeriodProvider } from './period';
+import { useI18n } from '@/i18n';
 
 type LensId = 'personal' | 'facturacion' | 'contabilidad';
 
-const LENSES: { id: LensId; label: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }[] = [
-  { id: 'personal', label: 'Personal', icon: User },
-  { id: 'facturacion', label: 'Invoicing', icon: Receipt },
-  { id: 'contabilidad', label: 'Accounting', icon: Scale },
+const LENSES: { id: LensId; message: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }[] = [
+  { id: 'personal', message: 'finance.lens.personal', icon: User },
+  { id: 'facturacion', message: 'finance.lens.invoicing', icon: Receipt },
+  { id: 'contabilidad', message: 'finance.lens.accounting', icon: Scale },
 ];
 
 export function Component() {
+  const { t } = useI18n();
   const [params, setParams] = useSearchParams();
   const { loading } = useFinanceStore();
   // Perfil ERP activo: al cambiarlo, se remonta el contenido (key) → re-fetch por perfil.
@@ -50,7 +52,7 @@ export function Component() {
       <div className="fin-launcher-header" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Wallet size={20} style={{ color: 'var(--mod-finance)' }} />
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Finance</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{t('finance.title')}</h1>
           {loading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />}
         </div>
 
@@ -60,7 +62,7 @@ export function Component() {
         {/* Selector de LENTE — control segmentado prominente (pills) */}
         <div
           role="tablist"
-          aria-label="Lente financiera"
+          aria-label={t('finance.lensLabel')}
           className="fin-lens-tabs"
           style={{
             display: 'inline-flex',
@@ -101,7 +103,7 @@ export function Component() {
                 }}
               >
                 <Icon size={16} />
-                {l.label}
+                {t(l.message)}
               </button>
             );
           })}

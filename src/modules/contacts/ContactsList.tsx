@@ -16,6 +16,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ContactsFilters } from './ContactsFilters';
 import { ContactsListItem } from './ContactsListItem';
 import type { Contact } from './types';
+import { useI18n } from '@/i18n';
 
 interface ContactsListProps {
   contacts: Contact[];
@@ -49,6 +50,7 @@ export function ContactsList({
   contacts, loading, error, filters, onFiltersChange,
   selectedId, onSelect, onCreateContact, onDeleteContact, onRetry,
 }: ContactsListProps) {
+  const { t } = useI18n();
   const availableTags = useMemo(
     () => [...new Set(contacts.flatMap(c => c.tags))].sort(),
     [contacts],
@@ -94,7 +96,7 @@ export function ContactsList({
         onMouseLeave={e => (e.currentTarget.style.background = 'var(--amber)')}
       >
         <Plus size={16} />
-        New Contact
+        {t('contacts.new')}
       </button>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -117,7 +119,7 @@ export function ContactsList({
                 cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
               }}
             >
-              Retry
+              {t('contacts.retry')}
             </button>
           </div>
         )}
@@ -126,9 +128,9 @@ export function ContactsList({
         {!loading && !error && contacts.length === 0 && (
           <EmptyState
             icon={Users}
-            title="No contacts yet"
-            description="Create your first contact or connect a sync provider to import your address book."
-            actions={[{ label: '+ New Contact', onClick: onCreateContact, variant: 'primary' }]}
+            title={t('contacts.emptyTitle')}
+            description={t('contacts.emptyDescription')}
+            actions={[{ label: `+ ${t('contacts.new')}`, onClick: onCreateContact, variant: 'primary' }]}
           />
         )}
 

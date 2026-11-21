@@ -56,6 +56,8 @@ import {
 import { api } from '@/services/api';
 import * as gwService from '@/services/gateway.service';
 import { useGatewayStore } from '@/stores/gateway.store';
+import { useGatewayConfigRepairStore } from '@/stores/gateway-config-repair.store';
+import type { InspectedConfigHealth } from '@/services/gateway-config-repair.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -306,10 +308,20 @@ export function ConfigHealthBanner() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const userPrefix = useAuthStore((s) => s.user?.id?.slice(0, 8) ?? '');
+  const userId = useAuthStore(s => s.user?.id);
+  const userRole = useAuthStore(s => s.user?.role);
+  const sessionGeneration = useAuthStore(s => s.sessionGeneration);
+  const currentIdentity = `${userId}:${sessionGeneration}:${userRole}`;
+  const repair = useGatewayConfigRepairStore();
+  const { resume: resumeRepair, start: startRepair } = repair;
+  useEffect(() => { void resumeRepair(); }, [resumeRepair, userId, sessionGeneration, userRole]);
 
   // ─── Estado del fetch + dismiss ──────────────────────────────────
   const seqRef = useRef(0);
-  const [report, setReport] = useState<ConfigHealthReport | null>(null);
+  const [receivedReport, setReport] = useState<InspectedConfigHealth | null>(null);
+  const [reportIdentity, setReportIdentity] = useState('');
+  const report = reportIdentity === currentIdentity ? receivedReport : null;
+  const [fetchError, setFetchError] = useState<string | null>(null);
   // Agentes con hidden incluidos — necesario para resolver el UUID de
   // `studio-builder` (Studio v2) y otros hidden cuando aparecen como orphan.
   // GET /managed-agents filtra hidden por defecto; aquí pasamos
@@ -332,6 +344,8 @@ export function ConfigHealthBanner() {
     const mySeq = ++seqRef.current;
     let cancelled = false;
     setLoading(true);
+    setFetchError(null);
+    const expectedGeneration = useAuthStore.getState().sessionGeneration;
     Promise.all([
       gwService.getConfigHealth({ checkAgentAuth: true }),
       api.get<{ data: ManagedAgent[] }>('/managed-agents', { include_hidden: '1' })
@@ -339,20 +353,22 @@ export function ConfigHealthBanner() {
         .catch(() => [] as ManagedAgent[]),
     ])
       .then(([r, agents]) => {
-        if (cancelled || mySeq !== seqRef.current) return;
-        setReport(r);
+        if (cancelled || mySeq !== seqRef.current || expectedGeneration !== useAuthStore.getState().sessionGeneration) return;
+        setReport(r as InspectedConfigHealth);
+        setReportIdentity(currentIdentity);
         setAgentsAll(agents);
       })
       .catch(() => {
-        if (cancelled || mySeq !== seqRef.current) return;
+        if (cancelled || mySeq !== seqRef.current || expectedGeneration !== useAuthStore.getState().sessionGeneration) return;
         setReport(null);
+        setFetchError('No se pudo completar la comprobación de modelos. La disponibilidad del Gateway se comprueba por separado.');
       })
       .finally(() => {
-        if (cancelled || mySeq !== seqRef.current) return;
+        if (cancelled || mySeq !== seqRef.current || expectedGeneration !== useAuthStore.getState().sessionGeneration) return;
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [refetchKey]);
+  }, [refetchKey, userId, sessionGeneration, userRole, currentIdentity]);
 
   const refetch = useCallback(() => setRefetchKey((k) => k + 1), []);
 
@@ -431,37 +447,43 @@ export function ConfigHealthBanner() {
     navigate(`/agents?selected=${managed.id}`);
   }, [navigate, resolveManagedAgent]);
 
-  // Auto-fix: cierra el modal si está abierto, dispara el endpoint, muestra
-  // toast con count y refetcha. Si `remaining_issues.has_issues`, warning.
-  const [autoFixBusy, setAutoFixBusy] = useState(false);
+  const autoFixBusy = repair.loading || repair.operation?.state === 'running';
   const handleAutoFix = useCallback(async () => {
-    if (autoFixBusy) return;
-    setPicker(null); // cualquier modal abierto se cancela
-    setAutoFixBusy(true);
-    try {
-      const result = await gwService.autoFixConfigHealth();
-      const count = result.fixes_applied.length;
-      if (count === 0 && !result.remaining_issues.has_issues) {
-        toast.success('No había inconsistencias que arreglar.');
-      } else if (result.remaining_issues.has_issues) {
-        toast.warning(
-          `Aplicadas ${count} fixes. Quedan ${
-            result.remaining_issues.orphan_agent_models.length +
-            result.remaining_issues.orphan_allowed_models.length +
-            (result.remaining_issues.orphan_primary ? 1 : 0) +
-            result.remaining_issues.orphan_fallbacks.length
-          } sin resolver (probablemente faltan modelos válidos — configura un provider).`,
-        );
-      } else {
-        toast.success(`${count} ${count === 1 ? 'inconsistencia' : 'inconsistencias'} resuelta${count === 1 ? '' : 's'}.`);
-      }
-      refetch();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Auto-fix falló');
-    } finally {
-      setAutoFixBusy(false);
-    }
-  }, [autoFixBusy, refetch]);
+    setPicker(null);
+    await startRepair();
+  }, [startRepair]);
+
+  useEffect(() => {
+    const operation = repair.operation;
+    if (!operation || operation.state === 'running' || operation.state === 'uncertain') return;
+    if (operation.state === 'succeeded') toast.success(operation.message);
+    else if (operation.state === 'blocked') toast.warning(operation.message);
+    else toast.error(operation.message);
+    const timer = setTimeout(refetch, 0);
+    return () => clearTimeout(timer);
+  }, [repair.operation?.id, repair.operation?.state, refetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const repairStatus = (repair.operation || repair.error || repair.pendingId) && (
+    <div role="status" style={{ marginTop: 8, lineHeight: 1.5 }}>
+      {repair.operation && <div>{repair.operation.message}</div>}
+      {repair.error && <div>{repair.error}</div>}
+      {repair.operation?.state === 'running' && <div>Fase: {repair.operation.phase === 'checking' ? 'comprobando' : repair.operation.phase === 'applying' ? 'aplicando' : 'verificando'}. Puedes seguir usando Micelclaw.</div>}
+      {repair.pendingId && <button type="button" onClick={() => void repair.check()} disabled={repair.loading} style={{ marginTop: 6, padding: '5px 9px', background: 'transparent', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Consultar resultado</button>}
+      {(repair.operation?.state === 'blocked' || repair.operation?.state === 'uncertain') && <button type="button" onClick={() => navigate('/gateway?tab=models')} style={{ marginLeft: 8, padding: '5px 9px', background: 'transparent', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Revisar modelos y cuentas</button>}
+    </div>
+  );
+
+  const inspectionIncomplete = !!report && report.inspection?.complete !== true;
+  if (inspectionIncomplete || fetchError || ((!report || !report.has_issues) && repairStatus)) {
+    return <div role="status" style={{ margin: isMobile ? '8px 12px' : '10px 16px', padding: 12, background: 'var(--amber-dim)', border: '1px solid var(--amber)', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+      {(inspectionIncomplete || fetchError) && <>
+        <strong>Comprobación de modelos pendiente</strong>
+        <div>{fetchError ?? (report?.inspection?.providers === 'current' ? 'Falta comprobar las credenciales de algún agente. No se deducen errores de una respuesta incompleta.' : 'El catálogo de proveedores no está comprobado ahora. Se conserva la configuración; no se borrarán modelos ni se cambiarán asignaciones.')}</div>
+        <button type="button" onClick={() => { setDismissed(false); refetch(); }} disabled={loading} style={{ marginTop: 6, padding: '5px 9px', background: 'transparent', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>{loading ? 'Comprobando…' : 'Comprobar de nuevo'}</button>
+      </>}
+      {repairStatus}
+    </div>;
+  }
 
   // ─── Render guard ────────────────────────────────────────────────
   // Silent en mock mode, durante la carga inicial, y si has_issues=false.
@@ -523,16 +545,16 @@ export function ConfigHealthBanner() {
             {/* Auto-fix: visible cuando hay 2+ issues O cuando hay primary/fallback
                 rotos (afectan a todos los agentes), porque ahí el ROI vs click
                 individual es alto. Para 1 issue trivial, se mantiene oculto. */}
-            {(visibleTotal >= 2 || filtered.orphan_primary || filtered.orphan_fallbacks.length > 0) && (
+            {!repair.pendingId && (visibleTotal >= 2 || filtered.orphan_primary || filtered.orphan_fallbacks.length > 0) && (
               <button
                 onClick={() => {
                   if (window.confirm(
-                    `Esto reasignará ${visibleTotal} inconsistencia${visibleTotal === 1 ? '' : 's'} a tus modelos válidos y propagará la auth automáticamente. ¿Continuar?`,
+                    `Se repararán únicamente las referencias a proveedores ausentes que se hayan comprobado. No se copiarán credenciales ni se ampliarán permisos. ¿Continuar?`,
                   )) {
                     void handleAutoFix();
                   }
                 }}
-                disabled={autoFixBusy || loading}
+                disabled={autoFixBusy || loading || !!repair.pendingId}
                 aria-label="Auto-fix all"
                 title="Arreglar todas las inconsistencias automáticamente"
                 style={{
@@ -690,6 +712,7 @@ export function ConfigHealthBanner() {
             />
           )}
         </div>
+        {repairStatus}
       </div>
 
       {/* Modal picker */}

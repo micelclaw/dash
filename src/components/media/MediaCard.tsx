@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
 } from '@/components/ui/dropdown-menu';
+import { useI18n } from '@/i18n';
 
 interface MediaCardProps {
   image?: string | null;
@@ -55,6 +56,7 @@ export function MediaCard({
   rounded = 'square',
   aspect = 'square',
 }: MediaCardProps) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -126,7 +128,8 @@ export function MediaCard({
                 e.stopPropagation();
                 onPlay();
               }}
-              title="Play"
+              title={t('media.play')}
+              aria-label={t('media.play')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -162,7 +165,8 @@ export function MediaCard({
               <DropdownMenuTrigger asChild>
                 <button
                   onClick={(e) => e.stopPropagation()}
-                  title="More"
+                  title={t('media.more')}
+                  aria-label={t('media.more')}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

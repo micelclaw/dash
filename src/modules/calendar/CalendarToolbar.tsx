@@ -11,9 +11,12 @@
  */
 
 import { ChevronLeft, ChevronRight, Plus, Menu } from 'lucide-react';
-import { formatRangeLabel, navigateDate } from '@/lib/date-helpers';
+import { startOfWeek, endOfWeek, navigateDate } from '@/lib/date-helpers';
 import { CalendarPeriodPicker } from './CalendarPeriodPicker';
 import type { CalendarView } from './types';
+import { useI18n } from '@/i18n';
+import { formatDate } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface CalendarToolbarProps {
   view: CalendarView;
@@ -40,10 +43,22 @@ export function CalendarToolbar({
   onCreateEvent,
   onOpenSidebar,
 }: CalendarToolbarProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const goToday = () => onDateChange(new Date());
   const goPrev = () => onDateChange(navigateDate(view, currentDate, -1));
   const goNext = () => onDateChange(navigateDate(view, currentDate, 1));
-  const rangeLabel = formatRangeLabel(view, currentDate);
+  const rangeLabel = view === 'agenda'
+    ? t('calendar.upcoming')
+    : view === 'month'
+      ? currentDate.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { month: 'long', year: 'numeric' })
+      : view === 'day'
+        ? formatDate(currentDate, locale, general)
+        : (() => {
+            const start = startOfWeek(currentDate);
+            const end = endOfWeek(currentDate);
+            return `${formatDate(start, locale, general)} – ${formatDate(end, locale, general)}`;
+          })();
   // Agenda has no meaningful period to jump to → plain title; the rest get a
   // tap-to-pick popover (month grid / ISO-week list / mini-month day picker).
   const titlePickable = view !== 'agenda';
@@ -64,7 +79,7 @@ export function CalendarToolbar({
     >
       {/* Hamburger (mobile only) — opens the calendars side panel */}
       {onOpenSidebar && (
-        <button onClick={onOpenSidebar} style={iconButton} title="Calendars" aria-label="Calendars">
+        <button onClick={onOpenSidebar} style={iconButton} title={t('calendar.calendars')} aria-label={t('calendar.calendars')}>
           <Menu size={16} />
         </button>
       )}
@@ -79,21 +94,21 @@ export function CalendarToolbar({
           fontWeight: 500,
         }}
       >
-        Today
+        {t('calendar.today')}
       </button>
 
       {/* Navigation arrows */}
-      <button onClick={goPrev} style={{ ...iconButton }}>
+      <button onClick={goPrev} style={{ ...iconButton }} aria-label={t('calendar.previousPeriod')} title={t('calendar.previousPeriod')}>
         <ChevronLeft size={16} />
       </button>
-      <button onClick={goNext} style={{ ...iconButton }}>
+      <button onClick={goNext} style={{ ...iconButton }} aria-label={t('calendar.nextPeriod')} title={t('calendar.nextPeriod')}>
         <ChevronRight size={16} />
       </button>
 
       {/* Range label — tappable period picker (month/week/day), plain for agenda */}
       {titlePickable ? (
         <CalendarPeriodPicker view={view} currentDate={currentDate} onDateChange={onDateChange}>
-          <button style={titleButton} aria-label="Jump to a period">
+          <button style={titleButton} aria-label={t('calendar.jumpPeriod')}>
             {rangeLabel}
           </button>
         </CalendarPeriodPicker>
@@ -127,6 +142,8 @@ export function CalendarToolbar({
           <button
             key={key}
             onClick={() => onViewChange(key)}
+            aria-label={t(`calendar.view.${key}`)}
+            title={t(`calendar.view.${key}`)}
             style={{
               ...buttonBase,
               padding: '4px 10px',
@@ -146,8 +163,8 @@ export function CalendarToolbar({
       {/* Create button */}
       <button
         onClick={onCreateEvent}
-        title="New event"
-        aria-label="New event"
+        title={t('calendar.newEvent')}
+        aria-label={t('calendar.newEvent')}
         style={{
           ...iconButton,
           background: 'var(--amber-dim)',

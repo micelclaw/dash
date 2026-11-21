@@ -11,28 +11,31 @@
  */
 
 import { Grid2x2, Rotate3d } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface GraphDimensionToggleProps {
   is3D: boolean;
   onChange: (is3D: boolean) => void;
 }
 
-const OPTIONS: Array<{ key: boolean; label: string; Icon: typeof Grid2x2; title: string }> = [
-  { key: false, label: '2D', Icon: Grid2x2, title: 'Vista 2D (plana)' },
-  { key: true, label: '3D', Icon: Rotate3d, title: 'Vista 3D (WebGL)' },
+const OPTIONS: Array<{ key: boolean; label: string; Icon: typeof Grid2x2; titleKey: string }> = [
+  { key: false, label: '2D', Icon: Grid2x2, titleKey: 'graph.dimension.2d' },
+  { key: true, label: '3D', Icon: Rotate3d, titleKey: 'graph.dimension.3d' },
 ];
 
 /** Segmented control para alternar entre la vista 2D (SVG) y la 3D (WebGL) del grafo. */
 export function GraphDimensionToggle({ is3D, onChange }: GraphDimensionToggleProps) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
-      {OPTIONS.map(({ key, label, Icon, title }) => {
+      {OPTIONS.map(({ key, label, Icon, titleKey }) => {
         const isActive = is3D === key;
         return (
           <button
             key={label}
             onClick={() => onChange(key)}
-            title={title}
+            title={t(titleKey)}
+            aria-label={t(titleKey)}
             aria-pressed={isActive}
             style={{
               display: 'flex',

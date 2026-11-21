@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { X, Activity } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
+import { useI18n } from '@/i18n';
 import type { SmartHistoryEntry } from '../types';
 import { InfoTip } from './ZfsHelp';
 
@@ -42,23 +43,16 @@ const STATUS_COLORS: Record<string, string> = {
   warning: '#f97316',
   critical: '#f43f5e',
 };
-const STATUS_LABELS: Record<string, string> = {
-  healthy: 'En buen estado',
-  warning: 'Aviso',
-  critical: 'Crítico',
-};
-
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return d.toLocaleString(locale);
 }
 
 // ── Mini-gráfico de temperatura ────────────────────────────────────
 // SVG polyline con la temperatura por muestra, en orden cronológico
 // ascendente (la más antigua a la izquierda). Tolera huecos (null).
-function TempChart({ entries }: { entries: SmartHistoryEntry[] }) {
+function TempChart({ entries, t }: { entries: SmartHistoryEntry[]; t: (key: string, values?: Record<string, string | number>) => string }) {
   const W = 560, H = 90, PAD = 8;
   // Orden cronológico ascendente para leer izquierda→derecha.
   const ordered = [...entries].sort((a, b) => new Date(a.sampled_at).getTime() - new Date(b.sampled_at).getTime());
@@ -67,7 +61,7 @@ function TempChart({ entries }: { entries: SmartHistoryEntry[] }) {
   if (known.length < 2) {
     return (
       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>
-        No hay suficientes muestras de temperatura para dibujar la evolución.
+        {t('storage.smart.notEnough')}
       </div>
     );
   }
@@ -87,10 +81,10 @@ function TempChart({ entries }: { entries: SmartHistoryEntry[] }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          Temperatura
+          {t('storage.smart.temperature')}
         </span>
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
-          min {min}°C · max {max}°C
+          {t('storage.smart.minMax', { min, max })}
         </span>
       </div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', background: 'var(--card, var(--bg))', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
@@ -104,6 +98,7 @@ function TempChart({ entries }: { entries: SmartHistoryEntry[] }) {
 }
 
 export function SmartHistoryModal({ diskId, diskLabel, onClose }: { diskId: string; diskLabel?: string; onClose: () => void }) {
+  const { t, locale } = useI18n();
   const fetchSmartHistory = useStorageStore((s) => s.fetchSmartHistory);
   const [entries, setEntries] = useState<SmartHistoryEntry[] | null>(null);
   const [error, setError] = useState(false);
@@ -117,10 +112,10 @@ export function SmartHistoryModal({ diskId, diskLabel, onClose }: { diskId: stri
       .catch((e) => {
         if (!alive) return;
         setError(true);
-        toast.error(`No se pudo cargar el historial SMART: ${e instanceof Error ? e.message : String(e)}`);
+        toast.error(t('storage.smart.errorToast', { error: e instanceof Error ? e.message : String(e) }));
       });
     return () => { alive = false; };
-  }, [diskId, fetchSmartHistory]);
+  }, [diskId, fetchSmartHistory, t]);
 
   const th: React.CSSProperties = {
     textAlign: 'left', padding: '6px 10px', fontSize: '0.6875rem', fontWeight: 500,
@@ -134,42 +129,42 @@ export function SmartHistoryModal({ diskId, diskLabel, onClose }: { diskId: stri
         <div style={head}>
           <Activity size={16} style={{ color: 'var(--mod-storage)' }} />
           <strong style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text)' }}>
-            Historial SMART{diskLabel ? ` — ${diskLabel}` : ''}
+            {t('storage.smart.title')}{diskLabel ? ` — ${diskLabel}` : ''}
           </strong>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)' }}><X size={16} /></button>
+          <button aria-label={t('storage.common.close')} title={t('storage.common.close')} onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)' }}><X size={16} /></button>
         </div>
         <div style={bodyStyle}>
           {entries == null && !error && (
             <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
-              Cargando historial…
+              {t('storage.smart.loading')}
             </div>
           )}
           {error && (
             <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
-              No se pudo cargar el historial SMART de este disco.
+              {t('storage.smart.loadError')}
             </div>
           )}
           {entries != null && !error && entries.length === 0 && (
             <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
-              Sin muestras SMART registradas para este disco todavía.
+              {t('storage.smart.empty')}
             </div>
           )}
           {entries != null && !error && entries.length > 0 && (
             <>
-              <TempChart entries={entries} />
+              <TempChart entries={entries} t={t} />
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
                   <thead>
                     <tr>
-                      <th style={th}>Fecha</th>
-                      <th style={th}>Estado</th>
-                      <th style={{ ...th, textAlign: 'right' }}>Temp</th>
-                      <th style={{ ...th, textAlign: 'right' }}>Horas</th>
+                      <th style={th}>{t('storage.smart.date')}</th>
+                      <th style={th}>{t('storage.smart.state')}</th>
+                      <th style={{ ...th, textAlign: 'right' }}>{t('storage.smart.tempShort')}</th>
+                      <th style={{ ...th, textAlign: 'right' }}>{t('storage.smart.hours')}</th>
                       <th style={{ ...th, textAlign: 'right' }}>
-                        Realocados <InfoTip text="Sectores que el disco marcó como dañados y reemplazó por sectores de reserva. Un número que crece con el tiempo indica un disco que se está degradando." />
+                        {t('storage.smart.reallocated')} <InfoTip text={t('storage.smart.reallocatedHint')} />
                       </th>
                       <th style={{ ...th, textAlign: 'right' }}>
-                        Pendientes <InfoTip text="Sectores inestables a la espera de reasignación. Si no bajan a cero solos, conviene vigilar de cerca el disco." />
+                        {t('storage.smart.pending')} <InfoTip text={t('storage.smart.pendingHint')} />
                       </th>
                     </tr>
                   </thead>
@@ -180,18 +175,18 @@ export function SmartHistoryModal({ diskId, diskLabel, onClose }: { diskId: stri
                       const badPend = e.pending_sectors > 0;
                       return (
                         <tr key={`${e.sampled_at}-${i}`} style={{ borderTop: '1px solid var(--border)' }}>
-                          <td style={{ padding: '6px 10px', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>{fmtDate(e.sampled_at)}</td>
+                          <td style={{ padding: '6px 10px', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)', whiteSpace: 'nowrap' }}>{fmtDate(e.sampled_at, locale)}</td>
                           <td style={{ padding: '6px 10px' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                               <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
-                              <span style={{ color: 'var(--text)' }}>{STATUS_LABELS[e.overall_status] ?? e.overall_status}</span>
+                              <span style={{ color: 'var(--text)' }}>{e.overall_status === 'healthy' ? t('storage.smart.healthy') : e.overall_status === 'warning' ? t('storage.smart.warning') : e.overall_status === 'critical' ? t('storage.smart.critical') : e.overall_status}</span>
                             </span>
                           </td>
                           <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
                             {e.temperature_c != null ? `${e.temperature_c}°C` : '—'}
                           </td>
                           <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
-                            {e.power_on_hours != null ? e.power_on_hours.toLocaleString('es-ES') : '—'}
+                            {e.power_on_hours != null ? e.power_on_hours.toLocaleString(locale) : '—'}
                           </td>
                           <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: badReal ? '#f43f5e' : 'var(--text-dim)', fontWeight: badReal ? 600 : 400 }}>
                             {e.reallocated_sectors}

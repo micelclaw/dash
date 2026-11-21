@@ -19,8 +19,9 @@ import {
   isSameDay, isSameMonth, isToday,
 } from '@/lib/date-helpers';
 import type { CalendarView } from './types';
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+import { useI18n } from '@/i18n';
+import { formatDate } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface Props {
   view: CalendarView;
@@ -63,23 +64,25 @@ export function CalendarPeriodPicker({ view, currentDate, onDateChange, children
 
 // ── Year header (prev/next year) ────────────────────────────────────
 function YearNav({ year, onDelta }: { year: number; onDelta: (n: number) => void }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-      <button onClick={() => onDelta(-1)} style={navBtn} aria-label="Previous year"><ChevronLeft size={16} /></button>
+      <button onClick={() => onDelta(-1)} style={navBtn} aria-label={t('calendar.previousYear')} title={t('calendar.previousYear')}><ChevronLeft size={16} /></button>
       <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{year}</span>
-      <button onClick={() => onDelta(1)} style={navBtn} aria-label="Next year"><ChevronRight size={16} /></button>
+      <button onClick={() => onDelta(1)} style={navBtn} aria-label={t('calendar.nextYear')} title={t('calendar.nextYear')}><ChevronRight size={16} /></button>
     </div>
   );
 }
 
 // ── Month picker: 12-month grid ─────────────────────────────────────
 function MonthPicker({ pivot, setPivot, currentDate, onPick }: PickerBodyProps) {
+  const { locale } = useI18n();
   const year = pivot.getFullYear();
   return (
     <div>
       <YearNav year={year} onDelta={(n) => setPivot(new Date(year + n, pivot.getMonth(), 1))} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-        {MONTHS.map((m, i) => {
+        {Array.from({ length: 12 }, (_, i) => new Date(year, i, 1).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { month: 'short' })).map((m, i) => {
           const active = currentDate.getFullYear() === year && currentDate.getMonth() === i;
           return (
             <button key={m} onClick={() => onPick(new Date(year, i, 1))} style={cellBtn(active)}>{m}</button>
@@ -92,6 +95,8 @@ function MonthPicker({ pivot, setPivot, currentDate, onPick }: PickerBodyProps) 
 
 // ── Week picker: W1..W53 list ───────────────────────────────────────
 function WeekPicker({ pivot, setPivot, currentDate, onPick }: PickerBodyProps) {
+  const { locale, t } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const year = pivot.getFullYear();
   const count = getISOWeeksInYear(year);
   const activeWeek = currentDate.getFullYear() === year ? getISOWeek(currentDate) : -1;
@@ -103,11 +108,11 @@ function WeekPicker({ pivot, setPivot, currentDate, onPick }: PickerBodyProps) {
           const w = idx + 1;
           const monday = mondayOfISOWeek(w, year);
           const sunday = addDays(monday, 6);
-          const range = `${monday.getDate()} ${MONTHS[monday.getMonth()]} – ${sunday.getDate()} ${MONTHS[sunday.getMonth()]}`;
+          const range = `${formatDate(monday, locale, general)} – ${formatDate(sunday, locale, general)}`;
           const active = w === activeWeek;
           return (
             <button key={w} onClick={() => onPick(monday)} style={{ ...rowBtn(active), display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontWeight: 600 }}>W{w}</span>
+              <span style={{ fontWeight: 600 }}>{t('calendar.weekNumber', { week: w })}</span>
               <span style={{ color: active ? 'inherit' : 'var(--text-dim)' }}>{range}</span>
             </button>
           );
@@ -119,16 +124,20 @@ function WeekPicker({ pivot, setPivot, currentDate, onPick }: PickerBodyProps) {
 
 // ── Day picker: mini month ──────────────────────────────────────────
 function DayPicker({ pivot, setPivot, currentDate, onPick }: PickerBodyProps) {
+  const { locale, t } = useI18n();
   const days = getMonthGridDays(pivot);
-  const names = getWeekDayNames();
+  const names = getWeekDayNames().map((_, i) => {
+    const mondayFirstDay = new Date(2024, 0, 1 + i);
+    return mondayFirstDay.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { weekday: 'short' });
+  });
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <button onClick={() => setPivot(addMonths(pivot, -1))} style={navBtn} aria-label="Previous month"><ChevronLeft size={16} /></button>
+        <button onClick={() => setPivot(addMonths(pivot, -1))} style={navBtn} aria-label={t('calendar.previousMonth')} title={t('calendar.previousMonth')}><ChevronLeft size={16} /></button>
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-          {MONTHS[pivot.getMonth()]} {pivot.getFullYear()}
+          {pivot.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { month: 'long', year: 'numeric' })}
         </span>
-        <button onClick={() => setPivot(addMonths(pivot, 1))} style={navBtn} aria-label="Next month"><ChevronRight size={16} /></button>
+        <button onClick={() => setPivot(addMonths(pivot, 1))} style={navBtn} aria-label={t('calendar.nextMonth')} title={t('calendar.nextMonth')}><ChevronRight size={16} /></button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
         {names.map((n) => (

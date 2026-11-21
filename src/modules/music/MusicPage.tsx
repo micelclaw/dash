@@ -26,14 +26,7 @@ import { AlbumDetailView } from './views/AlbumDetailView';
 import { ArtistDetailView } from './views/ArtistDetailView';
 import { PlaylistDetailView } from './views/PlaylistDetailView';
 import { UnavailableState } from './components/UnavailableState';
-
-const TABS: { id: MusicTab; label: string }[] = [
-  { id: 'home', label: 'Home' },
-  { id: 'albums', label: 'Albums' },
-  { id: 'artists', label: 'Artists' },
-  { id: 'playlists', label: 'Playlists' },
-  { id: 'favorites', label: 'Favorites' },
-];
+import { useI18n } from '@/i18n';
 
 /**
  * Music module — Navidrome-backed library browser (Home rails, albums,
@@ -42,6 +35,7 @@ const TABS: { id: MusicTab; label: string }[] = [
  * music.store.
  */
 export function MusicPage() {
+  const { t } = useI18n();
   const activeTab = useMusicStore((s) => s.activeTab);
   const search = useMusicStore((s) => s.search);
   const aiSearch = useMusicStore((s) => s.aiSearch);
@@ -117,18 +111,24 @@ export function MusicPage() {
   return (
     <MediaShell
       moduleVar="--mod-music"
-      tabs={TABS}
+      tabs={[
+        { id: 'home', label: t('music.home') },
+        { id: 'albums', label: t('music.albums') },
+        { id: 'artists', label: t('music.artists') },
+        { id: 'playlists', label: t('music.playlists') },
+        { id: 'favorites', label: t('music.favorites') },
+      ]}
       activeTab={activeTab}
       onTabChange={(id) => useMusicStore.getState().setActiveTab(id as MusicTab)}
       toolbar={
         <MediaToolbar
           search={search}
           onSearchChange={(q) => useMusicStore.getState().setSearch(q)}
-          searchPlaceholder="Search music…"
+          searchPlaceholder={t('music.search')}
           aiSlot
           aiActive={aiSearch}
           onAiToggle={() => useMusicStore.getState().toggleAiSearch()}
-          aiPlaceholder="Describe what you want to hear…"
+          aiPlaceholder={t('music.aiSearch')}
         />
       }
     >

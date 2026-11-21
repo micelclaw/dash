@@ -27,9 +27,11 @@ import { useState } from 'react';
 import { Cookie, ExternalLink } from 'lucide-react';
 import { Field, FormActions } from './shared';
 import { MatrixBridgeForm, CALLOUT, type LoginPaneContext } from './MatrixBridgeForm';
+import { useI18n } from '@/i18n';
 
 function GoogleChatLoginPane({ ctx }: { ctx: LoginPaneContext }) {
   const { submitting, send, bridgeMessage, onCancel } = ctx;
+  const { t } = useI18n();
   const [cookies, setCookies] = useState('');
 
   // El bridge hace json.loads: avisar ANTES de mandar evita un viaje de ida y
@@ -44,22 +46,20 @@ function GoogleChatLoginPane({ ctx }: { ctx: LoginPaneContext }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Google Chat links by reusing the session your browser already has. You&apos;ll export that
-        session&apos;s cookies once and paste them here.
+        {t('settings.matrix.googleChatIntro')}
       </p>
       <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
         <ExternalLink size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          Open <strong>chat.google.com</strong> while logged in and export its cookies as JSON with a
-          cookie-export extension. It must include <strong>COMPASS</strong> and <strong>SSID</strong>.
+          {t('settings.matrix.googleChatCookies')}
         </span>
       </div>
       {bridgeMessage}
       <Field
-        label="Google Chat cookies (JSON)"
+        label={t('settings.matrix.googleChatLabel')}
         hint={looksLikeJson
-          ? 'A JSON object, braces included — this bridge parses it, so a raw cookie string will not work.'
-          : 'That is not valid JSON yet. Paste the whole export, braces included.'}
+          ? t('settings.matrix.jsonValid')
+          : t('settings.matrix.jsonInvalid')}
       >
         <textarea
           value={cookies}
@@ -77,8 +77,7 @@ function GoogleChatLoginPane({ ctx }: { ctx: LoginPaneContext }) {
       <div style={{ ...CALLOUT, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
         <Cookie size={13} style={{ marginTop: 1, flexShrink: 0 }} />
         <span>
-          These cookies stay on your server. Signing out of Google in that browser also disconnects
-          this bridge.
+          {t('settings.matrix.googleCookiesStored')}
         </span>
       </div>
       <FormActions
@@ -87,13 +86,14 @@ function GoogleChatLoginPane({ ctx }: { ctx: LoginPaneContext }) {
         disabled={!cookies.trim() || !looksLikeJson}
         // Un solo disparo: no hay `start` que abrir.
         onConfirm={() => void send('cookies', cookies.trim())}
-        submitLabel={submitting ? 'Linking…' : 'Link Google Chat'}
+        submitLabel={submitting ? t('settings.matrix.googleLinking') : t('settings.matrix.linkGoogleChat')}
       />
     </div>
   );
 }
 
 export function GoogleChatMatrixForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return (
     <MatrixBridgeForm
       onComplete={onComplete}
@@ -104,8 +104,7 @@ export function GoogleChatMatrixForm({ onComplete, onCancel }: { onComplete: () 
         connectorDisplayName: 'Google Chat',
         hubSetupBlurb: (
           <>
-            Google Chat connects through a private Matrix bridge that runs on your own server. Set it
-            up once — everyone on this instance can then link their own account.
+            {t('settings.matrix.googleChatSetup')}
           </>
         ),
         // Sin disclaimer de baneo: reusar tu propia sesión web de Google Workspace
@@ -114,8 +113,7 @@ export function GoogleChatMatrixForm({ onComplete, onCancel }: { onComplete: () 
         renderLogin: (ctx) => <GoogleChatLoginPane ctx={ctx} />,
         readyBlurb: (
           <>
-            Your Google Chat account is linked and the bridge is importing your conversations. Next,
-            choose which ones Micelclaw should observe.
+            {t('settings.matrix.googleChatReady')}
           </>
         ),
       }}

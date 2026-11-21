@@ -17,6 +17,7 @@ import { liveAdapter, transformActivityToolEvent } from '../adapters/live.adapte
 import type { LiveToolRow } from '../adapters/live.adapter';
 import type { ActivityStats } from '@/services/activity.service';
 import type { TimeRange } from '../adapters/types';
+import { useI18n } from '@/i18n';
 
 interface Props {
   stats: ActivityStats | null;
@@ -40,6 +41,7 @@ export function LiveTab({
   range,
   onRangeChange,
 }: Props) {
+  const { t } = useI18n();
   const { filteredRows, loading } = useActivityRows<LiveToolRow>({
     adapter: liveAdapter,
     filters,
@@ -70,7 +72,7 @@ export function LiveTab({
       {filteredRows.length === 0 && !loading ? (
         <div className="flex h-full items-center justify-center text-sm text-[var(--text-muted)]">
           <div className="text-center">
-            <div className="mb-2">No active tool calls right now.</div>
+            <div className="mb-2">{t('activity.noActiveTools')}</div>
             <div className="text-xs">
               Start a chat with an agent — tool calls from any of your
               conversations appear here in real time.

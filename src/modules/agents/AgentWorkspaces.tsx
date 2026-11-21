@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, X, Pencil, Eye, Save, Loader2, Plus, Trash2 } from 'lucide-react';
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { toast } from 'sonner';
+import { useI18n, type MessageValues } from '@/i18n';
 import { api, ApiError } from '@/services/api';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { getAgentFileMeta } from './agent-file-meta';
@@ -23,6 +24,13 @@ import type { ManagedAgent } from './types';
 
 const RESERVED_FILES = new Set(['IDENTITY.md', 'TOOLS.md', 'USER.md', 'SOUL.md', 'BOOTSTRAP.md', 'AGENTS.md', 'MEMORY.md']);
 const isReserved = (filename: string) => RESERVED_FILES.has(filename);
+const FILE_META_KEYS: Record<string, string> = {
+  'IDENTITY.md': 'agents.workspaceMeta.identity', 'SOUL.md': 'agents.workspaceMeta.personality',
+  'USER.md': 'agents.workspaceMeta.user', 'TOOLS.md': 'agents.workspaceMeta.tools',
+  'AGENTS.md': 'agents.workspaceMeta.instructions', 'HEARTBEAT.md': 'agents.workspaceMeta.heartbeat',
+  'MEMORY.md': 'agents.workspaceMeta.memory', 'INFRASTRUCTURE.md': 'agents.workspaceMeta.infrastructure',
+  'BOOTSTRAP.md': 'agents.workspaceMeta.bootstrap',
+};
 
 interface AgentWorkspacesProps {
   agents: ManagedAgent[];
@@ -31,16 +39,16 @@ interface AgentWorkspacesProps {
   initialFilePath?: string | null;
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, t: (key: string, values?: MessageValues) => string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return 'Just now';
+  if (seconds < 60) return t('agents.workspaces.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('agents.workspaces.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('agents.workspaces.hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('agents.workspaces.daysAgo', { count: days });
 }
 
 // La carpeta compartida (/user/workspaces/shared) se sirve por el VFS, no por el endpoint de
@@ -64,6 +72,9 @@ function vfsToFileRecord(node: VfsNode, parentPath: string): FileRecord {
 }
 
 export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFilePath }: AgentWorkspacesProps) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
   const [selectedId, setSelectedId] = useState<string>(initialAgentId ?? agents[0]?.id ?? '');
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [hoveredFileId, setHoveredFileId] = useState<string | null>(null);
@@ -123,7 +134,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
     const fullPath = currentPath ? `${currentPath}/${trimmed}` : trimmed;
     const filename = trimmed.split('/').pop() ?? trimmed;
     if (isReserved(filename)) {
-      toast.error(`${filename} is managed by the provisioning service`);
+      toast.error(tRef.current('agents.workspaces.managed', { name: filename }));
       return;
     }
     setCreating(true);
@@ -132,9 +143,9 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
       setCreateOpen(false);
       setCreateName('');
       await reloadFiles();
-      toast.success(`Created ${trimmed}`);
+      toast.success(tRef.current('agents.workspaces.created', { name: trimmed }));
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to create file';
+      const msg = err instanceof ApiError ? err.message : tRef.current('agents.workspaces.createFailed');
       toast.error(msg);
     } finally { setCreating(false); }
   }, [selectedAgent, createName, currentPath, reloadFiles]);
@@ -142,7 +153,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
   const handleDeleteFile = useCallback(async () => {
     if (!selectedAgent || !pendingDelete) return;
     if (isReserved(pendingDelete.filename)) {
-      toast.error(`${pendingDelete.filename} is reserved and cannot be deleted`);
+      toast.error(tRef.current('agents.workspaces.reserved', { name: pendingDelete.filename }));
       setPendingDelete(null);
       return;
     }
@@ -158,9 +169,9 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
       }
       setPendingDelete(null);
       await reloadFiles();
-      toast.success(`Deleted ${pendingDelete.filename}`);
+      toast.success(tRef.current('agents.workspaces.deleted', { name: pendingDelete.filename }));
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to delete file';
+      const msg = err instanceof ApiError ? err.message : tRef.current('agents.workspaces.deleteFailed');
       toast.error(msg);
     } finally { setDeleting(false); }
   }, [selectedAgent, pendingDelete, openFile, reloadFiles]);
@@ -362,7 +373,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                 {agent.avatar ?? '\u{1F916}'} {agent.display_name}
               </option>
             ))}
-            <option value={SHARED_ID}>{'\u{1F4C1}'} Shared (compartida)</option>
+            <option value={SHARED_ID}>{'\u{1F4C1}'} {t('agents.workspaces.sharedMobile')}</option>
           </select>
         </div>
       ) : (
@@ -429,7 +440,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
           >
             <span style={{ fontSize: '1.125rem', flexShrink: 0 }}>{'\u{1F4C1}'}</span>
             <span style={{ fontSize: '0.8125rem', color: isShared ? 'var(--text)' : 'var(--text-dim)', fontWeight: isShared ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Shared
+              {t('agents.workspaces.shared')}
             </span>
           </div>
         </div>
@@ -479,7 +490,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = 'var(--amber)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; }}
-                title="Back"
+                title={t('agents.workspaces.back')}
               >
                 <ArrowLeft size={14} />
               </button>
@@ -539,7 +550,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--amber)'; e.currentTarget.style.borderColor = 'var(--amber)'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
             >
-              <Plus size={12} /> New file
+              <Plus size={12} /> {t('agents.workspaces.newFile')}
             </button>
           </div>
         )}
@@ -548,13 +559,13 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
           {filesLoading && (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              Loading files...
+              {t('agents.workspaces.loadingFiles')}
             </div>
           )}
 
           {!filesLoading && files.length === 0 && (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              {isShared ? 'La carpeta compartida está vacía.' : 'No files found in workspace.'}
+              {t(isShared ? 'agents.workspaces.sharedEmpty' : 'agents.workspaces.empty')}
             </div>
           )}
 
@@ -612,9 +623,10 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                   </span>
                   {(() => {
                     const meta = file.is_directory ? null : getAgentFileMeta(file.filename);
+                    const metaKey = Object.prototype.hasOwnProperty.call(FILE_META_KEYS, file.filename) ? FILE_META_KEYS[file.filename] : undefined;
                     return meta ? (
                       <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {meta.label}
+                        {metaKey ? t(metaKey) : meta.label}
                       </span>
                     ) : null;
                   })()}
@@ -636,14 +648,14 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                     minWidth: 60,
                     textAlign: 'right',
                   }}>
-                    {formatRelativeTime(file.updated_at)}
+                    {formatRelativeTime(file.updated_at, t)}
                   </span>
                 )}
                 {/* Delete icon \u2014 visible on hover, hidden for reserved files, directories & shared (read-only) */}
                 {!file.is_directory && !isReserved(file.filename) && !isShared && (
                   <button
                     onClick={e => { e.stopPropagation(); setPendingDelete(file); }}
-                    title={`Delete ${file.filename}`}
+                    title={t('agents.workspaces.deleteTitle', { name: file.filename })}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
                       color: 'var(--text-muted)', padding: 4, display: 'flex',
@@ -681,10 +693,10 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
               }}
             >
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-                Create file in workspace
+                {t('agents.workspaces.createTitle')}
               </h3>
               <p style={{ margin: '8px 0 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                Path relative to <code style={{ fontFamily: 'var(--font-mono)' }}>~/workspace{currentPath ? `/${currentPath}` : ''}</code>
+                {t('agents.workspaces.relativePath')}{' '}<code style={{ fontFamily: 'var(--font-mono)' }}>~/workspace{currentPath ? `/${currentPath}` : ''}</code>
               </p>
               <input
                 autoFocus
@@ -711,7 +723,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                     cursor: creating ? 'not-allowed' : 'pointer',
                     border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
                   }}
-                >Cancel</button>
+                >{t('agents.workspaces.cancel')}</button>
                 <button
                   onClick={handleCreateFile}
                   disabled={creating || !createName.trim()}
@@ -724,7 +736,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                   }}
                 >
                   {creating && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-                  Create
+                  {t('agents.workspaces.create')}
                 </button>
               </div>
             </div>
@@ -750,10 +762,10 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
               }}
             >
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-                Delete &ldquo;{pendingDelete.filename}&rdquo;?
+                {t('agents.workspaces.confirmDelete', { name: pendingDelete.filename })}
               </h3>
               <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                The file will be permanently removed from the agent's workspace.
+                {t('agents.workspaces.deleteWarning')}
               </p>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
                 <button
@@ -765,7 +777,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                     cursor: deleting ? 'not-allowed' : 'pointer',
                     border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
                   }}
-                >Cancel</button>
+                >{t('agents.workspaces.cancel')}</button>
                 <button
                   onClick={handleDeleteFile}
                   disabled={deleting}
@@ -778,7 +790,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                   }}
                 >
                   {deleting && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-                  Delete
+                  {t('agents.workspaces.delete')}
                 </button>
               </div>
             </div>
@@ -841,7 +853,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                 {/* Toggle edit/preview */}
                 <button
                   onClick={handleToggleEdit}
-                  title={isEditing ? 'Preview' : 'Edit'}
+                  title={t(isEditing ? 'agents.workspaces.preview' : 'agents.workspaces.edit')}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -863,7 +875,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    title="Save"
+                    title={t('agents.workspaces.save')}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -884,7 +896,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
             {/* Close */}
             <button
               onClick={handleClosePanel}
-              title="Close"
+              title={t('agents.workspaces.close')}
               style={{
                 background: 'none',
                 border: 'none',
@@ -906,7 +918,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFileP
           <div style={{ flex: 1, overflow: 'auto' }}>
             {fileContent === null ? (
               <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-                Loading...
+                {t('agents.workspaces.loading')}
               </div>
             ) : isEditing ? (
               <textarea

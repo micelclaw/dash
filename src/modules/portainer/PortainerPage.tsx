@@ -15,6 +15,7 @@ import { api } from '@/services/api';
 import { Container, AlertTriangle, Loader2 } from 'lucide-react';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
+import { useI18n } from '@/i18n';
 
 interface PortainerStatus {
   installed: boolean;
@@ -36,6 +37,7 @@ function formatUptime(seconds: number | null): string {
 }
 
 export function Component() {
+  const { t } = useI18n();
   const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<PortainerStatus | null>(null);
@@ -48,11 +50,11 @@ export function Component() {
       setStatus(res);
       return res;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check Portainer status');
+      setError(err instanceof Error ? err.message : t('portainer.statusError'));
       setPhase('error');
       return null;
     }
-  }, []);
+  }, [t]);
 
   const startPortainer = useCallback(async () => {
     setPhase('installing');
@@ -73,10 +75,10 @@ export function Component() {
         setTimeout(() => clearInterval(poll), 120_000);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start Portainer');
+      setError(err instanceof Error ? err.message : t('portainer.startError'));
       setPhase('error');
     }
-  }, [checkStatus]);
+  }, [checkStatus, t]);
 
   useEffect(() => {
     (async () => {
@@ -108,10 +110,10 @@ export function Component() {
         }}>
           <Container size={14} style={{ color: '#13bef9' }} />
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>Portainer</span>
-          <span style={{ color: 'var(--text-muted)' }}>Docker Management</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('portainer.dockerManagement')}</span>
           <div style={{ flex: 1 }} />
           {status.uptime_seconds != null && (
-            <span style={{ color: 'var(--text-muted)' }}>Up: {formatUptime(status.uptime_seconds)}</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('portainer.uptime', { duration: formatUptime(status.uptime_seconds) })}</span>
           )}
           <EmbedActions
             slug="portainer" fallbackUrl={status.url} ramMb={status.ram_mb}
@@ -125,7 +127,7 @@ export function Component() {
           src={(window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
             ? `${window.location.origin}/api/v1/portainer/ui/`
             : status.url}
-          title="Portainer Docker Management"
+          title={t('portainer.frameTitle')}
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"
         />
@@ -149,22 +151,22 @@ export function Component() {
       {phase === 'loading' && (
         <>
           <Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} />
-          <span style={{ fontSize: 14 }}>Checking Portainer status...</span>
+          <span style={{ fontSize: 14 }}>{t('portainer.checking')}</span>
         </>
       )}
 
       {phase === 'installing' && (
         <>
           <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--amber)' }} />
-          <span style={{ fontSize: 14 }}>Setting up Portainer...</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>This may take a moment on first launch</span>
+          <span style={{ fontSize: 14 }}>{t('portainer.settingUp')}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('portainer.firstLaunch')}</span>
         </>
       )}
 
       {phase === 'error' && (
         <>
           <AlertTriangle size={32} style={{ color: 'var(--error)' }} />
-          <span style={{ fontSize: 14 }}>Error connecting to Portainer</span>
+          <span style={{ fontSize: 14 }}>{t('portainer.connectionError')}</span>
           {error && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{error}</span>}
           <button
             onClick={() => { setError(null); startPortainer(); }}
@@ -179,7 +181,7 @@ export function Component() {
               fontSize: 13,
             }}
           >
-            Retry
+            {t('portainer.retry')}
           </button>
         </>
       )}

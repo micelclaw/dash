@@ -14,6 +14,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { User, AuthTokens, Tier } from '@/types/auth';
 import { api, ApiError } from '@/services/api';
+import { logoutSession } from '@/services/auth.service';
 
 /**
  * "Recordar usuario": si está activo (default), la sesión se guarda en
@@ -64,12 +65,17 @@ interface AuthStore {
   /** Set when /auth/login returned needs_2fa=true; cleared after verification or cancel. */
   pending2fa: PendingTwoFactor | null;
   /** Step 1 of login. Returns {needs2fa:true} when 2FA is enabled, {ok:true} otherwise. */
-  login: (email: string, password: string) => Promise<{ needs2fa: true } | { ok: true }>;
+  login: (email: string, password: string) => Promise<{ needs2fa: true } | { needsEnrollment: true; token: string; expiresAt: string } | { ok: true }>;
   /** Step 2 of login. Uses the stored pending2fa.challengeId. */
   login2fa: (code: string) => Promise<void>;
   /** Cancel a pending 2FA challenge (return to email/password form). */
   cancelPending2fa: () => void;
-  logout: () => void;
+  logoutState: 'idle' | 'revoking' | 'error';
+  logoutError: string | null;
+  logoutPending: { refreshToken: string; uncertainRefresh: boolean } | null;
+  logout: () => Promise<void>;
+  /** Local invalidation after server rejection/revocation; not a remote logout claim. */
+  clearSession: () => void;
   refresh: () => Promise<AuthRefreshResult>;
   setAuth: (user: User, tokens: AuthTokens) => void;
   /** Patch the cached user in place (after self-service profile update). */
@@ -77,7 +83,9 @@ interface AuthStore {
 }
 
 // Lock to deduplicate concurrent refresh calls — only one in-flight at a time
-let refreshFlight: { generation: number; promise: Promise<AuthRefreshResult> } | null = null;
+type RefreshFlight = { generation: number; promise: Promise<AuthRefreshResult>; resultTokens: AuthTokens | null };
+let refreshFlight: RefreshFlight | null = null;
+let logoutFlight: Promise<void> | null = null;
 
 export const useAuthStore = create<AuthStore>()(
   persist(
@@ -87,13 +95,24 @@ export const useAuthStore = create<AuthStore>()(
       tokens: null,
       isAuthenticated: false,
       pending2fa: null,
+      logoutState: 'idle', logoutError: null, logoutPending: null,
 
       login: async (email: string, password: string) => {
+        if (get().logoutState !== 'idle') throw new Error('La salida anterior no está confirmada');
+        const generation = get().sessionGeneration;
         const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
           '/auth/login',
           { email, password },
         );
+        if (get().sessionGeneration !== generation) throw new Error('La sesión cambió durante el inicio');
         const d = res.data;
+
+        // Enrollment is a purpose-limited capability, never authentication state.
+        // The caller keeps it in component memory; persist() cannot serialize it.
+        if (d.needs_2fa_enrollment === true) {
+          if (typeof d.enrollment_token !== 'string' || typeof d.expires_at !== 'string') throw new Error('Respuesta de inscripción no válida');
+          return { needsEnrollment: true, token: d.enrollment_token, expiresAt: d.expires_at };
+        }
 
         // 2FA gate: backend asks for a TOTP code before issuing tokens.
         if (d.needs_2fa) {
@@ -123,6 +142,8 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       login2fa: async (code: string) => {
+        if (get().logoutState !== 'idle') throw new Error('La salida anterior no está confirmada');
+        const generation = get().sessionGeneration;
         const pending = get().pending2fa;
         if (!pending) {
           throw new Error('No pending 2FA challenge');
@@ -131,6 +152,7 @@ export const useAuthStore = create<AuthStore>()(
           '/auth/login-2fa',
           { challenge_id: pending.challengeId, code },
         );
+        if (get().sessionGeneration !== generation) throw new Error('La sesión cambió durante el inicio');
         const d = res.data;
         const accessToken = d.access_token as string;
         const refreshToken = d.refresh_token as string;
@@ -150,25 +172,57 @@ export const useAuthStore = create<AuthStore>()(
         set({ pending2fa: null });
       },
 
-      logout: () => {
-        sessionStorage.setItem('claw-explicit-logout', '1');
-        set({ sessionGeneration: get().sessionGeneration + 1, user: null, tokens: null, isAuthenticated: false, pending2fa: null });
+      clearSession: () => {
+        try { sessionStorage.setItem('claw-explicit-logout', '1'); } catch { /* unavailable storage */ }
+        set({ sessionGeneration: get().sessionGeneration + 1, user: null, tokens: null,
+          isAuthenticated: false, pending2fa: null, logoutState: 'idle', logoutError: null, logoutPending: null });
+      },
+
+      logout: async () => {
+        if (logoutFlight) return logoutFlight;
+        const starting = get(), oldRefresh = refreshFlight?.generation === starting.sessionGeneration ? refreshFlight : null;
+        const generation = starting.sessionGeneration + 1;
+        const pending = starting.logoutPending ?? { refreshToken: starting.tokens?.refreshToken ?? '', uncertainRefresh: false };
+        set({ sessionGeneration: generation, logoutState: 'revoking', logoutError: null, logoutPending: pending });
+        logoutFlight = (async () => {
+          try {
+            if (oldRefresh) {
+              const result = await oldRefresh.promise;
+              if (oldRefresh.resultTokens) pending.refreshToken = oldRefresh.resultTokens.refreshToken;
+              else if (result.status === 'transient') pending.uncertainRefresh = true;
+              set({ logoutPending: { ...pending } });
+            }
+            if (get().sessionGeneration !== generation) throw new Error('La sesión cambió antes de revocarse');
+            if (pending.uncertainRefresh) throw new Error('La renovación perdió su respuesta. El cierre remoto no está confirmado; revisa la sesión específica en Sesiones activas.');
+            await logoutSession(pending.refreshToken);
+            if (get().sessionGeneration === generation) get().clearSession();
+          } catch (error) {
+            if (get().sessionGeneration === generation) set({ logoutState: 'error', logoutPending: { ...pending },
+              logoutError: pending.uncertainRefresh ? (error as Error).message : 'No se pudo confirmar la revocación. Conservamos la sesión para reintentar.' });
+            throw error;
+          }
+        })();
+        try { await logoutFlight; } finally { logoutFlight = null; }
       },
 
       refresh: async () => {
         const { tokens, user, sessionGeneration } = get();
+        if (get().logoutState !== 'idle') return { status: 'cancelled' };
         if (refreshFlight?.generation === sessionGeneration) return refreshFlight.promise;
         if (!tokens?.refreshToken) return { status: 'unavailable' };
         const current = () => get().sessionGeneration === sessionGeneration && get().tokens === tokens;
-        const flight = {
-          generation: sessionGeneration,
+        // A separate receipt is safe even if the API fails synchronously.
+        const receipt: { tokens: AuthTokens | null } = { tokens: null };
+        const flight: RefreshFlight = {
+          generation: sessionGeneration, get resultTokens() { return receipt.tokens; },
           promise: (async (): Promise<AuthRefreshResult> => {
             try {
               const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
                 '/auth/refresh', { refresh_token: tokens.refreshToken },
               );
-              if (!current()) return { status: 'cancelled' };
               const d = res.data;
+              receipt.tokens = { accessToken: d.access_token as string, refreshToken: d.refresh_token as string, refreshTokenId: d.refresh_token_id as string | undefined };
+              if (!current()) return { status: 'cancelled' };
               set({
                 user: user ? { ...user, tier: (res.tier as Tier) ?? user.tier } : user,
                 tokens: {
@@ -179,10 +233,10 @@ export const useAuthStore = create<AuthStore>()(
               });
               return { status: 'refreshed' };
             } catch (err) {
-              if (!current()) return { status: 'cancelled' };
               const status = err instanceof ApiError ? err.status : undefined;
+              if (!current()) return { status: status === 401 || status === 403 ? 'rejected' : 'transient' };
               if (status === 401 || status === 403) {
-                get().logout();
+                get().clearSession();
                 return { status: 'rejected' };
               }
               // Network/5xx retain the current session. Callers can distinguish
@@ -197,11 +251,12 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setAuth: (user: User, tokens: AuthTokens) => {
+        if (get().logoutState !== 'idle') return;
         set({ sessionGeneration: get().sessionGeneration + 1, user, tokens, isAuthenticated: true });
       },
 
       setUser: (user: User) => {
-        set({ user });
+        if (get().user?.id === user.id) set({ user });
       },
     }),
     {
@@ -211,6 +266,9 @@ export const useAuthStore = create<AuthStore>()(
         tokens: state.tokens,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        logoutState: state.logoutState === 'revoking' ? 'error' : state.logoutState,
+        logoutError: state.logoutState === 'revoking' ? 'Salida interrumpida. Reintenta la revocación.' : state.logoutError,
+        logoutPending: state.logoutPending,
       }),
     },
   ),

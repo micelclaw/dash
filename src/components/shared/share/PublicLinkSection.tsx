@@ -27,14 +27,15 @@ import {
   createFileLink, emailFileLink, revokeFileLink,
   type FileShareLink,
 } from '@/services/shares.service';
+import { useI18n } from '@/i18n';
 
 /** Opciones de caducidad del enlace (horas; '' = nunca). */
-const EXPIRY_OPTIONS: { label: string; hours: number | '' }[] = [
-  { label: 'Nunca', hours: '' },
-  { label: '1 hora', hours: 1 },
-  { label: '24 horas', hours: 24 },
-  { label: '7 días', hours: 168 },
-  { label: '30 días', hours: 720 },
+const EXPIRY_OPTIONS: { key: string; hours: number | '' }[] = [
+  { key: 'shared.links.never', hours: '' },
+  { key: 'shared.links.hour', hours: 1 },
+  { key: 'shared.links.hours', hours: 24 },
+  { key: 'shared.links.days7', hours: 168 },
+  { key: 'shared.links.days30', hours: 720 },
 ];
 
 interface PublicLinkSectionProps {
@@ -44,6 +45,7 @@ interface PublicLinkSectionProps {
 }
 
 export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkSectionProps) {
+  const { t, locale } = useI18n();
   const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
   const [password, setPassword] = useState('');
   const [expiryHours, setExpiryHours] = useState<number | ''>('');
@@ -58,9 +60,9 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
   const copyLink = useCallback(async (token: string) => {
     try {
       await navigator.clipboard.writeText(buildShareUrl(token, primaryDomain));
-      toast.success('Enlace copiado');
-    } catch { toast.error('No se pudo copiar'); }
-  }, [primaryDomain]);
+      toast.success(t('shared.links.copySuccess'));
+    } catch { toast.error(t('shared.links.copyError')); }
+  }, [primaryDomain, t]);
 
   const toggleQr = useCallback(async (token: string) => {
     if (qrToken === token) { setQrToken(null); setQrUrl(null); return; }
@@ -68,8 +70,8 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
       const { blob } = await api.getBlob(`/share/${token}/qr`);
       setQrToken(token);
       setQrUrl(URL.createObjectURL(blob));
-    } catch { toast.error('No se pudo generar el QR'); }
-  }, [qrToken]);
+    } catch { toast.error(t('shared.links.qrError')); }
+  }, [qrToken, t]);
 
   const handleCreate = useCallback(async () => {
     setCreating(true);
@@ -79,12 +81,12 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
         expires_in_hours: expiryHours || undefined,
       });
       await navigator.clipboard.writeText(buildShareUrl(link.token, primaryDomain)).catch(() => {});
-      toast.success('Enlace creado y copiado');
+      toast.success(t('shared.links.createSuccess'));
       setPassword('');
       onLinksChanged();
-    } catch { toast.error('No se pudo crear el enlace'); }
+    } catch { toast.error(t('shared.links.createError')); }
     setCreating(false);
-  }, [fileId, password, expiryHours, primaryDomain, onLinksChanged]);
+  }, [fileId, password, expiryHours, primaryDomain, onLinksChanged, t]);
 
   const handleEmail = useCallback(async () => {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) return;
@@ -96,22 +98,22 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
         password: password || undefined,
         expires_in_hours: expiryHours || undefined,
       });
-      if (res.email_sent) toast.success(`Enlace enviado a ${email.trim()}`);
-      else toast.warning('Enlace creado, pero el email no se pudo enviar (¿sin relay SMTP?). Cópialo a mano.');
+      if (res.email_sent) toast.success(t('shared.links.emailSent', { email: email.trim() }));
+      else toast.warning(t('shared.links.emailWarning'));
       setEmail(''); setMessage(''); setEmailOpen(false);
       onLinksChanged();
-    } catch { toast.error('No se pudo crear/enviar el enlace'); }
+    } catch { toast.error(t('shared.links.emailError')); }
     setSending(false);
-  }, [fileId, email, message, password, expiryHours, onLinksChanged]);
+  }, [fileId, email, message, password, expiryHours, onLinksChanged, t]);
 
   const handleRevoke = useCallback(async (token: string) => {
     try {
       await revokeFileLink(token);
-      toast.success('Enlace revocado');
+      toast.success(t('shared.links.revokeSuccess'));
       if (qrToken === token) { setQrToken(null); setQrUrl(null); }
       onLinksChanged();
-    } catch { toast.error('No se pudo revocar'); }
-  }, [qrToken, onLinksChanged]);
+    } catch { toast.error(t('shared.links.revokeError')); }
+  }, [qrToken, onLinksChanged, t]);
 
   return (
     <>
@@ -132,7 +134,7 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
                   /share/{l.token.slice(0, 12)}…
                 </span>
                 {l.expires_at && (
-                  <span title={`Caduca ${new Date(l.expires_at).toLocaleString('es-ES')}`}
+                  <span title={t('shared.links.expires', { date: new Date(l.expires_at).toLocaleString(locale) })}
                     style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.6875rem', color: 'var(--warning, #f59e0b)' }}>
                     <Clock size={11} />
                   </span>
@@ -142,13 +144,13 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
                     {l.download_count}{l.max_downloads ? `/${l.max_downloads}` : ''}↓
                   </span>
                 )}
-                <IconBtn title="Copiar enlace" onClick={() => copyLink(l.token)}><Copy size={12} /></IconBtn>
-                <IconBtn title="Código QR" onClick={() => void toggleQr(l.token)}><QrCode size={12} /></IconBtn>
-                <IconBtn title="Revocar" danger onClick={() => void handleRevoke(l.token)}><Trash2 size={12} /></IconBtn>
+                <IconBtn title={t('shared.links.copy')} onClick={() => copyLink(l.token)}><Copy size={12} /></IconBtn>
+                <IconBtn title={t('shared.links.qr')} onClick={() => void toggleQr(l.token)}><QrCode size={12} /></IconBtn>
+                <IconBtn title={t('shared.links.revoke')} danger onClick={() => void handleRevoke(l.token)}><Trash2 size={12} /></IconBtn>
               </div>
               {qrToken === l.token && qrUrl && (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
-                  <img src={qrUrl} alt="QR del enlace" style={{ width: 140, height: 140, borderRadius: 'var(--radius-sm)', background: '#fff', padding: 6 }} />
+                  <img src={qrUrl} alt={t('shared.links.qrAlt')} style={{ width: 140, height: 140, borderRadius: 'var(--radius-sm)', background: '#fff', padding: 6 }} />
                 </div>
               )}
             </div>
@@ -163,48 +165,53 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
             type="text"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            placeholder="Contraseña (opcional)"
+            aria-label={t('shared.links.password')}
+            placeholder={t('shared.links.password')}
             style={{ ...inputStyle, flex: 1, minWidth: 120 }}
           />
           <select
             value={String(expiryHours)}
             onChange={e => setExpiryHours(e.target.value === '' ? '' : Number(e.target.value))}
-            title="Caducidad"
+            title={t('shared.links.expiry')}
+            aria-label={t('shared.links.expiry')}
             style={selectStyle}
           >
             {EXPIRY_OPTIONS.map(o => (
-              <option key={o.label} value={String(o.hours)}>{o.label}</option>
+              <option key={o.key} value={String(o.hours)}>{t(o.key)}</option>
             ))}
           </select>
           <button onClick={() => void handleCreate()} disabled={creating} style={primaryBtnStyle(creating)}>
-            {creating ? 'Creando…' : 'Crear enlace'}
+            {creating ? t('shared.links.createBusy') : t('shared.links.create')}
           </button>
         </div>
 
         {/* Enviar por email (colapsado) */}
         <button
           onClick={() => setEmailOpen(o => !o)}
+          aria-expanded={emailOpen}
           style={{
             display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--text-dim)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', padding: '2px 0',
           }}
         >
-          <Mail size={12} /> {emailOpen ? 'Ocultar envío por email' : 'Enviar el enlace por email…'}
+          <Mail size={12} /> {emailOpen ? t('shared.links.emailHide') : t('shared.links.emailShow')}
         </button>
         {emailOpen && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <input
               type="email"
+              aria-label={t('shared.links.emailPlaceholder')}
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="destinatario@ejemplo.com"
+              placeholder={t('shared.links.emailPlaceholder')}
               style={inputStyle}
             />
             <textarea
               value={message}
+              aria-label={t('shared.links.message')}
               onChange={e => setMessage(e.target.value)}
-              placeholder="Mensaje (opcional)"
+              placeholder={t('shared.links.message')}
               rows={2}
               style={{ ...inputStyle, resize: 'vertical' }}
             />
@@ -213,7 +220,7 @@ export function PublicLinkSection({ fileId, links, onLinksChanged }: PublicLinkS
               disabled={sending || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())}
               style={primaryBtnStyle(sending)}
             >
-              {sending ? 'Enviando…' : 'Crear y enviar'}
+              {sending ? t('shared.links.sendBusy') : t('shared.links.send')}
             </button>
           </div>
         )}
@@ -229,6 +236,7 @@ function IconBtn({ title, danger, onClick, children }: {
     <button
       onClick={onClick}
       title={title}
+      aria-label={title}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'transparent', border: 'none', cursor: 'pointer', padding: 3,

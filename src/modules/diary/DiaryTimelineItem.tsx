@@ -15,6 +15,9 @@ import { HeatBadge } from '@/components/shared/HeatBadge';
 import { TagChip } from '@/components/shared/TagChip';
 import { MOOD_CONFIG, type MoodLevel } from './types';
 import { getPreview } from '@/lib/text';
+import { useI18n } from '@/i18n';
+import { formatDate } from '@/i18n/format';
+import { useSettingsStore } from '@/stores/settings.store';
 
 interface DiaryTimelineItemProps {
   id: string;
@@ -29,9 +32,11 @@ interface DiaryTimelineItemProps {
 }
 
 export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, tags, selected, onClick, onDelete }: DiaryTimelineItemProps) {
+  const { t, locale } = useI18n();
+  const general = useSettingsStore((s) => s.serverSettings?.general);
   const d = new Date(entryDate + 'T12:00:00');
   const dayNum = d.getDate();
-  const dayName = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  const dayName = d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { weekday: 'short' });
   const moodConfig = mood ? MOOD_CONFIG[mood] : null;
   const preview = getPreview(content, 'html');
 
@@ -39,7 +44,7 @@ export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, tag
     <EntityContextMenu
       entityType="diary_entry"
       entityId={id}
-      entityTitle={`Diary — ${entryDate}`}
+      entityTitle={t('diary.entryContextTitle', { date: formatDate(d, locale, general) })}
       onEdit={onClick}
       onDelete={onDelete}
       trigger={
@@ -95,7 +100,7 @@ export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, tag
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}>
-              {preview || 'Empty entry'}
+              {preview || t('diary.emptyEntry')}
             </span>
             {(tags?.length ?? 0) > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 }}>

@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { Boxes, PackageX, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -53,6 +54,7 @@ export function ItemDrawer({ itemId }: { itemId: string }) {
 }
 
 function ItemDrawerInner({ itemId }: { itemId: string }) {
+  const { t } = useI18n();
   const {
     items,
     locations,
@@ -149,17 +151,17 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
   };
 
   const handleTagsChange = (next: string[]) => {
-    handleUpdate({ tags: next }).catch(() => toast.error('Failed to update tags'));
+    handleUpdate({ tags: next }).catch(() => toast.error(t('inventory.drawer.tagUpdateFailed')));
   };
 
   const submitMeterReading = async (value: number, unit?: string): Promise<boolean> => {
     try {
       await updateMeter(itemId, value, unit);
       await refreshAfter();
-      toast.success('Reading logged');
+      toast.success(t('inventory.drawer.readingLogged'));
       return true;
     } catch {
-      toast.error('Failed to log reading');
+      toast.error(t('inventory.drawer.readingFailed'));
       return false;
     }
   };
@@ -168,9 +170,9 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
     try {
       await uploadItemFile(itemId, file, 'photo');
       await refreshLocal();
-      toast.success('Photo uploaded');
+      toast.success(t('inventory.drawer.photoUploaded'));
     } catch {
-      toast.error('Failed to upload photo');
+      toast.error(t('inventory.drawer.photoUploadFailed'));
     }
   };
 
@@ -193,7 +195,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
   return (
     <div
       role="dialog"
-      aria-label={item ? `Item: ${item.name}` : 'Item details'}
+      aria-label={item ? `${t('inventory.drawer.item')}: ${item.name}` : t('inventory.drawer.itemDetails')}
       style={
         isMobile
           ? {
@@ -239,11 +241,11 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Boxes size={16} style={{ color: 'var(--mod-inventory)' }} />
-          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>Item</span>
+          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{t('inventory.drawer.item')}</span>
         </div>
         <button
           onClick={() => selectItem(null)}
-          aria-label="Close"
+          aria-label={t('inventory.drawer.close')}
           style={{
             background: 'transparent',
             border: 'none',
@@ -263,13 +265,13 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
         <div style={{ flex: 1, minHeight: 0 }}>
           <EmptyState
             icon={PackageX}
-            title="This item no longer exists"
-            description="It was probably deleted — its ledger entries remain."
-            actions={[{ label: 'Close', onClick: () => selectItem(null), variant: 'secondary' }]}
+            title={t('inventory.drawer.missing')}
+            description={t('inventory.drawer.missingHelp')}
+            actions={[{ label: t('inventory.drawer.close'), onClick: () => selectItem(null), variant: 'secondary' }]}
           />
         </div>
       ) : !item ? (
-        <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading…</div>
+        <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>{t('inventory.drawer.loading')}</div>
       ) : (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Deleted item banner (read-only mode) */}
@@ -284,7 +286,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                 color: 'var(--text-dim)',
               }}
             >
-              Deleted item
+              {t('inventory.drawer.deleted')}
             </div>
           )}
 
@@ -335,8 +337,8 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
               {!readOnly && !editMode && (
                 <button
                   onClick={() => setEditMode(true)}
-                  title="Edit item"
-                  aria-label="Edit item"
+                  title={t('inventory.drawer.edit')}
+                  aria-label={t('inventory.drawer.edit')}
                   style={{
                     marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--text-dim)',
                     cursor: 'pointer', padding: 4, display: 'inline-flex', alignItems: 'center', borderRadius: 'var(--radius-sm)',
@@ -371,11 +373,11 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
           {/* 3. Purchase / warranty */}
           <div style={cardStyle}>
             <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
-              Purchased {fmtDate(item.purchase_date)} · {fmtMoney(item.purchase_price, item.currency)}
+              {t('inventory.drawer.purchased', { date: fmtDate(item.purchase_date), amount: fmtMoney(item.purchase_price, item.currency) })}
             </div>
             {item.warranty_until && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', color: 'var(--text)' }}>
-                <span>Warranty until {fmtDate(item.warranty_until)}</span>
+                <span>{t('inventory.drawer.warrantyUntil', { date: fmtDate(item.warranty_until) })}</span>
                 {warrantyDays !== null && (
                   <span
                     style={{
@@ -388,7 +390,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                       color: warrantyDays < 0 ? 'var(--error)' : warrantyDays < 90 ? 'var(--amber)' : 'var(--text-dim)',
                     }}
                   >
-                    {warrantyDays < 0 ? `expired ${Math.abs(warrantyDays)}d ago` : `${warrantyDays}d left`}
+                    {warrantyDays < 0 ? t('inventory.drawer.expiredDaysAgo', { count: Math.abs(warrantyDays) }) : t('inventory.drawer.daysLeft', { count: warrantyDays })}
                   </span>
                 )}
               </div>
@@ -408,10 +410,10 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
               }}
             >
               <div style={{ fontSize: '0.8125rem', color: 'var(--warning)', fontWeight: 600 }}>
-                Lent{lentDays !== null ? ` · ${lentDays} days` : ''}
+                {lentDays !== null ? t('inventory.drawer.lentDays', { count: lentDays }) : t('inventory.drawer.lend')}
               </div>
               {item.lent_until && (
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Due back {fmtDate(item.lent_until)}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('inventory.drawer.dueBack', { date: fmtDate(item.lent_until) })}</div>
               )}
             </div>
           )}
@@ -427,10 +429,10 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
 
           {/* 4. Tags */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={sectionLabel}>Tags</span>
+            <span style={sectionLabel}>{t('inventory.drawer.tags')}</span>
             {readOnly ? (
               (item.tags ?? []).length === 0 ? (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>No tags.</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('inventory.drawer.noTags')}</span>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {(item.tags ?? []).map(tag => (

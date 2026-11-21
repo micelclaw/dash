@@ -22,16 +22,15 @@ import { api } from '@/services/api';
 import { renameCalendar } from '@/services/calendars.service';
 import {
   getMonthGridDays,
-  getWeekDayNames,
   addMonths,
   isSameDay,
   isSameMonth,
   isToday,
-  formatMonthYear,
 } from '@/lib/date-helpers';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
 import { ConnectButton } from '@/components/shared/ConnectButton';
+import { useI18n } from '@/i18n';
 
 export interface CalendarInfo extends OriginEntity {
   id: string;
@@ -54,8 +53,6 @@ interface CalendarMiniSidebarProps {
   onCalendarsChange?: () => void | Promise<void>;
 }
 
-const DAY_NAMES = getWeekDayNames(1);
-
 // Default calendars to always show in the list even if no events exist
 const DEFAULT_CALENDARS = ['Personal', 'Work', 'Shared'];
 
@@ -70,6 +67,8 @@ export function CalendarMiniSidebar({
   calendars: apiCalendars,
   onCalendarsChange,
 }: CalendarMiniSidebarProps) {
+  const { t, locale } = useI18n();
+  const dayNames = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { weekday: 'short' }));
   const [miniMonth, setMiniMonth] = useState(() => new Date(currentDate));
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameTo, setRenameTo] = useState('');
@@ -99,7 +98,7 @@ export function CalendarMiniSidebar({
       );
       if (persistedCalendar) {
         await renameCalendar(persistedCalendar.id, newName);
-        toast.success(`Renamed "${oldName}" to "${newName}"`);
+        toast.success(t('calendar.renameSuccess', { oldName, newName }));
         setRenaming(null);
         await Promise.all([onCalendarsChange?.(), onRefresh?.()]);
         return;
@@ -110,11 +109,11 @@ export function CalendarMiniSidebar({
       await Promise.all(matching.map(e =>
         api.patch(`/events/${e.id}`, { calendar_name: newName }),
       ));
-      toast.success(`Renamed "${oldName}" to "${newName}"`);
+      toast.success(t('calendar.renameSuccess', { oldName, newName }));
       setRenaming(null);
       onRefresh?.();
     } catch {
-      toast.error('Failed to rename calendar');
+      toast.error(t('calendar.renameCalendarFailed'));
     } finally {
       renameInFlightRef.current.delete(calendar.id);
     }
@@ -124,11 +123,11 @@ export function CalendarMiniSidebar({
     try {
       // Delete via API (also deletes events on the backend)
       await api.delete(`/calendars/${cal.id}`);
-      toast.success(`Calendar "${cal.name}" deleted`);
+      toast.success(t('calendar.deleteSuccess', { name: cal.name }));
       onCalendarsChange?.();
       onRefresh?.();
     } catch {
-      toast.error('Failed to delete calendar');
+      toast.error(t('calendar.deleteCalendarFailedToast'));
     }
   };
 
@@ -200,7 +199,7 @@ export function CalendarMiniSidebar({
           padding: '12px 12px 8px',
         }}
       >
-        <button onClick={() => setMiniMonth(addMonths(miniMonth, -1))} style={navBtn}>
+        <button onClick={() => setMiniMonth(addMonths(miniMonth, -1))} style={navBtn} aria-label={t('calendar.previousMonth')} title={t('calendar.previousMonth')}>
           <ChevronLeft size={14} />
         </button>
         <span
@@ -210,9 +209,9 @@ export function CalendarMiniSidebar({
             color: 'var(--text)',
           }}
         >
-          {formatMonthYear(miniMonth)}
+          {miniMonth.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { month: 'long', year: 'numeric' })}
         </span>
-        <button onClick={() => setMiniMonth(addMonths(miniMonth, 1))} style={navBtn}>
+        <button onClick={() => setMiniMonth(addMonths(miniMonth, 1))} style={navBtn} aria-label={t('calendar.nextMonth')} title={t('calendar.nextMonth')}>
           <ChevronRight size={14} />
         </button>
       </div>
@@ -225,7 +224,7 @@ export function CalendarMiniSidebar({
           padding: '0 8px',
         }}
       >
-        {DAY_NAMES.map((name) => (
+        {dayNames.map((name) => (
           <div
             key={name}
             style={{
@@ -323,7 +322,7 @@ export function CalendarMiniSidebar({
             marginBottom: 8,
           }}
         >
-          Calendars
+          {t('calendar.calendars')}
         </div>
         {calendarList.filter(c => c.source !== 'kanban').map((cal) => {
           const name = cal.name;
@@ -365,7 +364,7 @@ export function CalendarMiniSidebar({
               trigger={
                 <div
                   role="group"
-                  aria-label={`${cal.display_name ?? name} calendar actions`}
+                  aria-label={t('calendar.calendarActions', { name: cal.display_name ?? name })}
                   style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0' }}
                 >
                   <label
@@ -422,9 +421,9 @@ export function CalendarMiniSidebar({
                 </div>
               }
               items={[
-                { label: 'Rename', icon: Pencil, onClick: () => { setRenameTo(name); setRenaming(name); } },
+                { label: t('calendar.rename'), icon: Pencil, onClick: () => { setRenameTo(name); setRenaming(name); } },
                 { label: '', icon: undefined, onClick: () => {}, separator: true },
-                { label: 'Delete', icon: Trash2, onClick: () => handleDeleteCalendar(cal), variant: 'danger' as const },
+                { label: t('calendar.delete'), icon: Trash2, onClick: () => handleDeleteCalendar(cal), variant: 'danger' as const },
               ]}
             />
           );
@@ -451,7 +450,7 @@ export function CalendarMiniSidebar({
           onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
         >
           <Plus size={14} />
-          Add calendar
+          {t('calendar.addCalendar')}
         </button>
 
         {/* Kanban Projects section */}
@@ -472,7 +471,7 @@ export function CalendarMiniSidebar({
               }}
             >
               <LayoutGrid size={11} />
-              Projects
+              {t('calendar.projects')}
             </div>
             {calendarList.filter(c => c.source === 'kanban').map((cal) => {
               const hidden = hiddenCalendars.has(cal.name);
@@ -526,16 +525,16 @@ export function CalendarMiniSidebar({
         open={confirmDeleteCal !== null}
         onClose={() => setConfirmDeleteCal(null)}
         onConfirm={() => { if (confirmDeleteCal) void performDeleteCalendar(confirmDeleteCal); setConfirmDeleteCal(null); }}
-        title="Delete calendar"
+        title={t('calendar.deleteCalendarConfirm')}
         description={(() => {
           if (!confirmDeleteCal) return '';
           const n = events.filter(e => e.calendar_name === confirmDeleteCal.name).length;
           return n > 0
-            ? `Delete "${confirmDeleteCal.name}" and its ${n} event${n === 1 ? '' : 's'}? This cannot be undone.`
-            : `Delete calendar "${confirmDeleteCal.name}"?`;
+            ? t(n === 1 ? 'calendar.deleteOneEventConfirm' : 'calendar.deleteEventsConfirm', { name: confirmDeleteCal.name, count: n })
+            : t('calendar.deleteCalendarOnlyConfirm', { name: confirmDeleteCal.name });
         })()}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        confirmLabel={t('calendar.delete')}
+        cancelLabel={t('calendar.cancel')}
         variant="danger"
       />
       <ConnectButton dataType="calendar" />

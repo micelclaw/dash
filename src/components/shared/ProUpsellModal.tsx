@@ -12,6 +12,7 @@
 
 import { Lock, X } from 'lucide-react';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
+import { useI18n } from '@/i18n';
 
 interface ProUpsellModalProps {
   feature: string;
@@ -20,6 +21,7 @@ interface ProUpsellModalProps {
 }
 
 export function ProUpsellModal({ feature, description, onClose }: ProUpsellModalProps) {
+  const { t } = useI18n();
   useEscapeToClose(onClose);
   return (
     <>
@@ -58,11 +60,13 @@ export function ProUpsellModal({ feature, description, onClose }: ProUpsellModal
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Lock size={16} style={{ color: 'var(--amber)' }} />
             <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
-              Pro Feature
+              {t('shared.pro.label')}
             </span>
           </div>
           <button
             onClick={onClose}
+            title={t('shared.action.close')}
+            aria-label={t('shared.action.close')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 2 }}
           >
             <X size={16} />
@@ -88,7 +92,7 @@ export function ProUpsellModal({ feature, description, onClose }: ProUpsellModal
               fontFamily: 'var(--font-sans)',
             }}
           >
-            Upgrade to Pro
+            {t('shared.pro.upgrade')}
           </button>
         </div>
       </div>

@@ -27,7 +27,7 @@
  *    si un release cambia un texto, el usuario ve qué pasó en vez de un fallo mudo.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Loader2, Check, ExternalLink, ShieldAlert, Info, Lock, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ import { ApiError } from '@/services/api';
 import * as hub from '@/services/matrix-hub.service';
 import * as syncSvc from '@/services/sync.service';
 import { Field, FormActions } from './shared';
+import { useI18n } from '@/i18n';
 
 /** Paso DERIVADO — no hay setStep para el estado "largo". */
 type Step = 'loading' | 'hub-setup' | 'hub-unavailable' | 'login-phone' | 'login-code' | 'login-2fa' | 'ready';
@@ -66,6 +67,9 @@ const CALLOUT: React.CSSProperties = {
 };
 
 export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === 'admin' || role === 'owner';
 
@@ -95,13 +99,13 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
           // login y enseña el motivo, en vez de girar para siempre.
           setLogin({
             state: 'unknown',
-            message: err instanceof Error ? err.message : 'The Telegram bridge did not answer.',
+            message: err instanceof Error ? err.message : tRef.current('settings.matrix.bridgeDidNotAnswer', { service: 'Telegram' }),
             hint: null,
           });
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not read the Telegram bridge status');
+      toast.error(err instanceof Error ? err.message : tRef.current('settings.telegram.readStatusFailed'));
     }
   }, []);
 
@@ -114,18 +118,18 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
     try {
       if (!status?.telegram_app_configured || apiId || apiHash) {
         if (!apiId.trim() || !apiHash.trim()) {
-          toast.error('Enter both the API ID and the API Hash');
+          toast.error(t('settings.telegram.needApiKeys'));
           return;
         }
         await hub.saveTelegramApp(apiId.trim(), apiHash.trim());
       }
-      toast.info('Setting up the Telegram bridge — this can take a few minutes the first time.');
+      toast.info(t('settings.matrix.settingUp', { service: 'Telegram' }));
       await hub.startMatrixHub();
       setApiHash('');
       await refresh();
-      toast.success('Telegram bridge is running');
+      toast.success(t('settings.matrix.running', { service: 'Telegram' }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not set up the bridge');
+      toast.error(err instanceof Error ? err.message : t('settings.matrix.setupFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -137,10 +141,10 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
       const r = await hub.advanceLogin(step, value);
       setLogin(r);
       if (r.state === 'error') toast.error(r.hint ?? r.message);
-      else if (r.state === 'unknown') toast.warning('Unexpected reply from the bridge — see the message below');
+      else if (r.state === 'unknown') toast.warning(t('settings.matrix.unexpectedReply'));
       return r;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'The Telegram bridge did not respond');
+      toast.error(err instanceof Error ? err.message : t('settings.matrix.bridgeDidNotRespond', { service: 'Telegram' }));
       return null;
     } finally {
       setSubmitting(false);
@@ -164,7 +168,7 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
         onComplete();
         return;
       }
-      toast.error(err instanceof Error ? err.message : 'Could not create the Telegram channel');
+      toast.error(err instanceof Error ? err.message : t('settings.matrix.createChannelFailed', { service: 'Telegram' }));
     } finally {
       setSubmitting(false);
     }
@@ -188,7 +192,7 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: 32 }}>
         <Loader2 size={18} className="animate-spin" style={{ color: 'var(--text-muted)' }} />
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>
-          Checking your Telegram bridge…
+          {t('settings.matrix.checkingBridge', { service: 'Telegram' })}
         </p>
       </div>
     );
@@ -199,26 +203,24 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Personal Telegram accounts connect through a private Matrix bridge that runs on your own
-          server. Set it up once — everyone on this instance can then log in with their own account.
-          Your messages never leave your server.
+          {t('settings.telegram.setup')}
         </p>
 
         {status?.telegram_app_configured && (
           <div style={{ ...CALLOUT, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
             <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-            <span>Telegram app credentials are already saved. You only need to start the bridge.</span>
+            <span>{t('settings.telegram.credentialsSaved')}</span>
           </div>
         )}
 
         <Field
-          label="Telegram API ID"
-          hint='Get these from my.telegram.org → API development tools. Log in with your phone number, open "API development tools", create an app (any title, e.g. "Micelclaw"), and copy the api_id — it is a number.'
+          label={t('settings.telegram.apiId')}
+          hint={t('settings.telegram.apiIdHint')}
         >
           <Input
             value={apiId}
             onChange={(e) => setApiId(e.target.value)}
-            placeholder={status?.telegram_app_configured ? 'Saved — leave blank to keep it' : 'e.g. 2040958'}
+            placeholder={status?.telegram_app_configured ? t('settings.telegram.savedKeep') : t('settings.telegram.exampleId')}
             inputMode="numeric"
           />
         </Field>
@@ -232,23 +234,22 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
             color: 'var(--amber)', textDecoration: 'none', marginTop: -6,
           }}
         >
-          Open my.telegram.org <ExternalLink size={11} />
+          {t('settings.telegram.openApi')} <ExternalLink size={11} />
         </a>
 
-        <Field label="Telegram API Hash" hint="On the same page, right under the API ID.">
+        <Field label={t('settings.telegram.apiHash')} hint={t('settings.telegram.apiHashHint')}>
           <Input
             type="password"
             value={apiHash}
             onChange={(e) => setApiHash(e.target.value)}
-            placeholder={status?.telegram_app_configured ? 'Saved — leave blank to keep it' : '32-character hex string'}
+            placeholder={status?.telegram_app_configured ? t('settings.telegram.savedKeep') : t('settings.telegram.hashPlaceholder')}
           />
         </Field>
 
         <div style={{ ...CALLOUT, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#fbbf24' }}>
           <ShieldAlert size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            Keep your API Hash secret — anyone who has it can impersonate this app on Telegram.
-            It is stored encrypted on your server and is never shown again after you save.
+            {t('settings.telegram.hashWarning')}
           </span>
         </div>
 
@@ -256,11 +257,11 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
           onBack={onCancel}
           saving={submitting}
           onConfirm={handleSetupHub}
-          submitLabel={submitting ? 'Setting up…' : 'Set up bridge'}
+          submitLabel={submitting ? t('settings.matrix.settingUpLabel') : t('settings.matrix.setUpBridge')}
         />
         {submitting && (
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-            Downloading and starting Synapse + the Telegram bridge. First run can take a few minutes.
+            {t('settings.telegram.downloadSetup')}
           </p>
         )}
       </div>
@@ -274,11 +275,10 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
         <div style={{ ...CALLOUT, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
           <Lock size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            Telegram (personal account) isn&apos;t enabled on this server yet. Ask an administrator to
-            set up the Telegram bridge in Settings → Channel Observers.
+            {t('settings.telegram.unavailable')}
           </span>
         </div>
-        <Button variant="outline" onClick={onCancel} className="w-full">Close</Button>
+        <Button variant="outline" onClick={onCancel} className="w-full">{t('settings.telegram.close')}</Button>
       </div>
     );
   }
@@ -288,13 +288,12 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Log in with your Telegram account. This links your personal chats — it is your real
-          account, not a bot.
+          {t('settings.telegram.loginIntro')}
         </p>
         {bridgeMessage}
         <Field
-          label="Phone number"
-          hint="With country code, e.g. +34… for Spain. Use the same number as your Telegram app."
+          label={t('settings.whatsapp.phone')}
+          hint={t('settings.telegram.phoneHint')}
         >
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+34 600 123 456" inputMode="tel" />
         </Field>
@@ -307,10 +306,10 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
             const started = await send('start');
             if (started && started.state === 'awaiting_phone') await send('phone', phone.trim());
           }}
-          submitLabel="Send code"
+          submitLabel={t('settings.telegram.sendCode')}
         />
         <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          Telegram will send you a one-time login code. Only you can see your own chats.
+          {t('settings.telegram.codeNotice')}
         </p>
       </div>
     );
@@ -320,18 +319,16 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Enter the login code Telegram just sent you.
+          {t('settings.telegram.enterCode')}
         </p>
         <div style={{ ...CALLOUT, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd' }}>
           <Info size={13} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>
-            Check your <strong>Telegram app</strong>, not your SMS. Telegram sends the code as a
-            message inside the app itself (from the official &quot;Telegram&quot; chat). It only falls back
-            to SMS if you are not signed in on any device.
+            {t('settings.telegram.checkApp')}
           </span>
         </div>
         {bridgeMessage}
-        <Field label="Login code" hint="The code from the Telegram service message.">
+        <Field label={t('settings.telegram.loginCode')} hint={t('settings.telegram.loginCodeHint')}>
           <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="1 2 3 4 5" inputMode="numeric" />
         </Field>
         <FormActions
@@ -339,7 +336,7 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
           saving={submitting}
           disabled={!code.trim()}
           onConfirm={() => void send('code', code.trim())}
-          submitLabel="Verify"
+          submitLabel={t('settings.telegram.verify')}
         />
       </div>
     );
@@ -349,21 +346,21 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-          Your account has two-step verification enabled.
+          {t('settings.telegram.twoStep')}
         </p>
         {bridgeMessage}
         <Field
-          label="Two-step verification password"
-          hint="This is the extra password you set in Telegram → Settings → Privacy and Security → Two-Step Verification. It is not the login code, and it is never stored."
+          label={t('settings.telegram.twoStepPassword')}
+          hint={t('settings.telegram.passwordHint')}
         >
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your Telegram password" />
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('settings.telegram.passwordPlaceholder')} />
         </Field>
         <FormActions
           onBack={() => void send('cancel')}
           saving={submitting}
           disabled={!password.trim()}
           onConfirm={async () => { await send('password', password); setPassword(''); }}
-          submitLabel="Log in"
+          submitLabel={t('settings.telegram.logIn')}
         />
       </div>
     );
@@ -374,17 +371,16 @@ export function TelegramMatrixForm({ onComplete, onCancel }: { onComplete: () =>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ ...CALLOUT, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#4ade80' }}>
         <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} />
-        <span>{login?.message ?? 'Logged in to Telegram.'}</span>
+        <span>{login?.message ?? t('settings.telegram.loggedIn')}</span>
       </div>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Your Telegram account is connected and the bridge is importing your chats. Next, choose which
-        chats Micelclaw should observe — you don&apos;t have to sync everything.
+        {t('settings.telegram.ready')}
       </p>
       <FormActions
         onBack={onCancel}
         saving={submitting}
         onConfirm={handleChooseChats}
-        submitLabel="Choose chats"
+        submitLabel={t('settings.telegram.chooseChats')}
       />
     </div>
   );

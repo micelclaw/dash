@@ -52,6 +52,7 @@ import { useBackGuard } from '@/hooks/use-back-guard';
 import { useIsMobile } from '@/hooks/use-media-query';
 import type { PhotosView, PhotoSortField, PhotoSortDir } from './types';
 import type { Photo, Album } from '@/types/files';
+import { useI18n } from '@/i18n';
 
 const PHOTO_TABS: { id: PhotosView; label: string }[] = [
   { id: 'timeline', label: 'Timeline' },
@@ -78,10 +79,11 @@ function SearchResultsGrid({
   search: string;
   onPhotoClick: (id: string) => void;
 }) {
+  const { t } = useI18n();
   if (loading) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
-        Searching...
+        {t('photos.searching')}
       </div>
     );
   }
@@ -90,8 +92,8 @@ function SearchResultsGrid({
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
         <Image size={40} style={{ opacity: 0.3 }} />
-        <div style={{ fontSize: '0.875rem' }}>No photos matching &quot;{search}&quot;</div>
-        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Try a different search term</div>
+        <div style={{ fontSize: '0.875rem' }}>{t('photos.noMatches', { query: search })}</div>
+        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>{t('photos.tryAnotherSearch')}</div>
       </div>
     );
   }
@@ -108,7 +110,7 @@ function SearchResultsGrid({
         }}>
           <Lock size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Upgrade to <strong style={{ color: 'var(--amber)' }}>Pro</strong> for AI-powered semantic search
+            {t('photos.upgradePrefix')} <strong style={{ color: 'var(--amber)' }}>Pro</strong> {t('photos.upgradeSuffix')}
           </span>
         </div>
       )}
@@ -208,6 +210,7 @@ function SearchResultThumbnail({
 }
 
 export function Component() {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -612,14 +615,14 @@ export function Component() {
         const newPhoto = { ...res.data, taken_at: null, thumbnail_url: '' } as Photo;
         prependPhoto(newPhoto);
       } catch {
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(t('photos.uploadFailed', { name: file.name }));
       }
     }
     if (success > 0) {
-      toast.success(`${success} photo${success !== 1 ? 's' : ''} uploaded`);
+      toast.success(t(success === 1 ? 'photos.uploadOne' : 'photos.uploadMany', { count: success }));
       if (selectedAlbumId) fetchAlbumPhotos(true);
     }
-  }, [prependPhoto, selectedAlbumId, fetchAlbumPhotos]);
+  }, [prependPhoto, selectedAlbumId, fetchAlbumPhotos, t]);
 
   const handleAlbumClick = useCallback((albumId: string) => {
     setSelectedAlbumId(albumId);
@@ -680,17 +683,17 @@ export function Component() {
     try {
       await addPhotosToAlbum(albumId, [photoId]);
     } catch {
-      toast.error('Failed to add to album');
+      toast.error(t('photos.addAlbumFailed'));
     }
-  }, [addPhotosToAlbum]);
+  }, [addPhotosToAlbum, t]);
 
   const handleSetAsCover = useCallback(async (photoId: string, albumId: string) => {
     try {
       await setAlbumCover(albumId, photoId);
     } catch {
-      toast.error('Failed to set cover');
+      toast.error(t('photos.coverFailed'));
     }
-  }, [setAlbumCover]);
+  }, [setAlbumCover, t]);
 
   const handleCreateAlbumInline = useCallback(async (name: string): Promise<Album> => {
     return await createAlbum(name);
@@ -704,13 +707,13 @@ export function Component() {
       if (selectedAlbumId) removeAlbumPhotos(idSet);
       setDeletePhotoId(null);
       await api.delete(`/files/${deletePhotoId}`);
-      toast.success('Photo deleted');
+      toast.success(t('photos.deleted'));
     } catch {
-      toast.error('Failed to delete photo');
+      toast.error(t('photos.deleteFailed'));
       fetchPhotos(true);
       if (selectedAlbumId) fetchAlbumPhotos(true);
     }
-  }, [deletePhotoId, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos]);
+  }, [deletePhotoId, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos, t]);
 
   const handleRemoveFromAlbum = useCallback(async (fileId: string) => {
     if (!selectedAlbumId) return;
@@ -718,18 +721,18 @@ export function Component() {
       await removePhotoFromAlbum(selectedAlbumId, fileId);
       fetchAlbumPhotos(true);
     } catch {
-      toast.error('Failed to remove from album');
+      toast.error(t('photos.removeAlbumFailed'));
     }
-  }, [selectedAlbumId, removePhotoFromAlbum, fetchAlbumPhotos]);
+  }, [selectedAlbumId, removePhotoFromAlbum, fetchAlbumPhotos, t]);
 
   const handleSetAsCoverForCurrentAlbum = useCallback(async (photoId: string) => {
     if (!selectedAlbumId) return;
     try {
       await setAlbumCover(selectedAlbumId, photoId);
     } catch {
-      toast.error('Failed to set cover');
+      toast.error(t('photos.coverFailed'));
     }
-  }, [selectedAlbumId, setAlbumCover]);
+  }, [selectedAlbumId, setAlbumCover, t]);
 
   // ── Batch actions ──────────────────────────────────────
 
@@ -744,9 +747,9 @@ export function Component() {
       await addPhotosToAlbum(albumId, ids);
       activeSelection.clearSelection();
     } catch {
-      toast.error('Failed to add to album');
+      toast.error(t('photos.addAlbumFailed'));
     }
-  }, [activeSelection, addPhotosToAlbum]);
+  }, [activeSelection, addPhotosToAlbum, t]);
 
   const handleBatchDelete = useCallback(async () => {
     const ids = [...activeSelection.selectedIds];
@@ -757,30 +760,30 @@ export function Component() {
     removePhotos(idSet);
     if (selectedAlbumId) removeAlbumPhotos(idSet);
     activeSelection.clearSelection();
-    toast.success(`${ids.length} photo${ids.length !== 1 ? 's' : ''} deleted`);
+    toast.success(t(ids.length === 1 ? 'photos.deletedOne' : 'photos.deletedMany', { count: ids.length }));
 
     try {
       await Promise.all(ids.map(id => api.delete(`/files/${id}`)));
     } catch {
-      toast.error('Some photos failed to delete');
+      toast.error(t('photos.deleteSomeFailed'));
       fetchPhotos(true);
       if (selectedAlbumId) fetchAlbumPhotos(true);
     }
-  }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos]);
+  }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos, t]);
 
   const handleProcessPhotos = useCallback(async (ids: string[], clearAfter = false) => {
     // Guard: check model is selected and downloaded before calling API
     const settings = useSettingsStore.getState().settings;
     const modelId = settings?.ai?.local_models?.multimodal_model;
     if (!modelId) {
-      toast.error('No multimodal model selected. Go to Settings → AI & Intelligence to configure one.');
+      toast.error(t('photos.noModel'));
       return;
     }
     try {
       const modelsRes = await api.get<{ data: { id: string; downloaded: boolean }[] }>('/photos/models/multimodal');
       const model = modelsRes.data.find((m: { id: string }) => m.id === modelId);
       if (!model || !(model as { downloaded: boolean }).downloaded) {
-        toast.error(`Model "${modelId}" is not downloaded. Pull it from Settings → AI & Intelligence.`);
+        toast.error(t('photos.modelNotDownloaded', { name: modelId }));
         return;
       }
     } catch { /* if check fails, let backend handle it */ }
@@ -789,12 +792,12 @@ export function Component() {
     try {
       const res = await api.post('/photos/ai/reprocess-selected', { file_ids: ids }) as any;
       const data = res.data ?? res;
-      toast.success(`${data.reset} photo${data.reset !== 1 ? 's' : ''} queued for processing`);
+      toast.success(t(data.reset === 1 ? 'photos.queuedOne' : 'photos.queuedMany', { count: data.reset }));
       if (clearAfter) activeSelection.clearSelection();
     } catch {
-      toast.error('Failed to queue photos for processing');
+      toast.error(t('photos.queueFailed'));
     }
-  }, [activeSelection, setFilesPending]);
+  }, [activeSelection, setFilesPending, t]);
 
   const handleBatchProcess = useCallback(() => {
     void handleProcessPhotos([...activeSelection.selectedIds], true);
@@ -820,12 +823,12 @@ export function Component() {
     try {
       await Promise.all(ids.map(id => api.patch(`/files/${id}`, { custom_fields: { aesthetic_override: value } })));
       toast.success(value === null
-        ? `AI score restored (${ids.length})`
-        : `${value} star${value === 1 ? '' : 's'} (${ids.length})`);
+        ? t('photos.aiScoreRestored', { count: ids.length })
+        : t(value === 1 ? 'photos.starResultOne' : 'photos.starResultMany', { value, count: ids.length }));
     } catch {
-      toast.error('Failed to assign stars');
+      toast.error(t('photos.starsFailed'));
     }
-  }, [activeSelection.selectedIds]);
+  }, [activeSelection.selectedIds, t]);
 
   // Espejo del menú de click derecho del tile, aplicado a la selección entera
   // (petición 2026-07-12: "el menú del ⋮ debe ser el mismo que el del click
@@ -837,29 +840,29 @@ export function Component() {
     const sfx = n > 1 ? ` (${n})` : '';
     const single = n === 1 ? selectedPhotos[0] : undefined;
     const items: ContextMenuItem[] = [
-      { label: `Add to album${sfx}`, icon: FolderPlus, onClick: handleBatchAddToAlbum },
+      { label: `${t('photos.addAlbum')}${sfx}`, icon: FolderPlus, onClick: handleBatchAddToAlbum },
     ];
     if (isAlbumView) {
-      items.push({ label: `Remove from album${sfx}`, icon: FolderMinus, onClick: () => setBatchRemoveOpen(true) });
+      items.push({ label: `${t('photos.removeAlbum')}${sfx}`, icon: FolderMinus, onClick: () => setBatchRemoveOpen(true) });
     }
-    if (single) items.push({ label: 'View details', icon: Info, onClick: () => handleViewDetails(single) });
-    items.push({ label: `Download${sfx}`, icon: Download, onClick: handleBatchDownload });
-    items.push({ label: `Process with AI${sfx}`, icon: Cpu, onClick: handleBatchProcess });
+    if (single) items.push({ label: t('photos.viewDetails'), icon: Info, onClick: () => handleViewDetails(single) });
+    items.push({ label: `${t('photos.download')}${sfx}`, icon: Download, onClick: handleBatchDownload });
+    items.push({ label: `${t('photos.processAi')}${sfx}`, icon: Cpu, onClick: handleBatchProcess });
     items.push({
-      label: `Assign stars${sfx}`,
+      label: `${t('photos.assignStars')}${sfx}`,
       icon: Star,
       onClick: () => {},
       subItems: [
         ...[5, 4, 3, 2, 1, 0].map((v) => ({
-          label: `${'★'.repeat(v)}${'☆'.repeat(5 - v)}  ${v} star${v === 1 ? '' : 's'}`,
+          label: `${'★'.repeat(v)}${'☆'.repeat(5 - v)}  ${t(v === 1 ? 'photos.starOne' : 'photos.starMany', { count: v })}`,
           onClick: () => { void handleBatchStars(v); },
         })),
-        { label: 'Auto (AI)', onClick: () => { void handleBatchStars(null); } },
+        { label: t('photos.autoAi'), onClick: () => { void handleBatchStars(null); } },
       ],
     });
     if (single) {
       items.push({
-        label: 'Set as cover',
+        label: t('photos.setCover'),
         icon: Image,
         onClick: () => {
           // Dentro de un álbum: portada de ESTE álbum; en timeline: elegir álbum.
@@ -869,12 +872,12 @@ export function Component() {
       });
     }
     items.push({ label: '', separator: true, onClick: () => {} });
-    items.push({ label: `Share${sfx}`, icon: Share2, onClick: () => setShareSelectionOpen(true) });
-    items.push({ label: `Relate${sfx}`, icon: Link2, onClick: () => setRelateSelectionOpen(true) });
+    items.push({ label: `${t('photos.shareAction')}${sfx}`, icon: Share2, onClick: () => setShareSelectionOpen(true) });
+    items.push({ label: `${t('photos.relate')}${sfx}`, icon: Link2, onClick: () => setRelateSelectionOpen(true) });
     items.push({ label: '', separator: true, onClick: () => {} });
-    items.push({ label: `Delete${sfx}`, icon: Trash2, variant: 'danger', onClick: () => setBatchDeleteOpen(true) });
+    items.push({ label: `${t('photos.delete')}${sfx}`, icon: Trash2, variant: 'danger', onClick: () => setBatchDeleteOpen(true) });
     return items;
-  }, [activeSelection.selectedIds, selectedPhotos, isAlbumView, handleBatchAddToAlbum, handleBatchDownload, handleBatchProcess, handleBatchStars, handleViewDetails, handleSetAsCoverForCurrentAlbum]);
+  }, [activeSelection.selectedIds, selectedPhotos, isAlbumView, handleBatchAddToAlbum, handleBatchDownload, handleBatchProcess, handleBatchStars, handleViewDetails, handleSetAsCoverForCurrentAlbum, t]);
 
   const handleBatchRemoveFromAlbum = useCallback(async () => {
     if (!selectedAlbumId) return;
@@ -884,13 +887,13 @@ export function Component() {
       for (const id of ids) {
         await removePhotoFromAlbum(selectedAlbumId, id);
       }
-      toast.success(`${ids.length} photo${ids.length !== 1 ? 's' : ''} removed from album`);
+      toast.success(t(ids.length === 1 ? 'photos.removedOne' : 'photos.removedMany', { count: ids.length }));
       albumSelection.clearSelection();
       fetchAlbumPhotos(true);
     } catch {
-      toast.error('Failed to remove photos');
+      toast.error(t('photos.removePhotosFailed'));
     }
-  }, [selectedAlbumId, albumSelection, removePhotoFromAlbum, fetchAlbumPhotos]);
+  }, [selectedAlbumId, albumSelection, removePhotoFromAlbum, fetchAlbumPhotos, t]);
 
   // ── Album actions ──────────────────────────────────────
 
@@ -902,9 +905,9 @@ export function Component() {
     try {
       await updateAlbum(albumId, data);
     } catch {
-      toast.error('Failed to update album');
+      toast.error(t('photos.updateAlbumFailed'));
     }
-  }, [updateAlbum]);
+  }, [updateAlbum, t]);
 
   const handleDeleteAlbumConfirm = useCallback(async () => {
     if (!deleteAlbumConfirm) return;
@@ -924,7 +927,7 @@ export function Component() {
     <>
     <MediaShell
       moduleVar="--mod-photos"
-      tabs={PHOTO_TABS}
+      tabs={PHOTO_TABS.map((tab) => ['timeline', 'albums', 'people'].includes(tab.id) ? { ...tab, label: t(`photos.tab.${tab.id}`) } : tab)}
       activeTab={view}
       onTabChange={(id) => handleViewChange(id as PhotosView)}
       actions={<PhotosUploadButton onClick={() => setUploadDialogOpen(true)} />}
@@ -932,11 +935,11 @@ export function Component() {
         <MediaToolbar
           search={search}
           onSearchChange={handleSearchChange}
-          searchPlaceholder="Search photos…"
+          searchPlaceholder={t('photos.searchPlaceholder')}
           aiSlot
           aiActive={aiSearch}
           onAiToggle={handleAiToggle}
-          aiPlaceholder="Describe a photo…"
+          aiPlaceholder={t('photos.aiPlaceholder')}
           left={(view === 'timeline' || isAlbumView) && !(isMobile && activeSelection.selectedIds.size > 0) ? (
             // Toolbar unificada (timeline Y dentro de álbum): estrellas en un
             // solo botón + ordenación Date/Name/Size; Inventory solo en timeline.
@@ -1116,9 +1119,9 @@ export function Component() {
         open={!!deletePhotoId}
         onClose={() => setDeletePhotoId(null)}
         onConfirm={handleDeletePhoto}
-        title="Delete photo?"
-        description="This photo will be moved to trash."
-        confirmLabel="Delete"
+        title={t('photos.deletePhotoTitle')}
+        description={t('photos.deletePhotoDescription')}
+        confirmLabel={t('photos.delete')}
         variant="danger"
       />
 
@@ -1127,9 +1130,9 @@ export function Component() {
         open={batchDeleteOpen}
         onClose={() => setBatchDeleteOpen(false)}
         onConfirm={handleBatchDelete}
-        title={`Delete ${activeSelection.selectedIds.size} photos?`}
-        description="Selected photos will be moved to trash."
-        confirmLabel="Delete"
+        title={t(activeSelection.selectedIds.size === 1 ? 'photos.deleteOneTitle' : 'photos.deleteManyTitle', { count: activeSelection.selectedIds.size })}
+        description={t('photos.deleteManyDescription')}
+        confirmLabel={t('photos.delete')}
         variant="danger"
       />
 
@@ -1138,9 +1141,9 @@ export function Component() {
         open={batchRemoveOpen}
         onClose={() => setBatchRemoveOpen(false)}
         onConfirm={handleBatchRemoveFromAlbum}
-        title={`Remove ${albumSelection.selectedIds.size} photos from album?`}
-        description="Photos will be removed from this album but not deleted."
-        confirmLabel="Remove"
+        title={t(albumSelection.selectedIds.size === 1 ? 'photos.removeOneTitle' : 'photos.removeManyTitle', { count: albumSelection.selectedIds.size })}
+        description={t('photos.removeManyDescription')}
+        confirmLabel={t('photos.remove')}
         variant="warning"
       />
 
@@ -1150,7 +1153,7 @@ export function Component() {
           open
           anchorPos={batchAlbumPicker}
           albums={albums}
-          title="Add to album"
+          title={t('photos.addAlbum')}
           onSelect={handleBatchAddSelect}
           onCreate={handleCreateAlbumInline}
           onClose={() => setBatchAlbumPicker(null)}
@@ -1163,7 +1166,7 @@ export function Component() {
           open
           anchorPos={coverPickerPos}
           albums={albums}
-          title="Set as cover"
+          title={t('photos.setCover')}
           onSelect={(albumId) => {
             const photoId = selectedPhotos[0]!.id;
             setCoverPickerPos(null);
@@ -1230,9 +1233,9 @@ export function Component() {
         open={!!deleteAlbumConfirm}
         onClose={() => setDeleteAlbumConfirm(null)}
         onConfirm={handleDeleteAlbumConfirm}
-        title="Delete album?"
-        description={deleteAlbumConfirm ? `"${deleteAlbumConfirm.name}" will be permanently deleted. Photos inside will not be removed.` : ''}
-        confirmLabel="Delete"
+        title={t('photos.deleteAlbumTitle')}
+        description={deleteAlbumConfirm ? t('photos.deleteAlbumDescription', { name: deleteAlbumConfirm.name }) : ''}
+        confirmLabel={t('photos.delete')}
         variant="danger"
       />
 

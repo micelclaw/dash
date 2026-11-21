@@ -28,6 +28,7 @@ import {
   type FinanceContactDetail,
 } from '@/stores/finance-billing.store';
 import { useEscapeClose } from '../use-escape-close';
+import { useI18n } from '@/i18n';
 
 /** Primer email conocido del contacto cliente. */
 function firstContactEmail(contact: FinanceContactDetail | null | undefined): string {
@@ -47,6 +48,7 @@ export function EnviarFacturaDialog({
   document: FinanceDoc | null;
   contact?: FinanceContactDetail | null;
 }) {
+  const { t } = useI18n();
   const { fetchEmailAccounts, sendInvoice } = useFinanceBillingStore();
 
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
@@ -65,10 +67,8 @@ export function EnviarFacturaDialog({
     if (!open || !doc) return;
     const prefillTo = firstContactEmail(contact);
     setTo(prefillTo);
-    setSubject(`Factura ${docNumber}`);
-    setMessage(
-      `Hola,\n\nAdjunto la factura ${docNumber}.\n\nUn saludo.`,
-    );
+    setSubject(`${t('finance.billing.invoice')} ${docNumber}`);
+    setMessage(t('finance.billing.defaultEmail', { number: docNumber }));
     setLoadingAccounts(true);
     let cancelled = false;
     void (async () => {
@@ -81,7 +81,7 @@ export function EnviarFacturaDialog({
       } catch (e) {
         if (!cancelled) {
           setAccounts([]);
-          toast.error(e instanceof Error ? e.message : 'Couldn\'t load the email accounts');
+          toast.error(e instanceof Error ? e.message : t('finance.error.load'));
         }
       } finally {
         if (!cancelled) setLoadingAccounts(false);
@@ -100,8 +100,8 @@ export function EnviarFacturaDialog({
 
   const onSend = async () => {
     const recipient = to.trim();
-    if (!recipient) { toast.error('Enter a recipient'); return; }
-    if (!accountId) { toast.error('Pick the issuing account'); return; }
+    if (!recipient) { toast.error(t('finance.billing.enterRecipient')); return; }
+    if (!accountId) { toast.error(t('finance.billing.chooseSender')); return; }
     setSending(true);
     try {
       const r = await sendInvoice(doc.id, {
@@ -110,10 +110,10 @@ export function EnviarFacturaDialog({
         message: message.trim() || undefined,
         account_id: accountId,
       });
-      toast.success(`Factura enviada a ${r.to?.join(', ') || recipient}`);
+      toast.success(t('finance.billing.sentTo', { recipient: r.to?.join(', ') || recipient }));
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Couldn\'t send the email');
+      toast.error(e instanceof Error ? e.message : t('finance.billing.sendFailed'));
     } finally {
       setSending(false);
     }
@@ -131,7 +131,7 @@ export function EnviarFacturaDialog({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Mail size={16} style={{ color: 'var(--mod-finance)' }} />
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Enviar factura {doc.number ? `${doc.number}` : ''}</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{t('finance.billing.sendInvoice')} {doc.number ? `${doc.number}` : ''}</h2>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
@@ -139,22 +139,22 @@ export function EnviarFacturaDialog({
         {noAccounts ? (
           <div style={{ padding: '20px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', textAlign: 'center' }}>
             <Mail size={22} style={{ color: 'var(--text-muted)', marginBottom: 8 }} />
-            <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 6 }}>You have no email accounts set up</div>
+            <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 6 }}>{t('finance.billing.emailAccountsMissing')}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Para enviar facturas por email necesitas una cuenta emisora. Añade una en Mail.
+              {t('finance.billing.emailAccountRequired')}
             </div>
             <a href="/mail" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--mod-finance)', borderRadius: 'var(--radius-md, 6px)', color: '#fff', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
-              <ExternalLink size={14} /> Ir a Mail
+              <ExternalLink size={14} /> {t('finance.billing.goToMail')}
             </a>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Cuenta emisora */}
             <div>
-              <label style={labelStyle}>Issuing account</label>
+              <label style={labelStyle}>{t('finance.billing.issuingAccount')}</label>
               {loadingAccounts ? (
                 <div style={{ ...fieldStyle, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
-                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Cargando cuentas…
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> {t('finance.billing.loadingAccounts')}
                 </div>
               ) : (
                 <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
@@ -169,26 +169,26 @@ export function EnviarFacturaDialog({
 
             {/* Destinatario */}
             <div>
-              <label style={labelStyle}>Recipient</label>
+              <label style={labelStyle}>{t('finance.billing.recipient')}</label>
               <input ref={toRef} type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="cliente@empresa.com" style={fieldStyle} />
             </div>
 
             {/* Asunto */}
             <div>
-              <label style={labelStyle}>Subject</label>
-              <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={`Factura ${docNumber}`} style={fieldStyle} />
+              <label style={labelStyle}>{t('finance.billing.subject')}</label>
+              <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={`${t('finance.billing.invoice')} ${docNumber}`} style={fieldStyle} />
             </div>
 
             {/* Mensaje */}
             <div>
-              <label style={labelStyle}>Message</label>
+              <label style={labelStyle}>{t('finance.billing.message')}</label>
               <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} style={{ ...fieldStyle, resize: 'vertical' }} />
             </div>
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>{t('finance.cancel')}</button>
           <button
             onClick={onSend}
             disabled={!canSend}
@@ -200,7 +200,7 @@ export function EnviarFacturaDialog({
             }}
           >
             {sending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
-            Enviar
+            {t('finance.billing.send')}
           </button>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

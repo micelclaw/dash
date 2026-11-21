@@ -15,6 +15,7 @@ import { Search, Plus, X } from 'lucide-react';
 import { DiaryTimelineItem } from './DiaryTimelineItem';
 import { DiaryStatsWidget } from './DiaryStatsWidget';
 import type { DiaryEntry } from './types';
+import { useI18n } from '@/i18n';
 
 interface DiaryTimelineProps {
   entries: DiaryEntry[];
@@ -42,6 +43,7 @@ function SkeletonItem() {
 export function DiaryTimeline({
   entries, loading, error, selectedId, onSelect, onCreateToday, search, onSearchChange, onRetry,
 }: DiaryTimelineProps) {
+  const { t, locale } = useI18n();
   const [localSearch, setLocalSearch] = useState(search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -59,7 +61,7 @@ export function DiaryTimeline({
     for (const entry of entries) {
       const d = new Date(entry.entry_date + 'T12:00:00');
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      const label = d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { month: 'long', year: 'numeric' });
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(entry);
       // Store label on first entry for display
@@ -72,12 +74,12 @@ export function DiaryTimeline({
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (!seen.has(key)) {
         seen.add(key);
-        const label = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+        const label = d.toLocaleDateString(locale === 'es' ? 'es-ES' : 'en-GB', { month: 'long', year: 'numeric' });
         result.push({ label, entries: map.get(key)! });
       }
     }
     return result;
-  }, [entries]);
+  }, [entries, locale]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface)' }}>
@@ -93,7 +95,7 @@ export function DiaryTimeline({
         }}
       >
         <Plus size={16} />
-        New entry
+        {t('diary.newEntry')}
       </button>
 
       {/* Search */}
@@ -109,7 +111,7 @@ export function DiaryTimeline({
           <input
             value={localSearch}
             onChange={e => setLocalSearch(e.target.value)}
-            placeholder="Search diary..."
+            placeholder={t('diary.search')}
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
               color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
@@ -148,16 +150,16 @@ export function DiaryTimeline({
                 cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
               }}
             >
-              Retry
+              {t('diary.retry')}
             </button>
           </div>
         )}
 
         {!loading && !error && entries.length === 0 && (
           <div style={{ padding: 32, textAlign: 'center' }}>
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>No diary entries yet</p>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('diary.noEntries')}</p>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: 4 }}>
-              Start writing to capture your days
+              {t('diary.startWriting')}
             </p>
           </div>
         )}

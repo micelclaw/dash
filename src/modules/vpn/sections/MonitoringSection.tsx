@@ -13,6 +13,7 @@
 import { useVpnStats } from '../hooks/use-vpn-stats';
 import { TransferChart } from '../components/TransferChart';
 import type { VpnPeer } from '../hooks/use-vpn';
+import { useI18n } from '@/i18n';
 
 interface MonitoringSectionProps {
   peers: VpnPeer[];
@@ -25,30 +26,31 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }
 
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+function timeAgo(dateStr: string | null, t: (key: string, values?: Record<string, string | number>) => string): string {
+  if (!dateStr) return t('vpn.never');
   const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60_000) return 'Just now';
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`;
-  return `${Math.floor(diff / 86400_000)}d ago`;
+  if (diff < 60_000) return t('vpn.justNow');
+  if (diff < 3600_000) return t('vpn.minutesAgo', { count: Math.floor(diff / 60_000) });
+  if (diff < 86400_000) return t('vpn.hoursAgo', { count: Math.floor(diff / 3600_000) });
+  return t('vpn.daysAgo', { count: Math.floor(diff / 86400_000) });
 }
 
-function getStatus(peer: VpnPeer): { label: string; color: string } {
-  if (!peer.last_handshake) return { label: 'Offline', color: '#6b7280' };
+function getStatus(peer: VpnPeer, t: (key: string) => string): { label: string; color: string } {
+  if (!peer.last_handshake) return { label: t('vpn.offline'), color: '#6b7280' };
   const diff = Date.now() - new Date(peer.last_handshake).getTime();
-  if (diff < 180_000) return { label: 'Online', color: '#22c55e' };
-  if (diff < 900_000) return { label: 'Recent', color: '#f59e0b' };
-  return { label: 'Offline', color: '#6b7280' };
+  if (diff < 180_000) return { label: t('vpn.online'), color: '#22c55e' };
+  if (diff < 900_000) return { label: t('vpn.recent'), color: '#f59e0b' };
+  return { label: t('vpn.offline'), color: '#6b7280' };
 }
 
 export function MonitoringSection({ peers }: MonitoringSectionProps) {
+  const { t } = useI18n();
   const { snapshots, loading } = useVpnStats(24);
 
   return (
     <div style={{ padding: 24, maxWidth: 800 }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 20px', fontFamily: 'var(--font-sans)' }}>
-        Monitoring
+        {t('vpn.monitoringTitle')}
       </h2>
 
       {/* Bandwidth Chart */}
@@ -60,11 +62,11 @@ export function MonitoringSection({ peers }: MonitoringSectionProps) {
         marginBottom: 20,
       }}>
         <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 12px', fontFamily: 'var(--font-sans)' }}>
-          Bandwidth (Last 24h)
+          {t('vpn.bandwidth24h')}
         </h3>
         {loading ? (
           <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-            Loading stats...
+            {t('vpn.loadingStats')}
           </div>
         ) : (
           <TransferChart snapshots={snapshots} peers={peers} />
@@ -84,12 +86,12 @@ export function MonitoringSection({ peers }: MonitoringSectionProps) {
           fontSize: '0.875rem', fontWeight: 600,
           color: 'var(--text)', fontFamily: 'var(--font-sans)',
         }}>
-          Current Session
+          {t('vpn.currentSession')}
         </div>
 
         {peers.length === 0 ? (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-            No peers
+            {t('vpn.noPeers')}
           </div>
         ) : (
           <table style={{
@@ -98,16 +100,16 @@ export function MonitoringSection({ peers }: MonitoringSectionProps) {
           }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                <th style={thStyle}>Peer</th>
-                <th style={thStyle}>Status</th>
+                <th style={thStyle}>{t('vpn.peer')}</th>
+                <th style={thStyle}>{t('vpn.status')}</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>RX</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>TX</th>
-                <th style={thStyle}>Last Handshake</th>
+                <th style={thStyle}>{t('vpn.lastHandshake')}</th>
               </tr>
             </thead>
             <tbody>
               {peers.map(peer => {
-                const status = getStatus(peer);
+                const status = getStatus(peer, t);
                 return (
                   <tr key={peer.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={tdStyle}>
@@ -126,7 +128,7 @@ export function MonitoringSection({ peers }: MonitoringSectionProps) {
                       {formatBytes(peer.transfer_tx)}
                     </td>
                     <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>
-                      {timeAgo(peer.last_handshake)}
+                      {timeAgo(peer.last_handshake, t)}
                     </td>
                   </tr>
                 );

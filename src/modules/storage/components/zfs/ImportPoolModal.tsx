@@ -16,29 +16,29 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Upload } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import { SectionIntro, ZFS_COPY } from '../ZfsHelp';
+import { SectionIntro } from '../ZfsHelp';
 import { ZfsModal, ZfsButton, ZfsInput, Field } from './ZfsModal';
+import { useI18n } from '@/i18n';
 
 export function ImportPoolModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   const demo = useStorageStore((s) => s.zfs_demo);
   const importPool = useStorageStore((s) => s.zfsImportPool);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { await importPool(name.trim()); toast.success(`Almacén "${name.trim()}" importado${demo ? ' (demo)' : ''}`); onClose(); }
-    catch (e) { toast.error(`No se pudo importar: ${e instanceof Error ? e.message : String(e)}`); }
+    try { await importPool(name.trim()); toast.success(t('storage.pool.imported', { name: name.trim(), demo: demo ? t('storage.common.demoSuffix') : '' })); onClose(); }
+    catch (e) { toast.error(t('storage.pool.importError', { error: e instanceof Error ? e.message : String(e) })); }
     finally { setBusy(false); }
   };
   return (
-    <ZfsModal title="Importar un almacén (pool)" icon={<Upload size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
-      footer={<><ZfsButton onClick={onClose}>Cancelar</ZfsButton><ZfsButton primary disabled={busy || !name.trim()} onClick={submit}>{busy ? 'Importando…' : 'Importar'}</ZfsButton></>}>
-      <SectionIntro>{ZFS_COPY.import_pool}</SectionIntro>
+    <ZfsModal title={t('storage.pool.importTitle')} icon={<Upload size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><ZfsButton onClick={onClose}>{t('storage.common.cancel')}</ZfsButton><ZfsButton primary disabled={busy || !name.trim()} onClick={submit}>{busy ? t('storage.pool.importBusy') : t('storage.pool.import')}</ZfsButton></>}>
+      <SectionIntro>{t('storage.help.importPool')}</SectionIntro>
       <div>
-        <Field hint="El nombre del almacén que quieres reconectar. Debe coincidir con el nombre con el que se creó/exportó (p. ej. tank, vault).">
-          Nombre del almacén
-        </Field>
-        <ZfsInput value={name} onChange={(e) => setName(e.target.value)} placeholder="tank" />
+        <Field hint={t('storage.pool.nameHint')}>{t('storage.pool.name')}</Field>
+        <ZfsInput aria-label={t('storage.pool.name')} value={name} onChange={(e) => setName(e.target.value)} placeholder="tank" />
       </div>
     </ZfsModal>
   );

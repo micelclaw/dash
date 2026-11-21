@@ -12,8 +12,10 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
+import { useI18n } from '@/i18n';
 
 export function InlineEditor() {
+  const { t } = useI18n();
   const editingNodeId = useDiagramsStore((s) => s.editingNodeId);
   const setEditingNode = useDiagramsStore((s) => s.setEditingNode);
   const updateNodeData = useDiagramsStore((s) => s.updateNodeData);
@@ -109,6 +111,7 @@ export function InlineEditor() {
   return (
     <textarea
       ref={textareaRef}
+      aria-label={t('sketches.inlineEditor.nodeText')}
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={handleKeyDown}

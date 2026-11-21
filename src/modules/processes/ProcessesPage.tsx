@@ -17,6 +17,7 @@ import { useProcessesStore } from '@/stores/processes.store';
 import type { ClawProcess, OllamaLoadedModel } from '@/stores/processes.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { LogsPanel } from './LogsPanel';
+import { useI18n } from '@/i18n';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -52,6 +53,10 @@ function Sparkline({ data, color, width = 64, height = 20 }: { data: number[]; c
 }
 
 function StatusBadge({ status }: { status: ClawProcess['status'] }) {
+  const { t } = useI18n();
+  const labelKey: Partial<Record<string, string>> = {
+    running: 'processes.running', stopped: 'processes.stopped', error: 'processes.error',
+  };
   const color =
     status === 'running' ? { bg: 'rgba(34,197,94,0.15)', text: '#22c55e' }
     : status === 'error'   ? { bg: 'rgba(239,68,68,0.15)', text: '#ef4444' }
@@ -62,7 +67,7 @@ function StatusBadge({ status }: { status: ClawProcess['status'] }) {
       borderRadius: 'var(--radius-sm)', background: color.bg, color: color.text,
       textTransform: 'uppercase', fontFamily: 'var(--font-sans)',
     }}>
-      {status}
+      {labelKey[status] ? t(labelKey[status]!) : status}
     </span>
   );
 }
@@ -70,6 +75,7 @@ function StatusBadge({ status }: { status: ClawProcess['status'] }) {
 // ─── Ollama models sub-panel ─────────────────────────────
 
 function OllamaModelsPanel({ models }: { models: OllamaLoadedModel[] }) {
+  const { t } = useI18n();
   const unloadOllamaModel = useProcessesStore((s) => s.unloadOllamaModel);
   const [unloading, setUnloading] = useState<string | null>(null);
 
@@ -77,9 +83,9 @@ function OllamaModelsPanel({ models }: { models: OllamaLoadedModel[] }) {
     setUnloading(name);
     try {
       await unloadOllamaModel(name);
-      toast.success(`${name} unloaded`);
+      toast.success(t('processes.unloadSuccess', { name }));
     } catch {
-      toast.error(`Failed to unload ${name}`);
+      toast.error(t('processes.unloadError', { name }));
     }
     setUnloading(null);
   };
@@ -90,15 +96,15 @@ function OllamaModelsPanel({ models }: { models: OllamaLoadedModel[] }) {
         fontSize: '0.6875rem', fontWeight: 600, color: 'var(--amber)',
         textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8,
       }}>
-        Loaded Models
+        {t('processes.loadedModels')}
       </div>
       {models.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>No models currently loaded in memory</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{t('processes.noLoadedModels')}</div>
       ) : (
         <table style={{ borderCollapse: 'collapse', fontSize: '0.75rem' }}>
           <thead>
             <tr>
-              {[['Model', 'left'], ['Params', 'left'], ['RAM', 'right'], ['VRAM', 'right'], ['', 'right']].map(([h, align]) => (
+              {[[t('processes.model'), 'left'], [t('processes.params'), 'left'], ['RAM', 'right'], ['VRAM', 'right'], ['', 'right']].map(([h, align]) => (
                 <th key={h} style={{
                   textAlign: align as 'left' | 'right',
                   padding: '0 16px 4px 0',
@@ -129,7 +135,7 @@ function OllamaModelsPanel({ models }: { models: OllamaLoadedModel[] }) {
                     <button
                       onClick={() => handleUnload(m.name)}
                       disabled={isUnloading}
-                      title="Unload model from memory"
+                      title={t('processes.unloadTitle')}
                       style={{
                         background: 'none', border: '1px solid var(--border)', cursor: isUnloading ? 'default' : 'pointer',
                         color: isUnloading ? 'var(--text-muted)' : '#ef4444',
@@ -139,7 +145,7 @@ function OllamaModelsPanel({ models }: { models: OllamaLoadedModel[] }) {
                       }}
                     >
                       <Square size={10} />
-                      {isUnloading ? 'Unloading…' : 'Unload'}
+                      {isUnloading ? t('processes.unloading') : t('processes.unload')}
                     </button>
                   </td>
                 </tr>
@@ -173,6 +179,7 @@ function sortProcesses(procs: ClawProcess[], sortBy: SortKey, dir: 'asc' | 'desc
 // ─── Component ──────────────────────────────────────────
 
 export function Component() {
+  const { t } = useI18n();
   const processes = useProcessesStore((s) => s.processes);
   const stats = useProcessesStore((s) => s.stats);
   const loading = useProcessesStore((s) => s.loading);
@@ -215,14 +222,14 @@ export function Component() {
       if (action === 'restart') await restartProcess(proc.id);
       else if (action === 'stop') await stopProcess(proc.id);
       else await startProcess(proc.id);
-      toast.success(`${proc.name}: ${action} initiated`);
+      toast.success(t('processes.actionStarted', { name: proc.name, action: t(`processes.${action}`) }));
     } catch {
-      toast.error(`Failed to ${action} ${proc.name}`);
+      toast.error(t('processes.actionFailed', { action: t(`processes.${action}`).toLowerCase(), name: proc.name }));
     }
   };
 
   const handleRefresh = () => {
-    fetchProcesses().then(() => toast.success('Refreshed')).catch(() => {});
+    fetchProcesses().then(() => toast.success(t('processes.refreshSuccess'))).catch(() => {});
   };
 
   const SortIcon = ({ col }: { col: SortKey }) => {
@@ -270,7 +277,7 @@ export function Component() {
           <div style={{ position: 'relative', flex: '0 1 260px' }}>
             <Search size={14} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
-              placeholder="Filter processes..."
+              placeholder={t('processes.filter')}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               style={{
@@ -295,7 +302,7 @@ export function Component() {
             }}
           >
             <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Refresh
+            {t('processes.refresh')}
           </button>
         </div>
 
@@ -305,10 +312,10 @@ export function Component() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)', height: 36 }}>
                 <th style={{ textAlign: 'left', padding: '0 8px', fontWeight: 500 }}>
-                  <div style={thStyle('name')} onClick={() => setSort('name')}>Name <SortIcon col="name" /></div>
+                  <div style={thStyle('name')} onClick={() => setSort('name')}>{t('processes.name')} <SortIcon col="name" /></div>
                 </th>
                 <th style={{ textAlign: 'left', padding: '0 8px', fontWeight: 500, width: 140 }}>
-                  <div style={thStyle('pid')} onClick={() => setSort('pid')}>ID <SortIcon col="pid" /></div>
+                  <div style={thStyle('pid')} onClick={() => setSort('pid')}>{t('processes.id')} <SortIcon col="pid" /></div>
                 </th>
                 <th style={{ textAlign: 'right', padding: '0 8px', fontWeight: 500, width: 70 }}>
                   <div style={{ ...thStyle('cpu'), justifyContent: 'flex-end' }} onClick={() => setSort('cpu')}>CPU <SortIcon col="cpu" /></div>
@@ -319,9 +326,9 @@ export function Component() {
                 <th style={{ textAlign: 'right', padding: '0 8px', fontWeight: 500, width: 60, color: 'var(--text-muted)' }}>GPU</th>
                 <th style={{ textAlign: 'right', padding: '0 8px', fontWeight: 500, width: 80, color: 'var(--text-muted)' }}>VRAM</th>
                 <th style={{ textAlign: 'center', padding: '0 8px', fontWeight: 500, width: 80 }}>
-                  <div style={{ ...thStyle('status'), justifyContent: 'center' }} onClick={() => setSort('status')}>Status <SortIcon col="status" /></div>
+                  <div style={{ ...thStyle('status'), justifyContent: 'center' }} onClick={() => setSort('status')}>{t('processes.status')} <SortIcon col="status" /></div>
                 </th>
-                <th style={{ textAlign: 'right', padding: '0 8px', fontWeight: 500, width: 80 }}>Uptime</th>
+                <th style={{ textAlign: 'right', padding: '0 8px', fontWeight: 500, width: 80 }}>{t('processes.uptime')}</th>
                 <th style={{ width: 120 }} />
               </tr>
             </thead>
@@ -349,7 +356,7 @@ export function Component() {
                           {isOllama && (
                             <button
                               onClick={(e) => { e.stopPropagation(); toggleExpandProcess(p.id); }}
-                              title={isExpanded ? 'Collapse' : 'Show loaded models'}
+                              title={isExpanded ? t('processes.collapse') : t('processes.showModels')}
                               style={{
                                 background: 'none', border: 'none', cursor: 'pointer',
                                 color: isExpanded ? 'var(--amber)' : 'var(--text-muted)',
@@ -385,7 +392,7 @@ export function Component() {
                       <td style={{ padding: '0 8px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
                           {canManage && p.restartable && p.status === 'stopped' && (
-                            <button onClick={() => handleAction('start', p)} title="Start"
+                            <button onClick={() => handleAction('start', p)} title={t('processes.start')}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#22c55e', padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)' }}>
                               <Play size={14} />
                             </button>
@@ -393,13 +400,13 @@ export function Component() {
                           {canManage && p.status !== 'stopped' && (
                             <>
                               {p.restartable && (
-                                <button onClick={() => handleAction('restart', p)} title="Restart"
+                                <button onClick={() => handleAction('restart', p)} title={t('processes.restart')}
                                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--amber)', padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)' }}>
                                   <RotateCcw size={14} />
                                 </button>
                               )}
                               {p.stoppable && (
-                                <button onClick={() => handleAction('stop', p)} title="Stop"
+                                <button onClick={() => handleAction('stop', p)} title={t('processes.stop')}
                                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)' }}>
                                   <Square size={14} />
                                 </button>
@@ -407,7 +414,7 @@ export function Component() {
                             </>
                           )}
                           {p.has_logs && (
-                            <button onClick={() => selectProcess(p.id)} title="View logs"
+                            <button onClick={() => selectProcess(p.id)} title={t('processes.viewLogs')}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)' }}>
                               <FileText size={14} />
                             </button>
@@ -432,7 +439,7 @@ export function Component() {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={9} style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>
-                    {loading ? 'Loading processes...' : 'No processes found'}
+                    {loading ? t('processes.loading') : t('processes.empty')}
                   </td>
                 </tr>
               )}

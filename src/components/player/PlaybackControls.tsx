@@ -12,8 +12,10 @@
 
 import { SkipBack, Play, Pause, SkipForward } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
+import { useI18n } from '@/i18n';
 
 export function PlaybackControls() {
+  const { t } = useI18n();
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const pause = usePlayerStore((s) => s.pause);
   const resume = usePlayerStore((s) => s.resume);
@@ -32,17 +34,18 @@ export function PlaybackControls() {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <button onClick={playPrev} style={btnStyle} title="Previous">
+      <button onClick={playPrev} style={btnStyle} title={t('player.previous')} aria-label={t('player.previous')}>
         <SkipBack size={16} />
       </button>
       <button
         onClick={isPlaying ? pause : resume}
         style={{ ...btnStyle, padding: 6 }}
-        title={isPlaying ? 'Pause' : 'Play'}
+        title={isPlaying ? t('player.pause') : t('player.play')}
+        aria-label={isPlaying ? t('player.pause') : t('player.play')}
       >
         {isPlaying ? <Pause size={18} /> : <Play size={18} />}
       </button>
-      <button onClick={playNext} style={btnStyle} title="Next">
+      <button onClick={playNext} style={btnStyle} title={t('player.next')} aria-label={t('player.next')}>
         <SkipForward size={16} />
       </button>
     </div>

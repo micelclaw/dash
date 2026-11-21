@@ -15,6 +15,7 @@ import { Headphones } from 'lucide-react';
 import { MediaCard, MediaGrid, MediaUnavailable } from '@/components/media';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useBooksStore } from '@/stores/books.store';
+import { useI18n } from '@/i18n';
 import { audioCoverUrl } from '@/services/books.service';
 import { AudiobookDetail } from './AudiobookDetail';
 import { formatTotalDuration } from '../lib/format';
@@ -49,6 +50,7 @@ function AbsUnavailableState() {
  * opens it and starts playback through the global player.
  */
 export function AudiobooksView() {
+  const { t } = useI18n();
   const items = useBooksStore((s) => s.audioItems);
   const audioLoaded = useBooksStore((s) => s.audioLoaded);
   const loading = useBooksStore((s) => s.loadingAudio);
@@ -78,7 +80,7 @@ export function AudiobooksView() {
 
   if (!audioLoaded) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('books.loading')}</div>
     ) : null;
   }
 
@@ -86,8 +88,8 @@ export function AudiobooksView() {
     return (
       <EmptyState
         icon={Headphones}
-        title="No audiobooks yet"
-        description="Add audiobooks to your Audiobookshelf library to listen to them here."
+        title={t('books.noAudiobooks')}
+        description={t('books.audiobookHint')}
       />
     );
   }
@@ -96,8 +98,8 @@ export function AudiobooksView() {
     return (
       <EmptyState
         icon={Headphones}
-        title="No audiobooks match your search"
-        description={`Nothing in the library matches “${search.trim()}”.`}
+        title={t('books.noAudiobooksMatch')}
+        description={t('books.searchNoMatch', { query: search.trim() })}
       />
     );
   }

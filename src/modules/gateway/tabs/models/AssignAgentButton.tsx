@@ -15,6 +15,7 @@ import { Check, Loader2, UserPlus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AgentAvatar } from '@/components/shared/AgentAvatar';
 import type { ManagedAgent } from '@/modules/agents/types';
+import { useI18n } from '@/i18n';
 
 /**
  * Botón "Asignar" de la tarjeta de modelo (sustituye al viejo Set Default):
@@ -32,6 +33,7 @@ export function AssignAgentButton({ agents, assignedAgentIds, disabled, disabled
   assigningAgentId: string | null;
   onAssign: (agent: ManagedAgent) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
 
@@ -40,7 +42,7 @@ export function AssignAgentButton({ agents, assignedAgentIds, disabled, disabled
       <PopoverTrigger asChild>
         <button
           disabled={disabled}
-          title={disabled ? disabledReason : 'Asignar este modelo a un agente'}
+          title={disabled ? disabledReason : t('gateway.models.assign')}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           style={{
@@ -58,7 +60,7 @@ export function AssignAgentButton({ agents, assignedAgentIds, disabled, disabled
           }}
         >
           <UserPlus size={12} />
-          Asignar
+          {t('gateway.models.assignAction')}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" style={{ width: 248, padding: 6 }}>
@@ -66,11 +68,11 @@ export function AssignAgentButton({ agents, assignedAgentIds, disabled, disabled
           fontSize: '0.6875rem', color: 'var(--text-dim)',
           padding: '4px 8px 6px', fontFamily: 'var(--font-sans)',
         }}>
-          Asignar a un agente · aplica a sesiones nuevas
+          {t('gateway.models.assignHelp')}
         </div>
         {agents.length === 0 && (
           <div style={{ padding: '6px 8px', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Sin agentes
+            {t('gateway.models.noAgents')}
           </div>
         )}
         {agents.map((a) => {
@@ -80,7 +82,7 @@ export function AssignAgentButton({ agents, assignedAgentIds, disabled, disabled
             <button
               key={a.id}
               disabled={already || busy}
-              title={already ? `${a.display_name} ya usa este modelo` : undefined}
+              title={already ? t('gateway.models.alreadyAssigned', { agent: a.display_name }) : undefined}
               onClick={() => { onAssign(a); setOpen(false); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,

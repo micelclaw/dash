@@ -18,6 +18,7 @@ import { AppIcon } from '@/components/shared/AppIcon';
 import { useUserAvatar } from '@/hooks/use-user-avatar';
 import { getProviderIcon } from '@/config/provider-icons';
 import { PROVIDER_COLORS, PROVIDER_LABELS } from '@/modules/gateway/tabs/models/constants';
+import { useI18n } from '@/i18n';
 
 interface AgentTreeNodeProps {
   agent: ManagedAgent;
@@ -86,6 +87,7 @@ function ModelBadge({ model }: { model: string }) {
 }
 
 export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 0, expanded = true, onToggleExpand }: AgentTreeNodeProps) {
+  const { t } = useI18n();
   const [userAvatar, setUserAvatar] = useUserAvatar();
   const [hovered, setHovered] = useState(false);
   const [toggleHovered, setToggleHovered] = useState(false);
@@ -131,7 +133,7 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
             onChange={setUserAvatar}
             size={36}
             fallback="👤"
-            title="Change your avatar"
+            title={t('agents.changeAvatar')}
           />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -146,7 +148,7 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
             fontSize: '0.875rem',
             color: 'var(--text-dim)',
           }}>
-            Owner
+            {t('agents.owner')}
           </span>
         </div>
       </div>
@@ -219,7 +221,7 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
             letterSpacing: '0.03em',
             flexShrink: 0,
           }}>
-            Main Router
+            {t('agents.mainRouter')}
           </span>
         )}
       </div>
@@ -307,7 +309,7 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
               flexShrink: 0,
             }}
           />
-          {childCount} sub-agent{childCount !== 1 ? 's' : ''}
+          {t(childCount === 1 ? 'agents.subAgentOne' : 'agents.subAgents', { count: childCount })}
         </div>
       )}
     </div>

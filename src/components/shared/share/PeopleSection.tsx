@@ -25,6 +25,7 @@ import {
   listShareRecipients, createShare,
   type ShareRecipient, type SharePermission,
 } from '@/services/shares.service';
+import { useI18n } from '@/i18n';
 
 interface PendingPerson {
   id: string;
@@ -46,6 +47,7 @@ interface PeopleSectionProps {
 }
 
 export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith = [], onShared }: PeopleSectionProps) {
+  const { t } = useI18n();
   const [recipients, setRecipients] = useState<ShareRecipient[]>([]);
   const [people, setPeople] = useState<PendingPerson[]>([]);
   const [personInput, setPersonInput] = useState('');
@@ -73,14 +75,14 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
   const addPerson = useCallback((r: ShareRecipient) => {
     setPeople(prev => prev.some(p => p.id === r.id) ? prev : [...prev, {
       id: r.id,
-      name: r.display_name || r.email || 'Usuario',
+      name: r.display_name || r.email || t('shared.people.unknown'),
       email: r.email,
       avatarPath: r.avatar_path,
       permission: 'view',
     }]);
     setPersonInput('');
     setShowSuggestions(false);
-  }, []);
+  }, [t]);
 
   const handleShare = useCallback(async () => {
     if (people.length === 0) return;
@@ -109,13 +111,13 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
     }
     setSharing(false);
     if (ok > 0) {
-      toast.success(ok === 1 ? 'Compartido' : `${ok} comparticiones creadas`);
+      toast.success(ok === 1 ? t('shared.people.sharedOne') : t('shared.people.sharedMany', { count: ok }));
       setPeople([]);
       onShared();
     }
-    if (already > 0) toast.info(already === 1 ? 'Ya estaba compartido con esa persona' : `${already} ya estaban compartidos`);
-    if (failed > 0) toast.error(`${failed} no se pudieron compartir`);
-  }, [people, ids, entityType, entityTitle, onShared]);
+    if (already > 0) toast.info(already === 1 ? t('shared.people.alreadyOne') : t('shared.people.alreadyMany', { count: already }));
+    if (failed > 0) toast.error(t('shared.people.failed', { count: failed }));
+  }, [people, ids, entityType, entityTitle, onShared, t]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -126,11 +128,14 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
           onKeyDown={e => { if (e.key === 'Enter' && suggestions[0]) addPerson(suggestions[0]); }}
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-          placeholder="Escribe un nombre o email…"
+          aria-label={t('shared.people.search')}
+          placeholder={t('shared.people.search')}
           style={{ ...inputStyle, flex: 1 }}
         />
         <button
           onClick={() => { if (suggestions[0]) addPerson(suggestions[0]); }}
+          title={t('shared.people.add')}
+          aria-label={t('shared.people.add')}
           style={{
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)', padding: '6px 8px', cursor: 'pointer',
@@ -152,7 +157,7 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
           maxHeight: 160, overflowY: 'auto',
         }}>
           {suggestions.map(r => {
-            const name = r.display_name || r.email || 'Usuario';
+            const name = r.display_name || r.email || t('shared.people.unknown');
             return (
               <button
                 key={r.id}
@@ -182,7 +187,7 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
 
       {recipients.length === 0 && (
         <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          No hay otros usuarios en esta instancia con quien compartir.
+          {t('shared.people.noneAvailable')}
         </p>
       )}
 
@@ -202,14 +207,17 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
               </div>
               <select
                 value={p.permission}
+                aria-label={`${p.name}: ${t('shared.people.view')}`}
                 onChange={e => setPeople(prev => prev.map(x => x.id === p.id ? { ...x, permission: e.target.value as SharePermission } : x))}
                 style={selectStyle}
               >
-                <option value="view">Solo lectura</option>
-                <option value="edit">Puede editar</option>
+                <option value="view">{t('shared.people.view')}</option>
+                <option value="edit">{t('shared.people.edit')}</option>
               </select>
               <button
                 onClick={() => setPeople(prev => prev.filter(x => x.id !== p.id))}
+                title={t('shared.people.remove')}
+                aria-label={`${t('shared.people.remove')}: ${p.name}`}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
               >
                 <X size={12} />
@@ -228,7 +236,7 @@ export function PeopleSection({ entityType, ids, entityTitle, alreadySharedWith 
               cursor: sharing ? 'wait' : 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            {sharing ? 'Compartiendo…' : 'Compartir'}
+            {sharing ? t('shared.people.sharing') : t('shared.people.share')}
           </button>
         </div>
       )}

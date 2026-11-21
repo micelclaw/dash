@@ -12,15 +12,17 @@
 
 import { FileText } from 'lucide-react';
 import type { InventoryItem } from '@/modules/inventory/types';
+import { useI18n } from '@/i18n';
 import { sectionLabel } from './drawer-ui';
 
 /** Lista de documentos adjuntos del item (descarga vía files API). */
 export function FilesSection({ item }: { item: InventoryItem }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <span style={sectionLabel}>Files</span>
+      <span style={sectionLabel}>{t('inventory.drawer.files')}</span>
       {(item.file_ids ?? []).length === 0 ? (
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>No files.</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{t('inventory.drawer.noFiles')}</span>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {(item.file_ids ?? []).map(fid => (

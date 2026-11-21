@@ -17,6 +17,7 @@ import { AddPeerDialog } from '../components/AddPeerDialog';
 import { PeerDetailDialog } from '../components/PeerDetailDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { VpnPeer, VpnPeerConfig, VpnPeerUpdate } from '../hooks/use-vpn';
+import { useI18n } from '@/i18n';
 
 interface PeersSectionProps {
   peers: VpnPeer[];
@@ -34,6 +35,7 @@ export function PeersSection({
   peers, loading, showAddDialog, onCloseAddDialog,
   onAddPeer, onUpdatePeer, onTogglePeer, onRemovePeer, onGetPeerConfig,
 }: PeersSectionProps) {
+  const { t } = useI18n();
   const [addOpen, setAddOpen] = useState(false);
   const [editPeer, setEditPeer] = useState<VpnPeer | null>(null);
   const [removePeer, setRemovePeer] = useState<VpnPeer | null>(null);
@@ -53,7 +55,7 @@ export function PeersSection({
         marginBottom: 16,
       }}>
         <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0, fontFamily: 'var(--font-sans)' }}>
-          Peers ({peers.length})
+          {t('vpn.peerCount', { count: peers.length })}
         </h2>
         <button
           onClick={() => setAddOpen(true)}
@@ -66,12 +68,12 @@ export function PeersSection({
             cursor: 'pointer', fontFamily: 'var(--font-sans)',
           }}
         >
-          <Plus size={14} /> Add Peer
+          <Plus size={14} /> {t('vpn.addPeer')}
         </button>
       </div>
 
       {loading && (
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>{t('vpn.loadingPeers')}</div>
       )}
 
       {!loading && peers.length === 0 && (
@@ -81,7 +83,7 @@ export function PeersSection({
           color: 'var(--text-muted)', fontSize: '0.875rem',
           fontFamily: 'var(--font-sans)',
         }}>
-          No peers configured. Add your first peer to get started.
+          {t('vpn.noPeersConfigured')}
         </div>
       )}
 
@@ -121,9 +123,9 @@ export function PeersSection({
           if (removePeer) await onRemovePeer(removePeer.id);
           setRemovePeer(null);
         }}
-        title={`Remove "${removePeer?.name}"?`}
-        description="This will permanently remove this peer. The device will no longer be able to connect via VPN."
-        confirmLabel="Remove"
+        title={t('vpn.removePeerConfirm', { name: removePeer?.name ?? '' })}
+        description={t('vpn.removePeerDescription')}
+        confirmLabel={t('vpn.remove')}
         variant="danger"
       />
 
@@ -150,10 +152,12 @@ export function PeersSection({
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-                {configPeer.peer.name} — Config Template
+                {t('vpn.configTemplate', { name: configPeer.peer.name })}
               </span>
               <button
                 onClick={() => setConfigPeer(null)}
+                title={t('vpn.closeMenu')}
+                aria-label={t('vpn.closeMenu')}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}
               >
                 ×
@@ -164,7 +168,7 @@ export function PeersSection({
                 fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 8,
                 fontFamily: 'var(--font-sans)',
               }}>
-                Note: The private key was only available at creation. Replace {'<YOUR_PRIVATE_KEY>'} with the actual key.
+                {t('vpn.configPrivateKeyNote', { placeholder: '<YOUR_PRIVATE_KEY>' })}
               </div>
               <pre style={{
                 background: 'var(--bg)', border: '1px solid var(--border)',

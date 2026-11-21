@@ -14,7 +14,8 @@ import { Globe } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataProviderIcon, DataServiceIcon, type DataServiceDomain } from '@/config/data-provider-icons';
 import type { DataTypeId } from '@/config/data-types';
-import { distinctOriginProviders, originDescription, type EntityOrigin, type OriginEntity } from '@/types/origins';
+import type { EntityOrigin, OriginEntity } from '@/types/origins';
+import { sourceBadgeModel } from './source-badge-model';
 
 interface SourceBadgeProps {
   origins?: EntityOrigin[];
@@ -35,11 +36,7 @@ function OriginIcon({ origin, domain, size }: { origin: EntityOrigin; domain?: D
 }
 
 export function SourceBadge({ origins, source, domain, size = 'sm', detail = false }: SourceBadgeProps) {
-  const known = origins?.length ? origins : source === 'local' || (domain === 'photos' && source === 'scan')
-    ? [{ provider_slug: 'micelclaw', label: 'Micelclaw' }]
-    : [{ provider_slug: null, label: source || 'Fuente desconocida' }];
-  const groups = distinctOriginProviders(known);
-  const description = known.map(originDescription).join(' / ');
+  const { known, groups, description } = sourceBadgeModel(origins, source, domain);
   const iconSize = size === 'xs' ? 12 : 14;
   const full = detail || size === 'md';
   const content = (

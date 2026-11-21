@@ -17,6 +17,7 @@ import { formatTotalDuration, formatTrackDuration } from '@/modules/music/lib/fo
 import { imageUrl } from '@/services/video.service';
 import { useVideoStore } from '@/stores/video.store';
 import { SeasonList } from '../components/SeasonList';
+import { useI18n } from '@/i18n';
 
 /**
  * Detail view for a Movie / Series / Episode: backdrop banner, poster hero
@@ -24,13 +25,14 @@ import { SeasonList } from '../components/SeasonList';
  * render their seasons with lazily-loaded episode rows.
  */
 export function ItemDetailView() {
+  const { t } = useI18n();
   const item = useVideoStore((s) => s.selectedItem);
   const seasons = useVideoStore((s) => s.seasons);
   const loading = useVideoStore((s) => s.loadingDetail);
 
   if (!item) {
     return loading ? (
-      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading…</div>
+      <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: '0.875rem' }}>{t('video.loading')}</div>
     ) : null;
   }
 
@@ -59,10 +61,11 @@ export function ItemDetailView() {
   if (item.runtime_seconds) subtitleParts.push(formatTotalDuration(item.runtime_seconds));
   if (item.official_rating) subtitleParts.push(item.official_rating);
 
-  const kicker =
-    item.type === 'Episode' && item.series_name
-      ? `${item.series_name}${item.season_name ? ` · ${item.season_name}` : ''}`
-      : item.type;
+  const kicker = item.type === 'Episode' && item.series_name
+    ? `${item.series_name}${item.season_name ? ` · ${item.season_name}` : ''}`
+    : item.type === 'Movie' ? t('video.movieSection')
+      : item.type === 'Series' ? t('video.seriesSection')
+        : item.type === 'Episode' ? t('video.episode') : item.type;
 
   const cast = (item.people ?? []).filter((p) => p.type === 'Actor').slice(0, 8);
 
@@ -132,18 +135,18 @@ export function ItemDetailView() {
                 <>
                   <HeroActionButton
                     icon={Play}
-                    label={`Resume from ${formatTrackDuration(positionSeconds)}`}
+                    label={t('video.resumeFrom', { time: formatTrackDuration(positionSeconds) })}
                     onClick={() => playFrom(positionSeconds)}
                     primary
                   />
                   <HeroActionButton
                     icon={RotateCcw}
-                    label="Play from start"
+                    label={t('video.playFromStart')}
                     onClick={() => playFrom(0)}
                   />
                 </>
               ) : (
-                <HeroActionButton icon={Play} label="Play" onClick={() => playFrom(0)} primary />
+                <HeroActionButton icon={Play} label={t('video.play')} onClick={() => playFrom(0)} primary />
               )
             ) : undefined
           }
@@ -166,7 +169,7 @@ export function ItemDetailView() {
 
         {cast.length > 0 && (
           <div style={{ padding: '0 16px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-dim)' }}>Cast: </span>
+            <span style={{ fontWeight: 600, color: 'var(--text-dim)' }}>{t('video.cast')} </span>
             {cast.map((p) => (p.role ? `${p.name} (${p.role})` : p.name)).join(', ')}
           </div>
         )}

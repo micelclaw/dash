@@ -18,8 +18,10 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { AddFeedDialog } from './AddFeedDialog';
 import { OpmlDialog } from './OpmlDialog';
 import { ConnectButton } from '@/components/shared/ConnectButton';
+import { useI18n } from '@/i18n';
 
 export function FeedsSidebar() {
+  const { t } = useI18n();
   const feeds = useFeedsStore(s => s.feeds);
   const viewMode = useFeedsStore(s => s.viewMode);
   const totalUnread = useFeedsStore(s => s.totalUnread);
@@ -64,19 +66,19 @@ export function FeedsSidebar() {
     <div className="flex flex-col h-full bg-[var(--surface)] border-r border-[var(--border)]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)]">
-        <span className="text-sm font-medium text-[var(--text)]">Feeds</span>
+        <span className="text-sm font-medium text-[var(--text)]">{t('feeds.title')}</span>
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setShowOpmlDialog(true)}
             className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)] hover:text-[var(--text)]"
-            title="Import / Export OPML"
+            title={t('feeds.opml')}
           >
             <FileUp size={14} />
           </button>
           <button
             onClick={() => setShowAddDialog(true)}
             className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-dim)] hover:text-[var(--text)]"
-            title="Add feed"
+            title={t('feeds.add')}
           >
             <Plus size={16} />
           </button>
@@ -88,7 +90,7 @@ export function FeedsSidebar() {
         {/* All Articles */}
         <SidebarItem
           icon={<Rss size={15} />}
-          label="All Articles"
+          label={t('feeds.allArticles')}
           badge={totalUnread || undefined}
           active={viewMode === 'all'}
           onClick={() => setViewMode('all')}
@@ -97,7 +99,7 @@ export function FeedsSidebar() {
         {/* Favorites */}
         <SidebarItem
           icon={<Star size={15} />}
-          label="Favorites"
+          label={t('feeds.favorites')}
           active={viewMode === 'favorites'}
           onClick={() => setViewMode('favorites')}
         />
@@ -155,12 +157,12 @@ export function FeedsSidebar() {
         {feeds.length === 0 && (
           <div className="px-4 py-8 text-center text-[var(--text-dim)] text-sm">
             <Rss size={32} className="mx-auto mb-2 opacity-30" />
-            <p>No feeds yet</p>
+            <p>{t('feeds.empty')}</p>
             <button
               onClick={() => setShowAddDialog(true)}
               className="mt-2 text-[var(--amber)] hover:underline text-xs"
             >
-              Subscribe to your first feed
+              {t('feeds.subscribeFirst')}
             </button>
           </div>
         )}
@@ -204,6 +206,7 @@ function FeedItem({ feed, active, unread, onClick }: {
   unread: number;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
   const unsubscribe = useFeedsStore(s => s.unsubscribe);
   const refreshFeed = useFeedsStore(s => s.refreshFeed);
   const [showMenu, setShowMenu] = useState(false);
@@ -229,14 +232,14 @@ function FeedItem({ feed, active, unread, onClick }: {
           </span>
         )}
         {feed.error_count > 0 && (
-          <span className="text-[var(--error)] text-[10px]" title={feed.last_error || 'Error'}>!</span>
+          <span className="text-[var(--error)] text-[10px]" title={feed.last_error || t('feeds.error')}>!</span>
         )}
       </button>
 
       {/* Context menu trigger */}
       <button
         className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--surface-hover)] text-[var(--text-dim)]"
-        aria-label={`Options for ${feed.title}`}
+        aria-label={t('feeds.optionsFor', { feed: feed.title })}
         aria-haspopup="menu"
         aria-expanded={showMenu}
         onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
@@ -250,13 +253,13 @@ function FeedItem({ feed, active, unread, onClick }: {
             className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-[var(--text-dim)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
             onClick={() => { refreshFeed(feed.id); setShowMenu(false); }}
           >
-            <RefreshCw size={12} /> Refresh
+            <RefreshCw size={12} /> {t('feeds.refresh')}
           </button>
           <button
             className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-[var(--error)] hover:bg-[var(--surface-hover)]"
             onClick={() => { setShowMenu(false); setConfirmUnsub(true); }}
           >
-            <Trash2 size={12} /> Unsubscribe
+            <Trash2 size={12} /> {t('feeds.unsubscribe')}
           </button>
         </div>
       )}
@@ -267,10 +270,10 @@ function FeedItem({ feed, active, unread, onClick }: {
         open={confirmUnsub}
         onClose={() => setConfirmUnsub(false)}
         onConfirm={() => { setConfirmUnsub(false); void unsubscribe(feed.id); }}
-        title="Unsubscribe from feed"
-        description={`Unsubscribe from "${feed.title}"? Its articles will be removed from your reader.`}
-        confirmLabel="Unsubscribe"
-        cancelLabel="Cancel"
+        title={t('feeds.unsubscribeTitle')}
+        description={t('feeds.unsubscribeConfirm', { feed: feed.title })}
+        confirmLabel={t('feeds.unsubscribe')}
+        cancelLabel={t('feeds.cancel')}
         variant="danger"
       />
     </div>

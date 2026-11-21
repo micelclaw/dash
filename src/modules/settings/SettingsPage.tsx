@@ -20,14 +20,16 @@ import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useSecurityStore } from '@/stores/security.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useUiPreferencesStore } from '@/stores/ui-preferences.store';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useConfigurationAvailability } from '@/hooks/use-configuration-availability';
 import {
   SECTION_REGISTRY,
   KNOWN_SECTION_IDS,
   type SettingsGroupId,
 } from '@/components/settings/sections';
 import { NotFoundSection } from '@/components/settings/sections/NotFoundSection';
-import { SECURITY_TABS } from '@/components/settings/sections/SecuritySection';
+import { SECURITY_TABS, normalizeSecuritySettingsTarget, resolveSecurityDestination } from '@/components/settings/sections/SecuritySection';
 import { SettingsSidebarGroup } from '@/components/settings/SettingsSidebarGroup';
 import { SettingsSidebarSearch } from '@/components/settings/SettingsSidebarSearch';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -86,7 +88,7 @@ const SECURITY_SIDEBAR_ITEMS: SidebarItem[] = SECURITY_TABS.map((tab) => ({
   icon: tab.icon,
 }));
 
-function buildGroups(isAdmin: boolean): SidebarGroup[] {
+function buildGroups(isAdmin: boolean, configurationAvailable: boolean): SidebarGroup[] {
   const groups: SidebarGroup[] = [
     {
       id: 'account',
@@ -177,7 +179,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       sections: sectionsForGroup('dev'),
     });
   }
-  return groups;
+  return configurationAvailable ? groups : groups.map(group => ({ ...group, sections: group.sections.filter(item => item.sectionId !== 'configuration-migration') }));
 }
 
 // ── Section ID redirects (back-compat for bookmarks) ─────────────
@@ -207,31 +209,6 @@ function renderSection(section: string) {
   return <NotFoundSection requestedId={section} knownIds={KNOWN_SECTION_IDS} />;
 }
 
-// ── Sidebar group expanded state — persisted in localStorage ─────
-//
-// Keyed per-user via the prefix below. Default state expands only
-// the group containing the active section.
-
-const STORAGE_KEY = 'settings-sidebar-groups';
-
-function loadExpandedState(): Record<string, boolean> | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as Record<string, boolean>;
-  } catch {
-    return null;
-  }
-}
-
-function saveExpandedState(state: Record<string, boolean>) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
-
 function findGroupForSection(groups: SidebarGroup[], sectionId: string): string | null {
   for (const g of groups) {
     if (g.sections.some((s) => s.sectionId === sectionId)) return g.id;
@@ -244,15 +221,19 @@ export function Component() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const configurationAvailability = useConfigurationAvailability();
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const fetchConfig = useSecurityStore((s) => s.fetchConfig);
   const loading = useSettingsStore((s) => s.loading);
   const settings = useSettingsStore((s) => s.settings);
+  const remoteConflicts = useSettingsStore((s) => s.remoteConflicts);
   const userRole = useAuthStore((s) => s.user?.role);
+  const syncedExpandedGroups = useUiPreferencesStore((s) => s.preferences.settings_groups);
+  const saveExpandedState = useUiPreferencesStore((s) => s.setSettingsGroups);
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
-  const GROUPS = useMemo(() => buildGroups(isAdmin), [isAdmin]);
+  const GROUPS = useMemo(() => buildGroups(isAdmin, configurationAvailability.available), [isAdmin, configurationAvailability.available]);
 
   // Effective active section: undefined → landing. Apply redirects only for
   // legacy controls that have a semantics-preserving destination.
@@ -275,25 +256,25 @@ export function Component() {
   }, [redirectedSection, navigate]);
 
   const activeSection = redirectedSection;
-  const activeTarget = `${location.pathname}${location.search}`;
+  const conflictNotice = activeSection && remoteConflicts[activeSection] ? <div role="status" data-testid="settings-remote-conflict" className="mb-4 rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-[var(--text)]">
+    <p>Esta sección cambió en el servidor. Tu borrador se ha conservado.</p>
+    <p className="mt-1 text-xs text-[var(--text-muted)]">Guardar puede reemplazar los cambios de esa sección en el servidor. Descarta el borrador para cargar su versión actual.</p>
+  </div> : null;
+  const activeTarget = normalizeSecuritySettingsTarget(`${location.pathname}${location.search}`);
 
   // Sidebar group expanded state — accordion: at most one open.
-  // Stored as a record so existing localStorage entries (which had
-  // multiple `true` values) still parse; we just collapse to the
-  // first true on load.
+  // The per-user server preference is a record; keep only the first
+  // expanded group for the current accordion layout.
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
-    const stored = loadExpandedState();
-    if (stored) {
-      // Migration from pre-accordion: keep only the first true.
-      const firstOpen = Object.entries(stored).find(([, v]) => v)?.[0];
-      const init: Record<string, boolean> = {};
-      for (const g of GROUPS) init[g.id] = g.id === firstOpen;
-      return init;
-    }
     const init: Record<string, boolean> = {};
     for (const g of GROUPS) init[g.id] = false;
     return init;
   });
+
+  useEffect(() => {
+    const firstOpen = Object.entries(syncedExpandedGroups).find(([, open]) => open)?.[0];
+    setExpandedGroups(Object.fromEntries(GROUPS.map(group => [group.id, group.id === firstOpen])));
+  }, [syncedExpandedGroups, GROUPS]);
 
   // Helper: produce a record with only `groupId` open (or all closed
   // if `groupId` is null). Accordion behavior.
@@ -319,7 +300,7 @@ export function Component() {
       saveExpandedState(next);
       return next;
     });
-  }, [activeSection, GROUPS, singleExpanded]);
+  }, [activeSection, GROUPS, singleExpanded, saveExpandedState]);
 
   const toggleGroup = useCallback(
     (groupId: string) => {
@@ -331,19 +312,24 @@ export function Component() {
         return next;
       });
     },
-    [singleExpanded],
+    [singleExpanded, saveExpandedState],
   );
 
   // Search state.
   const [searchQuery, setSearchQuery] = useState('');
   // Móvil: drawer lateral con la misma nav que escritorio (sustituye al <select> feo).
   const [navOpen, setNavOpen] = useState(false);
+  const [drawerNavigationTarget, setDrawerNavigationTarget] = useState<string | null>(null);
+  const selectFromDrawer = useCallback((target: string) => {
+    setDrawerNavigationTarget(target);
+    setNavOpen(false);
+  }, []);
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const results = searchSettings(searchQuery);
+    const results = searchSettings(searchQuery).filter(result => result.entry.sectionId !== 'configuration-migration' || configurationAvailability.available);
     // Filter out admin-only results when not admin.
     return isAdmin ? results : results.filter((r) => r.entry.groupId !== 'admin');
-  }, [searchQuery, isAdmin]);
+  }, [searchQuery, isAdmin, configurationAvailability.available]);
 
   useEffect(() => {
     fetchSettings();
@@ -391,7 +377,7 @@ export function Component() {
   // Nav lateral compartida (escritorio + drawer móvil). `onPick` cierra el drawer al
   // elegir sección; en escritorio no se pasa. Es EXACTAMENTE la misma nav (búsqueda +
   // árbol de grupos) para que móvil se vea igual que el side panel, no un <select>.
-  const renderNavTree = (onPick?: () => void) => (
+  const renderNavTree = (onPick?: (target: string) => void) => (
     <>
       <SettingsSidebarSearch query={searchQuery} onQueryChange={setSearchQuery} />
 
@@ -405,23 +391,26 @@ export function Component() {
           ) : (
             searchResults.map((r) => {
               const group = GROUPS.find((g) => g.id === r.entry.groupId);
-              const item = group?.sections.find((s) => s.target === r.entry.path)
+              const item = group?.sections.find((s) => s.target === normalizeSecuritySettingsTarget(r.entry.path ?? `/settings/${r.entry.sectionId}`))
                 ?? group?.sections.find((s) => s.sectionId === r.entry.sectionId);
               const Icon = item?.icon ?? SearchIcon;
               const target = r.entry.path ?? `/settings/${r.entry.sectionId}`;
-              const isActive = activeTarget === target;
+              const pageTarget = normalizeSecuritySettingsTarget(target);
+              const isActive = activeTarget === pageTarget;
+              const targetLabel = r.entry.path && target !== pageTarget ? r.entry.label : item?.label ?? r.entry.label;
               const matchHint =
                 r.match.field === 'label'
                   ? group?.label
                   : `${group?.label ?? ''} · matches: ${r.match.term}`;
               return (
                 <button
-                  key={r.entry.sectionId}
+                  key={r.entry.path ?? r.entry.sectionId}
                   type="button"
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => {
                     navigate(target, { replace: true });
                     setSearchQuery('');
-                    onPick?.();
+                    onPick?.(target);
                   }}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
@@ -437,7 +426,7 @@ export function Component() {
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Icon size={14} />
-                    <span>{item?.label ?? r.entry.label}</span>
+                    <span>{targetLabel}</span>
                   </span>
                   {matchHint && (
                     <span style={{
@@ -458,7 +447,7 @@ export function Component() {
         <>
           <button
             type="button"
-            onClick={() => { navigate('/settings', { replace: true }); onPick?.(); }}
+            onClick={() => { navigate('/settings', { replace: true }); onPick?.('/settings'); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 8, width: '100%',
               padding: '8px 12px', marginBottom: 6,
@@ -493,7 +482,8 @@ export function Component() {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => { navigate(item.target, { replace: true }); onPick?.(); }}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => { navigate(item.target, { replace: true }); onPick?.(item.target); }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                       padding: '6px 10px',
@@ -556,15 +546,29 @@ export function Component() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {conflictNotice}
           {activeSection ? renderSection(activeSection) : <SettingsLanding groups={landingGroups} />}
         </div>
 
         {/* Drawer lateral: MISMA nav que escritorio (búsqueda + árbol de grupos). El
             paddingTop deja hueco para la X de cierre que aporta SheetContent. */}
         <Sheet open={navOpen} onOpenChange={setNavOpen}>
-          <SheetContent side="left" style={{ width: 280, padding: '8px 8px 14px', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))', overflowY: 'auto' }} aria-describedby={undefined}>
+          <SheetContent side="left" style={{ width: 280, padding: '8px 8px 14px', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))', overflowY: 'auto' }} aria-describedby={undefined} onCloseAutoFocus={event => {
+            const picked = drawerNavigationTarget;
+            setDrawerNavigationTarget(null);
+            if (!picked) return;
+            const [pathname, query = ''] = picked.split('?');
+            if (pathname !== '/settings/security') return;
+            const { target } = resolveSecurityDestination(new URLSearchParams(query).get('security_tab'));
+            const heading = target ? document.getElementById(target) : null;
+            if (heading) {
+              event.preventDefault();
+              const focused = document.activeElement;
+              if (!focused || !heading.closest('main')?.contains(focused)) heading.focus({ preventScroll: true });
+            }
+          }}>
             <div style={{ width: '100%' }}>
-              {renderNavTree(() => setNavOpen(false))}
+              {renderNavTree(selectFromDrawer)}
             </div>
           </SheetContent>
         </Sheet>
@@ -596,6 +600,7 @@ export function Component() {
           position: 'relative',
         }}
       >
+        {conflictNotice}
         {activeSection ? renderSection(activeSection) : <SettingsLanding groups={landingGroups} />}
       </div>
     </div>

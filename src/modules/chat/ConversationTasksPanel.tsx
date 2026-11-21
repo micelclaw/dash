@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useI18n } from '@/i18n';
 
 type Task = {
   id: string;
@@ -29,11 +30,6 @@ type Task = {
 type TaskList = { tasks: Task[]; truncated: boolean };
 type TaskHistory = { messages: Array<{ role: string; text: string }>; has_more: boolean };
 
-const statusLabels: Record<string, string> = {
-  queued: 'Pendiente', running: 'En curso', completed: 'Completado',
-  failed: 'Fallido', timed_out: 'Tiempo agotado', cancelled: 'Cancelado',
-};
-
 function taskTime(value: number | null): string {
   return value ? new Date(value).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '';
 }
@@ -48,6 +44,7 @@ function elapsedTime(task: Task): string {
 }
 
 export function ConversationTasksPanel({ conversationId, onClose }: { conversationId: string; onClose: () => void }) {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const taskEvent = useWebSocket('chat.task.changed');
   const syncedEvent = useWebSocket('chat.synced');
@@ -76,8 +73,8 @@ export function ConversationTasksPanel({ conversationId, onClose }: { conversati
       setTruncated(result.data.truncated);
       setError('');
     } catch {
-      setError('No se pudieron cargar las tareas de esta conversación.');
-      if (showSpinner) toast.error('No se pudieron cargar las tareas.');
+      setError(t('chat.tasks.loadError'));
+      if (showSpinner) toast.error(t('chat.tasks.loadError'));
     } finally {
       setLoading(false);
     }
@@ -110,8 +107,8 @@ export function ConversationTasksPanel({ conversationId, onClose }: { conversati
       setHistory(historyResponse?.data ?? null);
       setError('');
     } catch {
-      setError('No se pudo cargar el detalle de esta tarea.');
-      toast.error('No se pudo abrir el trabajo delegado.');
+      setError(t('chat.tasks.detailError'));
+      toast.error(t('chat.tasks.openError'));
     } finally {
       setDetailLoading(false);
     }
@@ -124,19 +121,19 @@ export function ConversationTasksPanel({ conversationId, onClose }: { conversati
       const response = await api.post<{ data: { ok?: boolean; cancelled?: boolean } }>(
         `/conversations/threads/${conversationId}/tasks/${detail.id}/${action}`, {},
       );
-      if (response.data.ok !== true && response.data.cancelled !== true) throw new Error('Action was not applied');
-      toast.success(action === 'cancel' ? 'Tarea detenida' : action === 'retry-delivery' ? 'Entrega reintentada' : 'Entrega descartada');
+      if (response.data.ok !== true && response.data.cancelled !== true) throw new Error(t('chat.tasks.actionAppliedError'));
+      toast.success(action === 'cancel' ? t('chat.tasks.stopped') : action === 'retry-delivery' ? t('chat.tasks.deliveryRetried') : t('chat.tasks.deliveryDismissed'));
       await refresh();
       await openTask(detail);
     } catch {
-      toast.error('No se pudo completar la acción de esta tarea.');
+      toast.error(t('chat.tasks.actionError'));
     } finally {
       setBusyAction(false);
     }
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Trabajo en segundo plano" style={{
+    <div role="dialog" aria-modal="true" aria-label={t('chat.tasks.backgroundLabel')} style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 1000,
       width: isMobile ? '100vw' : 440, maxWidth: '100vw',
       display: 'flex', flexDirection: 'column', background: 'var(--card)',
@@ -145,16 +142,16 @@ export function ConversationTasksPanel({ conversationId, onClose }: { conversati
     }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
         <Activity size={17} style={{ color: 'var(--amber)' }} />
-        <strong style={{ flex: 1 }}>Tareas de este chat</strong>
-        <button type="button" aria-label="Actualizar tareas" onClick={() => void refresh(true)}><RefreshCw size={16} /></button>
-        <button type="button" aria-label="Cerrar trabajo" onClick={onClose}><X size={16} /></button>
+        <strong style={{ flex: 1 }}>{t('chat.tasks.title')}</strong>
+        <button type="button" aria-label={t('chat.tasks.refresh')} onClick={() => void refresh(true)}><RefreshCw size={16} /></button>
+        <button type="button" aria-label={t('chat.tasks.close')} onClick={onClose}><X size={16} /></button>
       </header>
       <div style={{ overflowY: 'auto', padding: 14, display: 'grid', alignContent: 'start', gap: 10 }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5, margin: 0 }}>Aquí aparecen las ejecuciones de este chat, incluso las ya terminadas. Los chats independientes iniciados desde «Nueva conversación en segundo plano» se abren en la lista de conversaciones de la izquierda.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5, margin: 0 }}>{t('chat.tasks.description')}</p>
         {error && <p role="alert" style={{ color: 'var(--error)', margin: 0 }}>{error}</p>}
-        {loading && <p style={{ color: 'var(--text-muted)' }}><Loader2 size={14} /> Cargando tareas…</p>}
-        {!loading && tasks.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Esta conversación no tiene tareas en segundo plano.</p>}
-        {truncated && <p style={{ color: 'var(--text-muted)', margin: 0 }}>Se muestran las 500 tareas más recientes.</p>}
+        {loading && <p style={{ color: 'var(--text-muted)' }}><Loader2 size={14} /> {t('chat.tasks.loading')}</p>}
+        {!loading && tasks.length === 0 && <p style={{ color: 'var(--text-muted)' }}>{t('chat.tasks.empty')}</p>}
+        {truncated && <p style={{ color: 'var(--text-muted)', margin: 0 }}>{t('chat.tasks.recentLimit')}</p>}
         {tasks.map((task) => (
           <button key={task.id} type="button" aria-pressed={selectedId === task.id} onClick={() => void openTask(task)} style={{
             textAlign: 'left', padding: 11, borderRadius: 8, cursor: 'pointer',
@@ -163,7 +160,7 @@ export function ConversationTasksPanel({ conversationId, onClose }: { conversati
           }}>
             <span style={{ fontWeight: 600 }}>{task.title}</span>
             <span style={{ fontSize: 12, color: task.status === 'failed' ? 'var(--error)' : 'var(--text-muted)' }}>
-              {statusLabels[task.status] ?? task.status} · {task.agent_id?.split('--').at(-1) ?? 'Agente'}
+              {taskStatus(t, task.status)} · {task.agent_id?.split('--').at(-1) ?? t('chat.tasks.agent')}
               {task.last_tool_name ? ` · ${task.last_tool_name}` : ''}
               {taskTime(task.started_at ?? task.created_at) ? ` · ${taskTime(task.started_at ?? task.created_at)}` : ''}
               {elapsedTime(task) ? ` · ${elapsedTime(task)}` : ''}
@@ -171,25 +168,33 @@ export function ConversationTasksPanel({ conversationId, onClose }: { conversati
             {(task.progress_summary || task.terminal_summary || task.error) && <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{task.terminal_summary ?? task.progress_summary ?? task.error}</span>}
           </button>
         ))}
-        {detailLoading && <p style={{ color: 'var(--text-muted)' }}>Cargando detalle…</p>}
-        {detail && <section aria-label="Detalle del trabajo" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 8 }}>
+        {detailLoading && <p style={{ color: 'var(--text-muted)' }}>{t('chat.tasks.detailLoading')}</p>}
+        {detail && <section aria-label={t('chat.tasks.detail')} style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 8 }}>
           <strong>{detail.title}</strong>
           {(detail.can_cancel || detail.can_retry_delivery || detail.can_dismiss_delivery) && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {detail.can_cancel && <button type="button" disabled={busyAction} onClick={() => void act('cancel')}>Detener</button>}
-            {detail.can_retry_delivery && <button type="button" disabled={busyAction} onClick={() => void act('retry-delivery')}>Reintentar entrega</button>}
-            {detail.can_dismiss_delivery && <button type="button" disabled={busyAction} onClick={() => void act('dismiss-delivery')}>Descartar entrega</button>}
+            {detail.can_cancel && <button type="button" disabled={busyAction} onClick={() => void act('cancel')}>{t('chat.tasks.cancel')}</button>}
+            {detail.can_retry_delivery && <button type="button" disabled={busyAction} onClick={() => void act('retry-delivery')}>{t('chat.tasks.retry')}</button>}
+            {detail.can_dismiss_delivery && <button type="button" disabled={busyAction} onClick={() => void act('dismiss-delivery')}>{t('chat.tasks.dismiss')}</button>}
           </div>}
           {detail.prompt && <p style={{ whiteSpace: 'pre-wrap', margin: 0, fontSize: 13 }}>{detail.prompt}</p>}
           {(detail.result || detail.terminal_summary) && <p style={{ whiteSpace: 'pre-wrap', margin: 0, color: 'var(--text-dim)', fontSize: 13 }}>{detail.result ?? detail.terminal_summary}</p>}
-          {history && <div aria-label="Transcripción del trabajo" style={{ display: 'grid', gap: 8 }}>
+          {history && <div aria-label={t('chat.tasks.transcript')} style={{ display: 'grid', gap: 8 }}>
             {history.messages.map((message, index) => <div key={index} style={{ borderLeft: '2px solid var(--amber)', paddingLeft: 8, fontSize: 12 }}>
-              <strong>{message.role === 'assistant' ? 'Agente' : message.role === 'user' ? 'Encargo' : 'Herramienta'}</strong>
+              <strong>{message.role === 'assistant' ? t('chat.tasks.agent') : message.role === 'user' ? t('chat.tasks.request') : t('chat.tasks.tool')}</strong>
               <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.text}</div>
             </div>)}
-            {history.has_more && <small style={{ color: 'var(--text-muted)' }}>Hay más actividad en OpenClaw.</small>}
+            {history.has_more && <small style={{ color: 'var(--text-muted)' }}>{t('chat.tasks.moreActivity')}</small>}
           </div>}
         </section>}
       </div>
     </div>
   );
+}
+
+function taskStatus(t: (key: string, values?: Record<string, string | number>) => string, status: string): string {
+  const keys: Record<string, string> = {
+    queued: 'chat.tasks.queued', running: 'chat.tasks.running', completed: 'chat.tasks.completed',
+    failed: 'chat.tasks.failed', timed_out: 'chat.tasks.timedOut', cancelled: 'chat.tasks.cancelled',
+  };
+  return keys[status] ? t(keys[status]) : status;
 }

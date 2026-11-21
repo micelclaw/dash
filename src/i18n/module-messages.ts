@@ -1,0 +1,31 @@
+// These keys describe built-in navigation only. App-provided labels are data.
+export const moduleMessages = {
+  en: {
+    'module.chat': 'AI Chat', 'module.search': 'Search', 'module.agents': 'Agents',
+    'module.notes': 'Notes', 'module.calendar': 'Calendar', 'module.mail': 'Mail',
+    'module.contacts': 'Contacts', 'module.diary': 'Diary', 'module.bookmarks': 'Bookmarks',
+    'module.tools': 'Tools', 'module.sketches': 'Sketches', 'module.projects': 'Tasks',
+    'module.inventory': 'Inventory', 'module.finance': 'Finance', 'module.photos': 'Photos',
+    'module.video': 'Video', 'module.music': 'Music', 'module.books': 'Books',
+    'module.messages': 'Messages', 'module.feeds': 'Feeds', 'module.explorer': 'File Explorer',
+    'module.proxy': 'Reverse Proxy', 'module.mail-server': 'Mail Server', 'module.storage': 'Storage',
+    'module.processes': 'Processes', 'module.activity': 'Activity Center', 'module.settings': 'Settings',
+    'moduleGroup.Productivity': 'Productivity', 'moduleGroup.Finance': 'Finance',
+    'moduleGroup.Multimedia': 'Multimedia', 'moduleGroup.Social': 'Social',
+    'moduleGroup.Files': 'Files', 'moduleGroup.Network': 'Network', 'moduleGroup.System': 'System',
+  },
+  es: {
+    'module.chat': 'Chat con IA', 'module.search': 'Buscar', 'module.agents': 'Agentes',
+    'module.notes': 'Notas', 'module.calendar': 'Calendario', 'module.mail': 'Correo',
+    'module.contacts': 'Contactos', 'module.diary': 'Diario', 'module.bookmarks': 'Marcadores',
+    'module.tools': 'Herramientas', 'module.sketches': 'Bocetos', 'module.projects': 'Tareas',
+    'module.inventory': 'Inventario', 'module.finance': 'Finanzas', 'module.photos': 'Fotos',
+    'module.video': 'Vídeo', 'module.music': 'Música', 'module.books': 'Libros',
+    'module.messages': 'Mensajes', 'module.feeds': 'Fuentes', 'module.explorer': 'Explorador de archivos',
+    'module.proxy': 'Proxy inverso', 'module.mail-server': 'Servidor de correo', 'module.storage': 'Almacenamiento',
+    'module.processes': 'Procesos', 'module.activity': 'Centro de actividad', 'module.settings': 'Ajustes',
+    'moduleGroup.Productivity': 'Productividad', 'moduleGroup.Finance': 'Finanzas',
+    'moduleGroup.Multimedia': 'Multimedia', 'moduleGroup.Social': 'Social',
+    'moduleGroup.Files': 'Archivos', 'moduleGroup.Network': 'Red', 'moduleGroup.System': 'Sistema',
+  },
+} as const;

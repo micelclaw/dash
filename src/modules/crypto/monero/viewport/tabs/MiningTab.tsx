@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '@/i18n';
 import { Loader2, Play, Square, Cpu, AlertTriangle } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
@@ -23,6 +24,7 @@ interface MiningStatus {
 }
 
 export function MiningTab() {
+  const { t } = useI18n();
   const rpc = useMoneroRpc();
   const { call } = rpc;
   const [status, setStatus] = useState<MiningStatus | null>(null);
@@ -79,19 +81,19 @@ export function MiningTab() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
-        <Loader2 size={16} className="spin" /> Checking mining status...
+        <Loader2 size={16} className="spin" /> {t('crypto.wallet.checkingMining')}
       </div>
     );
   }
 
   return (
     <div className="mn-root">
-      <h3 className="mn-title">Mining</h3>
+      <h3 className="mn-title">{t('crypto.wallet.mining')}</h3>
 
       {/* Warning */}
       <div className="mn-warning">
         <AlertTriangle size={13} />
-        <span>Solo mining on mainnet is extremely unlikely to find a block. This is primarily useful for testnet/stagenet or contributing hashrate to the network.</span>
+        <span>{t('crypto.wallet.miningWarning')}</span>
       </div>
 
       {/* Status card */}
@@ -100,12 +102,12 @@ export function MiningTab() {
           <Cpu size={20} />
         </div>
         <div className="mn-status-info">
-          <div className="mn-status-label">{status?.active ? 'Mining Active' : 'Mining Inactive'}</div>
+          <div className="mn-status-label">{status?.active ? t('crypto.wallet.miningActive') : t('crypto.wallet.miningInactive')}</div>
           {status?.active && (
             <div className="mn-status-details">
-              <span>{status.threads_count} thread{status.threads_count !== 1 ? 's' : ''}</span>
+              <span>{t(status.threads_count === 1 ? 'crypto.wallet.threadOne' : 'crypto.wallet.threadMany', { count: status.threads_count })}</span>
               {status.speed > 0 && <span>{status.speed.toFixed(1)} H/s</span>}
-              {status.is_background_mining_enabled && <span>Background</span>}
+              {status.is_background_mining_enabled && <span>{t('crypto.wallet.background')}</span>}
             </div>
           )}
         </div>
@@ -113,12 +115,12 @@ export function MiningTab() {
         {status?.active ? (
           <button className="mn-toggle-btn mn-toggle-stop" onClick={stopMining} disabled={toggling}>
             {toggling ? <Loader2 size={13} className="spin" /> : <Square size={13} />}
-            Stop
+            {t('crypto.stop')}
           </button>
         ) : (
           <button className="mn-toggle-btn mn-toggle-start" onClick={startMining} disabled={toggling}>
             {toggling ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
-            Start
+            {t('crypto.start')}
           </button>
         )}
       </div>
@@ -126,10 +128,10 @@ export function MiningTab() {
       {/* Config (only when not mining) */}
       {!status?.active && (
         <div className="mn-config">
-          <div className="mn-config-title">Configuration</div>
+          <div className="mn-config-title">{t('crypto.wallet.configuration')}</div>
 
           <div className="mn-field">
-            <label className="mn-label">Threads</label>
+            <label className="mn-label">{t('crypto.wallet.threads')}</label>
             <div className="mn-threads-row">
               <input
                 className="mn-input"
@@ -146,17 +148,17 @@ export function MiningTab() {
           <div className="mn-field">
             <label className="mn-check">
               <input type="checkbox" checked={bgMining} onChange={(e) => setBgMining(e.target.checked)} />
-              Background mining
+              {t('crypto.wallet.backgroundMining')}
             </label>
-            <div className="mn-field-hint">Mine only when the system is idle</div>
+            <div className="mn-field-hint">{t('crypto.wallet.idleOnly')}</div>
           </div>
 
           <div className="mn-field">
             <label className="mn-check">
               <input type="checkbox" checked={ignoreBattery} onChange={(e) => setIgnoreBattery(e.target.checked)} />
-              Ignore battery
+              {t('crypto.wallet.ignoreBattery')}
             </label>
-            <div className="mn-field-hint">Continue mining even when on battery power</div>
+            <div className="mn-field-hint">{t('crypto.wallet.onBatteryContinue')}</div>
           </div>
         </div>
       )}

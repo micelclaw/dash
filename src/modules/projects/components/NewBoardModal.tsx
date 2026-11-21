@@ -17,6 +17,7 @@ import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
 import { TagInput } from '@/components/shared/TagInput';
 import { BOARD_COLOR_PRESETS, BOARD_VIEW_OPTIONS } from '../utils/board-options';
 import type { Board } from '../types';
+import { useI18n } from '@/i18n';
 
 interface NewBoardModalProps {
   onClose: () => void;
@@ -24,6 +25,7 @@ interface NewBoardModalProps {
 }
 
 export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
+  const { t } = useI18n();
   const createBoard = useProjectsStore((s) => s.createBoard);
 
   const [title, setTitle] = useState('');
@@ -66,7 +68,7 @@ export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>New Board</span>
+          <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>{t('projects.newBoard')}</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, display: 'flex' }}>
             <X size={16} />
           </button>
@@ -74,7 +76,7 @@ export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <label style={labelStyle}>Title</label>
+            <label style={labelStyle}>{t('projects.title')}</label>
             <input
               autoFocus
               value={title}
@@ -83,17 +85,17 @@ export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
                 if (e.key === 'Enter') handleCreate();
                 if (e.key === 'Escape') onClose();
               }}
-              placeholder="Board name..."
+              placeholder={t('projects.boardName')}
               style={inputStyle}
             />
           </div>
 
           <div>
-            <label style={labelStyle}>Description</label>
+            <label style={labelStyle}>{t('projects.description')}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What is this board for?"
+              placeholder={t('projects.boardDescription')}
               rows={3}
               style={{ ...inputStyle, resize: 'vertical' }}
             />
@@ -101,17 +103,17 @@ export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
 
           <div style={{ display: 'flex', gap: 24 }}>
             <div>
-              <label style={labelStyle}>Icon</label>
+              <label style={labelStyle}>{t('projects.icon')}</label>
               <EmojiAvatarPicker
                 value={icon}
                 onChange={setIcon}
                 size={32}
                 fallback="📋"
-                title="Choose board icon"
+                title={t('projects.chooseBoardIcon')}
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Color</label>
+              <label style={labelStyle}>{t('projects.color')}</label>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {BOARD_COLOR_PRESETS.map((c) => (
                   <button
@@ -128,7 +130,7 @@ export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
                   type="color"
                   value={color ?? '#3b82f6'}
                   onChange={(e) => setColor(e.target.value)}
-                  title="Custom color"
+                  title={t('projects.customColor')}
                   style={{ width: 26, height: 26, padding: 0, border: '1px solid var(--border)', borderRadius: 6, background: 'none', cursor: 'pointer' }}
                 />
               </div>
@@ -136,12 +138,12 @@ export function NewBoardModal({ onClose, onCreated }: NewBoardModalProps) {
           </div>
 
           <div>
-            <label style={labelStyle}>Tags</label>
+            <label style={labelStyle}>{t('projects.tags')}</label>
             <TagInput tags={tags} onChange={setTags} />
           </div>
 
           <div>
-            <label style={labelStyle}>Default view</label>
+            <label style={labelStyle}>{t('projects.defaultView')}</label>
             <select
               value={defaultView}
               onChange={(e) => setDefaultView(e.target.value)}

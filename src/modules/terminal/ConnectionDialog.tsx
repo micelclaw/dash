@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useTerminalStore } from '@/stores/terminal.store';
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { useI18n } from '@/i18n';
 
 interface ConnectionDialogProps {
   open: boolean;
@@ -25,6 +26,7 @@ type AuthMethod = 'password' | 'key' | 'agent';
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
 export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogProps) {
+  const { t } = useI18n();
   const createConnection = useTerminalStore((s) => s.createConnection);
   const testConnection = useTerminalStore((s) => s.testConnection);
 
@@ -75,7 +77,7 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
       onConnect(conn.id, conn.label);
       handleClose();
     } catch (err) {
-      setTestError(err instanceof Error ? err.message : 'Failed to save connection');
+      setTestError(err instanceof Error ? err.message : t('terminal.saveFailed'));
       setTestStatus('error');
     } finally {
       setSubmitting(false);
@@ -105,11 +107,11 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
         setTestLatency(result.latency_ms);
       } else {
         setTestStatus('error');
-        setTestError(result.error || 'Connection failed');
+        setTestError(result.error || t('terminal.connectionFailed'));
       }
     } catch (err) {
       setTestStatus('error');
-      setTestError(err instanceof Error ? err.message : 'Test failed');
+      setTestError(err instanceof Error ? err.message : t('terminal.testFailed'));
     }
   };
 
@@ -122,19 +124,20 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
         onFocusOutside={(e) => e.preventDefault()}
       >
         <DialogTitle style={{ color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-          SSH Connection
+          {t('terminal.connectionTitle')}
         </DialogTitle>
         <DialogDescription>
-          Enter SSH connection details to connect to a remote server.
+          {t('terminal.connectionDescription')}
         </DialogDescription>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
           {/* Label */}
           <div>
-            <label style={labelStyle}>Label</label>
+            <label style={labelStyle}>{t('terminal.connectionLabel')}</label>
             <input
               style={inputStyle}
-              placeholder="My Server"
+              aria-label={t('terminal.connectionLabel')}
+              placeholder={t('terminal.serverExample')}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
@@ -143,18 +146,20 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
           {/* Host + Port row */}
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Host</label>
+              <label style={labelStyle}>{t('terminal.host')}</label>
               <input
                 style={inputStyle}
+                aria-label={t('terminal.host')}
                 placeholder="192.168.1.100"
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
               />
             </div>
             <div style={{ width: 80 }}>
-              <label style={labelStyle}>Port</label>
+              <label style={labelStyle}>{t('terminal.port')}</label>
               <input
                 style={inputStyle}
+                aria-label={t('terminal.port')}
                 type="number"
                 value={port}
                 onChange={(e) => setPort(e.target.value)}
@@ -164,9 +169,10 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
 
           {/* Username */}
           <div>
-            <label style={labelStyle}>Username</label>
+            <label style={labelStyle}>{t('terminal.username')}</label>
             <input
               style={inputStyle}
+              aria-label={t('terminal.username')}
               placeholder="root"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -175,7 +181,7 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
 
           {/* Auth method */}
           <div>
-            <label style={labelStyle}>Authentication</label>
+            <label style={labelStyle}>{t('terminal.authentication')}</label>
             <div style={{ display: 'flex', gap: 4 }}>
               {(['password', 'key', 'agent'] as const).map((m) => (
                 <button
@@ -194,7 +200,7 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
                     fontWeight: authMethod === m ? 600 : 400,
                   }}
                 >
-                  {m === 'password' ? 'Password' : m === 'key' ? 'SSH Key' : 'Agent'}
+                  {m === 'password' ? t('terminal.password') : m === 'key' ? t('terminal.sshKey') : t('terminal.agent')}
                 </button>
               ))}
             </div>
@@ -203,9 +209,10 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
           {/* Conditional fields */}
           {authMethod === 'password' && (
             <div>
-              <label style={labelStyle}>Password</label>
+              <label style={labelStyle}>{t('terminal.password')}</label>
               <input
                 style={inputStyle}
+                aria-label={t('terminal.password')}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -216,18 +223,20 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
           {authMethod === 'key' && (
             <>
               <div>
-                <label style={labelStyle}>Private Key Path</label>
+                <label style={labelStyle}>{t('terminal.privateKeyPath')}</label>
                 <input
                   style={inputStyle}
+                  aria-label={t('terminal.privateKeyPath')}
                   placeholder="~/.ssh/id_rsa"
                   value={privateKeyPath}
                   onChange={(e) => setPrivateKeyPath(e.target.value)}
                 />
               </div>
               <div>
-                <label style={labelStyle}>Passphrase (optional)</label>
+                <label style={labelStyle}>{t('terminal.passphraseOptional')}</label>
                 <input
                   style={inputStyle}
+                aria-label={t('terminal.passphraseOptional')}
                   type="password"
                   value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)}
@@ -238,9 +247,10 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
 
           {/* Jump host */}
           <div>
-            <label style={labelStyle}>Jump Host (optional)</label>
+            <label style={labelStyle}>{t('terminal.jumpHostOptional')}</label>
             <input
               style={inputStyle}
+              aria-label={t('terminal.jumpHostOptional')}
               placeholder="user@jump-host:22"
               value={jumpHost}
               onChange={(e) => setJumpHost(e.target.value)}
@@ -261,13 +271,13 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
               {testStatus === 'testing' && (
                 <>
                   <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--amber)' }} />
-                  <span style={{ color: 'var(--text-muted)' }}>Testing connection...</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('terminal.testing')}</span>
                 </>
               )}
               {testStatus === 'success' && (
                 <>
                   <CheckCircle2 size={14} style={{ color: 'var(--success)' }} />
-                  <span style={{ color: 'var(--success)' }}>Connected ({testLatency}ms)</span>
+                  <span style={{ color: 'var(--success)' }}>{t('terminal.connected', { latency: testLatency })}</span>
                 </>
               )}
               {testStatus === 'error' && (
@@ -283,6 +293,7 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <button
               onClick={handleTest}
+              aria-label={t('terminal.test')}
               disabled={!isValid || testStatus === 'testing'}
               style={{
                 ...btnStyle,
@@ -292,14 +303,15 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
                 opacity: !isValid || testStatus === 'testing' ? 0.5 : 1,
               }}
             >
-              Test
+              {t('terminal.test')}
             </button>
             <div style={{ flex: 1 }} />
-            <button onClick={handleClose} style={{ ...btnStyle, background: '#0e0e16', color: 'var(--text)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              Cancel
+            <button onClick={handleClose} aria-label={t('terminal.cancel')} style={{ ...btnStyle, background: '#0e0e16', color: 'var(--text)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {t('terminal.cancel')}
             </button>
             <button
               onClick={handleConnect}
+              aria-label={t('terminal.connect')}
               disabled={!isValid || submitting}
               style={{
                 ...btnStyle,
@@ -310,7 +322,7 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
                 opacity: !isValid || submitting ? 0.5 : 1,
               }}
             >
-              {submitting ? 'Connecting...' : 'Connect'}
+              {submitting ? t('terminal.connecting') : t('terminal.connect')}
             </button>
           </div>
         </div>

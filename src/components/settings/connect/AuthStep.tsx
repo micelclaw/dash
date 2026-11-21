@@ -76,7 +76,7 @@ interface AuthStepProps {
   provider: syncSvc.DataProvider;
   ownServer: boolean;
   onBack: () => void;
-  onOAuth: (providerSlug: string, ownClient?: { clientId: string; clientSecret: string }) => void;
+  onOAuth: (providerSlug: string, ownClient?: { clientId: string; clientSecret: string;clientType?:'public'|'confidential' },mode?:'local'|'companion') => void;
   onNextcloudLogin?: (serverUrl: string) => void;
   onReady: (r: AuthResult) => void;
   busy?: boolean;
@@ -141,6 +141,8 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
   const [password, setPassword] = useState('');
   const [nextcloudManual, setNextcloudManual] = useState(false);
   const [extraFields, setExtraFields] = useState<Record<string, string>>({});
+  const [advancedOwnClient,setAdvancedOwnClient]=useState(false);
+  const [publicOwnClient,setPublicOwnClient]=useState(false);
   const [oauthClientId, setOauthClientId] = useState('');
   const [oauthClientSecret, setOauthClientSecret] = useState('');
   const [noPassword, setNoPassword] = useState(false);
@@ -164,6 +166,8 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
     setMetodo(provider.auth_order?.[0] ?? 'basic');
     setPassword('');
     setOauthClientSecret('');
+    setOauthClientId('');
+    setPublicOwnClient(false);
   }, [provider.slug, dataType.id]);
   const elegirMetodo = provider.auth_order.length > 1 ? (
     <div>
@@ -360,8 +364,9 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
 
   // ── OAuth: sin campo de contraseña, y con el permiso que se va a pedir ─────
   if (esOAuth) {
-    const needsOwnClient = provider.requires_own_oauth_client === true;
-    const oauthReady = !needsOwnClient || (oauthClientId.trim().length > 0 && oauthClientSecret.length > 0);
+    const needsOwnClient = provider.requires_own_oauth_client === true || advancedOwnClient;
+    const callbackUri=needsOwnClient?(provider.own_oauth_redirect_uri??provider.oauth_redirect_uri):provider.oauth_redirect_uri;
+    const oauthReady = !needsOwnClient || (oauthClientId.trim().length > 0 && (provider.slug==='microsoft' || publicOwnClient || oauthClientSecret.length > 0));
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {elegirMetodo}
@@ -378,6 +383,7 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
             : `Se abrirá una ventana de ${provider.label}. Micelclaw nunca ve tu contraseña.`}
         </div>
 
+        {provider.uses_shipped_oauth_client && <label style={etiqueta}><input type="checkbox" checked={advancedOwnClient} disabled={busy} onChange={e=>{setAdvancedOwnClient(e.target.checked);setOauthClientSecret('');setPublicOwnClient(false);}}/> Avanzado: usar una aplicación propia</label>}
         {needsOwnClient && (
           <>
             {provider.credential_guide && (
@@ -400,20 +406,21 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
               </div>
             )}
 
-            <div>
+            {['google','microsoft','slack'].includes(provider.slug)&&<label style={etiqueta}><input type="checkbox" checked={publicOwnClient} disabled={busy} onChange={e=>{setPublicOwnClient(e.target.checked);setOauthClientSecret('');}}/> Cliente público {provider.slug==='slack'?'con PKCE habilitado':'nativo con PKCE'} (sin secreto)</label>}
+            {publicOwnClient&&provider.slug==='google'?<p style={etiqueta}>El retorno se recibe en este ordenador o en Companion, en un puerto libre. El dominio de Micelclaw no se registra como callback. Esta opción usa el cliente de Escritorio propio que indiques.</p>:<div>
               <label htmlFor="oauth-redirect-uri" style={etiqueta}>URL de retorno OAuth</label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input id="oauth-redirect-uri" readOnly value={provider.oauth_redirect_uri ?? ''} style={{ ...campo, flex: 1 }} />
+                <input id="oauth-redirect-uri" readOnly value={callbackUri ?? ''} style={{ ...campo, flex: 1 }} />
                 <button
                   type="button"
                   aria-label="Copiar URL de retorno"
-                  onClick={() => void navigator.clipboard.writeText(provider.oauth_redirect_uri ?? '')}
+                  onClick={() => void navigator.clipboard.writeText(callbackUri ?? '')}
                   style={{ ...campo, width: 38, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 >
                   <Copy size={14} />
                 </button>
               </div>
-            </div>
+            </div>}
             <div>
               <label htmlFor="oauth-client-id" style={etiqueta}>Client ID</label>
               <input
@@ -427,8 +434,8 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
                 style={campo}
               />
             </div>
-            <div>
-              <label htmlFor="oauth-client-secret" style={etiqueta}>Client Secret</label>
+            {!publicOwnClient&&<div>
+              <label htmlFor="oauth-client-secret" style={etiqueta}>Client Secret{provider.slug==='microsoft'?' (opcional para un cliente público)':''}</label>
               <input
                 id="oauth-client-secret"
                 type="password"
@@ -439,9 +446,9 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
                 style={campo}
               />
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 5, lineHeight: 1.5 }}>
-                Micelclaw lo transporta cifrado dentro de la autorización y nunca lo añade a la URL.
+                Las credenciales de cliente propio van cifradas en el state; no aparecen en claro. Un cliente público de Microsoft usa PKCE y no necesita secreto.
               </div>
-            </div>
+            </div>}
           </>
         )}
 
@@ -461,7 +468,7 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
                 dato primero, la autorización pide UN permiso en vez de todos.
               */}
               <div style={{ color: 'var(--text-muted)', marginTop: 4, fontSize: '0.75rem' }}>
-                No pedirá acceso a correo, calendario ni otros tipos de dato.
+                No pedirá acceso a otros tipos de dato. También puede solicitar identidad y renovación de la sesión, necesarias para mantener esta conexión.
               </div>
             </div>
           </div>
@@ -475,9 +482,9 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
           (registrar una aplicación) que no existe en su mundo: tranquilizarle
           sobre algo que nunca iba a tener que hacer solo planta la duda.
         */}
-        {provider.uses_shipped_oauth_client && (
+        {provider.uses_shipped_oauth_client && !needsOwnClient && (
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            Puede que {provider.label} avise de que el editor no está verificado. Es normal: continúa.
+            {provider.oauth_product_publication==='testing'&&<>La aplicación de Google está en Prueba y solo permite usuarios autorizados por el proveedor. No está verificada para publicación general. </>}Puede que {provider.label} avise de que el editor no está verificado. Revisa el editor y los permisos antes de decidir si autorizas la conexión.
           </div>
         )}
 
@@ -509,13 +516,14 @@ export function AuthStep({ dataType, provider, ownServer, onBack, onOAuth, onNex
             otro fallo. Diseñar una pantalla para un estado que solo existe
             mientras se monta el producto es diseñar para el caso que no importa.
           */}
+          {(!needsOwnClient&&provider.uses_shipped_oauth_client||needsOwnClient&&publicOwnClient&&['google','microsoft'].includes(provider.slug))&&<Button variant="outline" disabled={busy||!oauthReady} onClick={()=>onOAuth(provider.slug,needsOwnClient?{clientId:oauthClientId.trim(),clientSecret:publicOwnClient?'':oauthClientSecret,clientType:publicOwnClient?'public':undefined}:undefined,'companion')}>Autorizar con Companion</Button>}
           <Button
             onClick={() => onOAuth(provider.slug, needsOwnClient ? {
               clientId: oauthClientId.trim(),
-              clientSecret: oauthClientSecret,
+              clientSecret: publicOwnClient?'':oauthClientSecret,
+              clientType:publicOwnClient?'public':undefined,
             } : undefined)}
             disabled={busy || !oauthReady}
-            style={{ maxWidth: '100%', minWidth: 0, whiteSpace: 'normal', textAlign: 'center' }}
           >
             {busy
               ? <><Loader2 size={14} className="animate-spin" /> Abriendo…</>

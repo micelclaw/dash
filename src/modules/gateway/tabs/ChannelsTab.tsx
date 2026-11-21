@@ -24,6 +24,7 @@ import { AddChannelDialog } from '../components/AddChannelDialog';
 import { ChannelConfigPanel } from '../components/ChannelConfigPanel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayChannel } from '../types';
+import { useI18n } from '@/i18n';
 
 const CHANNEL_ICONS: Record<string, typeof MessageCircle> = {
   telegram: Send,
@@ -49,6 +50,7 @@ const CHANNEL_COLORS: Record<string, string> = {
 };
 
 export function ChannelsTab() {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const { channels, channelsLoading, channelsError, fetchChannels } = useGatewayStore();
   const [showAdd, setShowAdd] = useState(false);
@@ -66,10 +68,10 @@ export function ChannelsTab() {
     setActionLoading(key);
     try {
       await gwService.loginChannel(ch.type, ch.account);
-      toast.success(`Logged in to ${ch.type}`);
+      toast.success(t('gateway.channels.loggedIn', { channel: ch.type }));
       fetchChannels();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Login failed');
+      toast.error(err instanceof Error ? err.message : t('gateway.channels.loginFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -80,24 +82,24 @@ export function ChannelsTab() {
     setActionLoading(key);
     try {
       await gwService.logoutChannel(ch.type, ch.account);
-      toast.success(`Logged out of ${ch.type}`);
+      toast.success(t('gateway.channels.loggedOut', { channel: ch.type }));
       fetchChannels();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Logout failed');
+      toast.error(err instanceof Error ? err.message : t('gateway.channels.logoutFailed'));
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleRemove = async (ch: GatewayChannel) => {
-    if (!confirm(`Remove ${ch.name || ch.type} channel?`)) return;
+    if (!confirm(t('gateway.channels.confirmRemove', { channel: ch.name || ch.type }))) return;
     setActionLoading(`remove-${ch.type}-${ch.account}`);
     try {
       await gwService.removeChannel(ch.type, ch.account);
-      toast.success(`Channel ${ch.type} removed`);
+      toast.success(t('gateway.channels.removed', { channel: ch.type }));
       fetchChannels();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Remove failed');
+      toast.error(err instanceof Error ? err.message : t('gateway.channels.removeFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -109,7 +111,7 @@ export function ChannelsTab() {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        Loading channels...
+        {t('gateway.channels.loading')}
       </div>
     );
   }
@@ -140,7 +142,7 @@ export function ChannelsTab() {
                 fontSize: '0.8125rem', color: 'var(--text-dim)',
                 fontFamily: 'var(--font-sans)',
               }}>
-                {channels.length} channel{channels.length !== 1 ? 's' : ''} configured
+                {t('gateway.channels.count', { count: channels.length })}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -158,7 +160,7 @@ export function ChannelsTab() {
                     display: 'flex', alignItems: 'center',
                   }}
                 >
-                  <RefreshCw size={14} />
+                  <RefreshCw size={14} aria-label={t('gateway.common.refresh')} />
                 </button>
                 <button
                   onClick={() => setShowAdd(true)}
@@ -176,7 +178,7 @@ export function ChannelsTab() {
                   }}
                 >
                   <Plus size={14} />
-                  Add Channel
+                  {t('gateway.channels.add')}
                 </button>
               </div>
             </div>
@@ -189,10 +191,10 @@ export function ChannelsTab() {
               }}>
                 <MessageCircle size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
                 <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-                  No channels configured
+                  {t('gateway.channels.empty')}
                 </span>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textAlign: 'center', maxWidth: 300 }}>
-                  Add a channel to let your agents communicate via Telegram, Discord, WhatsApp, and more.
+                  {t('gateway.channels.emptyHelp')}
                 </span>
               </div>
             ) : (
@@ -264,27 +266,27 @@ export function ChannelsTab() {
                       >
                         <SmallButton
                           icon={Settings2}
-                          label="Config"
+                          label={t('gateway.channels.configShort')}
                           onClick={() => setSelectedChannel(ch.type)}
                         />
                         {ch.status === 'login_required' || ch.status === 'disconnected' ? (
                           <SmallButton
                             icon={LogIn}
-                            label="Login"
+                            label={t('gateway.channels.loginShort')}
                             onClick={() => handleLogin(ch)}
                             loading={actionLoading === `login-${ch.type}-${ch.account}`}
                           />
                         ) : ch.status === 'connected' ? (
                           <SmallButton
                             icon={LogOut}
-                            label="Logout"
+                            label={t('gateway.channels.logoutShort')}
                             onClick={() => handleLogout(ch)}
                             loading={actionLoading === `logout-${ch.type}-${ch.account}`}
                           />
                         ) : null}
                         <SmallButton
                           icon={Trash2}
-                          label="Remove"
+                          label={t('gateway.channels.removeShort')}
                           onClick={() => handleRemove(ch)}
                           loading={actionLoading === `remove-${ch.type}-${ch.account}`}
                           danger

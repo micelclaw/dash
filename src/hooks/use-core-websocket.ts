@@ -9,7 +9,7 @@ const MAX_RECOVERY_ATTEMPTS = 3;
  * credential immediately. All async work belongs to this session generation. */
 export function startCoreWebSocketSession(): () => void {
   const initial = useAuthStore.getState();
-  if (!initial.isAuthenticated || !initial.tokens?.accessToken) return () => {};
+  if (!initial.isAuthenticated || !initial.tokens?.accessToken || initial.logoutState === 'revoking' || initial.logoutState === 'error') return () => {};
   const generation = initial.sessionGeneration;
   let cancelled = false;
   let refreshing = false;
@@ -18,7 +18,7 @@ export function startCoreWebSocketSession(): () => void {
   let stableTimer: ReturnType<typeof setTimeout> | null = null;
   let ownedClient = useWebSocketStore.getState().client;
   const current = () => !cancelled && useAuthStore.getState().sessionGeneration === generation
-    && useAuthStore.getState().isAuthenticated;
+    && useAuthStore.getState().isAuthenticated && useAuthStore.getState().logoutState !== 'revoking' && useAuthStore.getState().logoutState !== 'error';
   const clearTimers = () => {
     if (recoveryTimer !== null) clearTimeout(recoveryTimer);
     if (stableTimer !== null) clearTimeout(stableTimer);
@@ -80,7 +80,19 @@ export function startCoreWebSocketSession(): () => void {
       stableTimer = setTimeout(() => { if (current()) attempts = 0; stableTimer = null; }, 30_000);
     }
   });
-  void recover(true);
+  // A current JWT can be authenticated by Core directly. Rotating its refresh
+  // during every mount loses the only renewed credential if a full navigation
+  // tears down the response. Decoding exp only avoids that unnecessary rotation;
+  // it grants no access: Core still authenticates the socket and 4401 recovers.
+  let currentJwt = false;
+  try {
+    const encodedPayload = initial.tokens.accessToken.split('.')[1];
+    if (!encodedPayload) throw new Error('Opaque access credential');
+    const payload = JSON.parse(atob(encodedPayload.replace(/-/g, '+').replace(/_/g, '/')));
+    currentJwt = typeof payload.exp === 'number' && Number.isFinite(payload.exp) && payload.exp > Date.now() / 1000 + 30;
+  } catch { /* Opaque/expired credentials retain the existing refresh path. */ }
+  if (currentJwt) connect();
+  else void recover(true);
   return () => { retire(); unsubAuth(); unsubWs(); };
 }
 
@@ -88,5 +100,6 @@ export function useCoreWebSocket(): void {
   const generation = useAuthStore((state) => state.sessionGeneration);
   const userId = useAuthStore((state) => state.user?.id);
   const authenticated = useAuthStore((state) => state.isAuthenticated);
-  useEffect(startCoreWebSocketSession, [generation, userId, authenticated]);
+  const logoutState = useAuthStore((state) => state.logoutState);
+  useEffect(startCoreWebSocketSession, [generation, userId, authenticated, logoutState]);
 }

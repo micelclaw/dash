@@ -11,7 +11,6 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTerminalStore } from '@/stores/terminal.store';
 import { TerminalWebSocket } from './terminal-ws';
@@ -19,8 +18,6 @@ import { TabBar } from './TabBar';
 import { SplitView } from './SplitView';
 import { ConnectionDialog } from './ConnectionDialog';
 import { SnippetPanel } from './SnippetPanel';
-import { OnboardingGuide } from '@/components/onboarding/OnboardingGuide';
-import { useGatewayStore } from '@/stores/gateway.store';
 
 export function Component() {
   const token = useAuthStore((s) => s.tokens?.accessToken);
@@ -36,10 +33,6 @@ export function Component() {
   const [ws, setWs] = useState<TerminalWebSocket | null>(null);
   const [sshDialogOpen, setSSHDialogOpen] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
-  const gatewayConfigured = useGatewayStore((s) => s.configured);
-  const fetchSnapshot = useGatewayStore((s) => s.fetchSnapshot);
-  const navigate = useNavigate();
-  const [checkingGateway, setCheckingGateway] = useState(false);
 
   // Connect WS on mount
   useEffect(() => {
@@ -66,16 +59,11 @@ export function Component() {
   // Open default tabs when WS connects and no tabs exist
   useEffect(() => {
     if (!ws || tabs.length > 0) return;
-    // Wait until gateway configured status is known
-    if (gatewayConfigured === null) return;
-
-    // La configuración se administra desde Gateway; el terminal no ejecuta el
-    // wizard upstream ni abre el home de OpenClaw como paso de onboarding.
-    if (gatewayConfigured === false) {
-      return;
-    }
-
+    // Terminal is authenticated by Core; OpenClaw configuration is independent.
+    let cancelled = false;
+    const sessionToken = token;
     fetchDefaults().then((defaults) => {
+      if (cancelled || useAuthStore.getState().tokens?.accessToken !== sessionToken || useTerminalStore.getState().tabs.length > 0) return;
       for (const d of defaults) {
         addTab(d.type as 'local' | 'ssh', { label: d.label, cwd: d.cwd || undefined });
       }
@@ -85,7 +73,8 @@ export function Component() {
         useTerminalStore.getState().setActiveTab(created[0]!.id);
       }
     });
-  }, [ws, gatewayConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
+  }, [ws, token, fetchDefaults, addTab]); // Defaults run once per authenticated WS, independent of Gateway.
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -171,28 +160,6 @@ export function Component() {
     );
   }
 
-  // No abrir una shell hasta que el estado esté confirmado: null es el estado
-  // inicial mientras llega el snapshot y no debe convertirse en un atajo al
-  // wizard ni al home de OpenClaw.
-  if (gatewayConfigured !== true) {
-    return (
-      <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', overflow: 'auto', padding: 16, background: 'var(--bg)' }}>
-        <OnboardingGuide
-          open
-          checking={checkingGateway}
-          onOpenGateway={() => navigate('/gateway')}
-          onRetry={async () => {
-            setCheckingGateway(true);
-            try {
-              await fetchSnapshot();
-            } finally {
-              setCheckingGateway(false);
-            }
-          }}
-        />
-      </div>
-    );
-  }
 
   return (
     <div style={{

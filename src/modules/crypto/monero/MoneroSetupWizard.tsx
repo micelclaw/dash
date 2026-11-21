@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useI18n } from '@/i18n';
 import { X, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
 import { CryptoLogs } from '../shared/CryptoLogs';
@@ -60,6 +61,7 @@ async function waitForService(service: string, timeoutMs: number): Promise<boole
 }
 
 export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>('configure');
   const [config, setConfig] = useState<MoneroConfig>({ ...DEFAULTS });
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -139,10 +141,10 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
             <span style={{ fontSize: 16, color: '#ff6600' }}>&#9399;</span>
-            {step === 'configure' && (mode === 'install' ? 'Configure Monero Node' : 'Monero Settings')}
-            {step === 'installing' && (mode === 'install' ? 'Installing Monero Node' : 'Restarting Monero Node')}
-            {step === 'done' && 'Monero Node Ready'}
-            {step === 'error' && 'Error'}
+            {step === 'configure' && (mode === 'install' ? t('crypto.wizard.configureMonero') : t('crypto.wizard.moneroSettings'))}
+            {step === 'installing' && (mode === 'install' ? t('crypto.wizard.installingMonero') : t('crypto.wizard.restartingMonero'))}
+            {step === 'done' && t('crypto.wizard.moneroReady')}
+            {step === 'error' && t('crypto.wizard.error')}
           </div>
           <button
             onClick={onClose}
@@ -160,7 +162,7 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
 
               {/* Storage Mode */}
               <div>
-                <div className="wizard-section-title">Storage Mode</div>
+                <div className="wizard-section-title">{t('crypto.wizard.storageMode')}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {PRUNE_OPTIONS.map(opt => (
                     <label key={String(opt.value)} className="wizard-radio" style={{ border: config.prune === opt.value ? '1px solid var(--amber)' : '1px solid var(--border)' }}>
@@ -188,9 +190,9 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
 
               {/* Sync Performance */}
               <div>
-                <div className="wizard-section-title">Sync Performance</div>
+                <div className="wizard-section-title">{t('crypto.wizard.syncPerformance')}</div>
                 <div>
-                  <div className="wizard-field-label">DB Sync Mode</div>
+                  <div className="wizard-field-label">{t('crypto.wizard.dbSyncMode')}</div>
                   <select
                     className="wizard-select"
                     value={config.db_sync_mode}
@@ -205,10 +207,10 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
 
               {/* Network */}
               <div>
-                <div className="wizard-section-title">Network</div>
+                <div className="wizard-section-title">{t('crypto.wizard.network')}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
-                    <div className="wizard-field-label">Outbound Peers</div>
+                    <div className="wizard-field-label">{t('crypto.wizard.outboundPeers')}</div>
                     <select
                       className="wizard-select"
                       value={config.out_peers}
@@ -218,7 +220,7 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
                     </select>
                   </div>
                   <div>
-                    <div className="wizard-field-label">Inbound Peers</div>
+                    <div className="wizard-field-label">{t('crypto.wizard.inboundPeers')}</div>
                     <select
                       className="wizard-select"
                       value={config.in_peers}
@@ -234,14 +236,14 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
               {confirmRestart && mode === 'configure' && (
                 <div className="wizard-confirm-box">
                   <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
-                    Restart Required
+                    {t('crypto.wizard.restartRequired')}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                    This will restart the Monero Node. Sync progress will be preserved.
+                    {t('crypto.wizard.preserveSync')}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button className="wizard-btn-secondary" onClick={() => setConfirmRestart(false)}>Cancel</button>
-                    <button className="wizard-btn-primary" onClick={handleConfigure}>Restart Now</button>
+                    <button className="wizard-btn-secondary" onClick={() => setConfirmRestart(false)}>{t('crypto.wizard.cancel')}</button>
+                    <button className="wizard-btn-primary" onClick={handleConfigure}>{t('crypto.wizard.restartNow')}</button>
                   </div>
                 </div>
               )}
@@ -249,11 +251,11 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
               {/* Actions */}
               {!confirmRestart && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <button className="wizard-btn-secondary" onClick={onClose}>Cancel</button>
+                  <button className="wizard-btn-secondary" onClick={onClose}>{t('crypto.wizard.cancel')}</button>
                   {mode === 'install' ? (
-                    <button className="wizard-btn-primary" onClick={handleInstall}>Install</button>
+                    <button className="wizard-btn-primary" onClick={handleInstall}>{t('crypto.wizard.install')}</button>
                   ) : (
-                    <button className="wizard-btn-primary" onClick={handleConfigure}>Apply &amp; Restart</button>
+                    <button className="wizard-btn-primary" onClick={handleConfigure}>{t('crypto.wizard.applyRestart')}</button>
                   )}
                 </div>
               )}
@@ -278,7 +280,7 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
               <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>
                 {mode === 'install' ? 'Monero Node installed successfully' : 'Configuration applied'}
               </div>
-              <button className="wizard-btn-primary" onClick={onDone}>Done</button>
+              <button className="wizard-btn-primary" onClick={onDone}>{t('crypto.wizard.done')}</button>
             </div>
           )}
 
@@ -289,8 +291,8 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
                 {error}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="wizard-btn-secondary" onClick={onClose}>Close</button>
-                <button className="wizard-btn-primary" onClick={() => setStep('configure')}>Retry</button>
+                <button className="wizard-btn-secondary" onClick={onClose}>{t('crypto.wizard.close')}</button>
+                <button className="wizard-btn-primary" onClick={() => setStep('configure')}>{t('crypto.wizard.retry')}</button>
               </div>
             </div>
           )}

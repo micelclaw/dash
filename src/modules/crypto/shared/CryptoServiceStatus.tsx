@@ -23,9 +23,9 @@ export function getDotColor(svc: ServiceInfo | undefined): string {
   return '#22c55e';
 }
 
-export function getStatusLabel(svc: ServiceInfo | undefined): string {
-  if (!svc || !svc.installed) return 'Not installed';
-  if (!svc.running) return 'Stopped';
-  if (svc.phase === 'syncing') return 'Syncing';
-  return 'Running';
+export function getStatusLabel(svc: ServiceInfo | undefined, t: (key: string) => string): string {
+  if (!svc || !svc.installed) return t('crypto.notInstalled');
+  if (!svc.running) return t('crypto.status.stopped');
+  if (svc.phase === 'syncing') return t('crypto.status.syncing');
+  return t('crypto.status.running');
 }

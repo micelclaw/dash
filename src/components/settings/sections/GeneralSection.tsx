@@ -15,32 +15,15 @@ import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
+import {SettingSearchSelect} from '../SettingSearchSelect';
 import { SaveBar } from '../SaveBar';
-
-const LANGUAGES = [
-  { value: 'en', label: '🇬🇧 English' },
-  { value: 'es', label: '🇪🇸 Español' },
-  { value: 'fr', label: '🇫🇷 Français' },
-  { value: 'de', label: '🇩🇪 Deutsch' },
-  { value: 'pt', label: '🇧🇷 Português' },
-  { value: 'ja', label: '🇯🇵 日本語' },
-  { value: 'zh', label: '🇨🇳 中文' },
-];
+import { useI18n } from '@/i18n';
+import { languageOptions } from '@/i18n/languages';
 
 const DATE_FORMATS = [
   { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
   { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
   { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
-];
-
-const TIME_FORMATS = [
-  { value: '24h', label: '24-hour' },
-  { value: '12h', label: '12-hour' },
-];
-
-const WEEK_START_OPTIONS = [
-  { value: '1', label: 'Monday' },
-  { value: '0', label: 'Sunday' },
 ];
 
 /**
@@ -85,7 +68,7 @@ function getTimezoneOptions(): Array<{ value: string; label: string }> {
   } catch {
     zones = ['UTC', 'America/New_York', 'Europe/London', 'Europe/Madrid', 'Asia/Tokyo'];
   }
-  TIMEZONE_OPTIONS_CACHE = zones.map((tz) => {
+  TIMEZONE_OPTIONS_CACHE = [...new Set(['UTC',...zones])].map((tz) => {
     const { label: offset } = getTimezoneOffset(tz);
     return { value: tz, label: `(${offset}) ${tz.replace(/_/g, ' ')}` };
   });
@@ -109,10 +92,11 @@ function formatPreview(dateFormat: string, timeFormat: string): string {
   const suffix = timeFormat === '12h' ? (now.getHours() >= 12 ? ' PM' : ' AM') : '';
   const timePart = `${String(hours).padStart(2, '0')}:${mins}${suffix}`;
 
-  return `Today: ${datePart} ${timePart}`;
+  return `${datePart} ${timePart}`;
 }
 
-export function GeneralSection() {
+export function GeneralSection({ initialSetup = false }: {initialSetup?: boolean} = {}) {
+  const { t } = useI18n();
   const settings = useSettingsStore((s) => s.settings);
   const dirty = useSettingsStore((s) => s.dirty);
   const setLocalValue = useSettingsStore((s) => s.setLocalValue);
@@ -126,46 +110,47 @@ export function GeneralSection() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateSection('general', settings.general as unknown as Record<string, unknown>);
-      toast.success('General saved');
+      await updateSection('general', initialSetup ? {language: g.language, timezone: g.timezone} : settings.general as unknown as Record<string, unknown>);
+      toast.success(t('general.saved'));
     } catch {
-      toast.error('Failed to save settings');
+      toast.error(t('general.saveFailed'));
     }
     setSaving(false);
   };
 
   return (
     <>
-      <SettingSection title="General" description="Language, timezone, and display preferences.">
+      <SettingSection title={t('general.title')} description={t('general.description')}>
         <SettingSelect
-          label="Language"
+          label={t('general.language')}
           value={g.language}
-          options={LANGUAGES}
+          options={languageOptions(t('general.languageUnavailable'))}
           onChange={(v) => setLocalValue('general.language', v)}
         />
-        <SettingSelect
-          label="Timezone"
+        <SettingSearchSelect
+          label={t('general.timezone')}
           value={g.timezone}
           options={getTimezoneOptions()}
           onChange={(v) => setLocalValue('general.timezone', v)}
         />
+        {!initialSetup && <>
         <SettingSelect
-          label="Date Format"
+          label={t('general.dateFormat')}
           value={g.date_format}
           options={DATE_FORMATS}
           onChange={(v) => setLocalValue('general.date_format', v)}
         />
         <SettingSelect
-          label="Time Format"
+          label={t('general.timeFormat')}
           value={g.time_format}
-          options={TIME_FORMATS}
+          options={[{ value: '24h', label: t('general.hour24') }, { value: '12h', label: t('general.hour12') }]}
           onChange={(v) => setLocalValue('general.time_format', v)}
         />
         <SettingSelect
-          label="Week Starts On"
-          description="First day of the week in calendar grids and weekly filters."
+          label={t('general.weekStart')}
+          description={t('general.weekStartHelp')}
           value={String(settings.calendar?.first_day_of_week ?? 1)}
-          options={WEEK_START_OPTIONS}
+          options={[{ value: '1', label: t('general.monday') }, { value: '0', label: t('general.sunday') }]}
           onChange={async (v) => {
             // Lives in calendar.first_day_of_week (existing field), but
             // we expose it here in General because it also drives
@@ -174,16 +159,17 @@ export function GeneralSection() {
             try {
               const next = { ...settings.calendar, first_day_of_week: parseInt(v, 10) as 0 | 1 };
               await updateSection('calendar', next as unknown as Record<string, unknown>);
-              toast.success('Week start saved');
+              toast.success(t('general.weekSaved'));
             } catch {
-              toast.error('Failed to save');
+              toast.error(t('general.weekSaveFailed'));
             }
           }}
         />
 
         <div style={{ padding: '8px 0', fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-          {formatPreview(g.date_format, g.time_format)}
+          {t('general.today', { date: formatPreview(g.date_format, g.time_format) })}
         </div>
+        </>}
       </SettingSection>
 
       <SaveBar visible={!!dirty.general} saving={saving} onSave={handleSave} onDiscard={() => resetSection('general')} />

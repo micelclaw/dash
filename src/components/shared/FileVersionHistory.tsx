@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
+import { useI18n } from '@/i18n';
 
 interface Snapshot {
   id: string;
@@ -42,6 +43,7 @@ interface FileVersionHistoryProps {
 }
 
 export function FileVersionHistory({ fileId, filename, defaultExpanded = false }: FileVersionHistoryProps) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [data, setData] = useState<VersionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,10 +77,10 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
     setActing('create');
     try {
       await api.post(`/files/${fileId}/versions`);
-      toast.success('Snapshot created');
+      toast.success(t('shared.versions.created'));
       load();
     } catch {
-      toast.error('Failed to create snapshot');
+      toast.error(t('shared.versions.createError'));
     }
     setActing(null);
   };
@@ -87,10 +89,10 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
     setActing(snapshotId);
     try {
       await api.post(`/files/${fileId}/versions/${snapshotId}/restore`);
-      toast.success('Version restored');
+      toast.success(t('shared.versions.restored'));
       load();
     } catch {
-      toast.error('Failed to restore version');
+      toast.error(t('shared.versions.restoreError'));
     }
     setActing(null);
   };
@@ -99,10 +101,10 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
     setActing(snapshotId);
     try {
       await api.delete(`/files/${fileId}/versions/${snapshotId}`);
-      toast.success('Snapshot deleted');
+      toast.success(t('shared.versions.deleted'));
       load();
     } catch {
-      toast.error('Failed to delete snapshot');
+      toast.error(t('shared.versions.deleteError'));
     }
     setActing(null);
   };
@@ -119,6 +121,7 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
     <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 6,
           padding: '8px 16px', background: 'none', border: 'none',
@@ -129,7 +132,7 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
       >
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         <History size={12} />
-        Version History
+        {t('shared.versions.heading')}
         {data && data.snapshots.length > 0 && (
           <span style={{
             marginLeft: 4, padding: '1px 6px', fontSize: '0.625rem',
@@ -144,10 +147,10 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
       {expanded && (
         <div style={{ padding: '0 16px 12px' }}>
           {loading ? (
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>Loading...</div>
+            <div role="status" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>{t('shared.versions.loading')}</div>
           ) : !data || data.snapshots.length === 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No snapshots yet</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('shared.versions.none')}</span>
               <button
                 onClick={createSnapshot}
                 disabled={acting === 'create'}
@@ -158,14 +161,14 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
                   cursor: 'pointer', fontFamily: 'var(--font-sans)',
                 }}
               >
-                <Plus size={10} /> Create Snapshot
+                <Plus size={10} /> {t('shared.versions.create')}
               </button>
             </div>
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                  {data.snapshots.length} version{data.snapshots.length > 1 ? 's' : ''} · {formatFileSize(data.total_snapshot_size)}
+                  {t(data.snapshots.length === 1 ? 'shared.versions.one' : 'shared.versions.count', { count: data.snapshots.length })} · {formatFileSize(data.total_snapshot_size)}
                 </span>
                 <button
                   onClick={createSnapshot}
@@ -177,7 +180,7 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
                     cursor: 'pointer', fontFamily: 'var(--font-sans)',
                   }}
                 >
-                  <Plus size={10} /> Snapshot
+                  <Plus size={10} /> {t('shared.versions.snapshot')}
                 </button>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -195,15 +198,15 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
                         {formatRelative(new Date(snap.created_at))} · {formatFileSize(snap.size_bytes)}
                       </div>
                     </div>
-                    <button onClick={() => downloadSnapshot(snap.id)} title="Download" disabled={acting === snap.id}
+                    <button onClick={() => downloadSnapshot(snap.id)} title={t('shared.versions.download')} aria-label={t('shared.versions.download')} disabled={acting === snap.id}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 3, display: 'flex' }}>
                       <Download size={12} />
                     </button>
-                    <button onClick={() => restoreSnapshot(snap.id)} title="Restore" disabled={acting === snap.id}
+                    <button onClick={() => restoreSnapshot(snap.id)} title={t('shared.versions.restore')} aria-label={t('shared.versions.restore')} disabled={acting === snap.id}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 3, display: 'flex' }}>
                       <RotateCcw size={12} />
                     </button>
-                    <button onClick={() => deleteSnapshot(snap.id)} title="Delete" disabled={acting === snap.id}
+                    <button onClick={() => deleteSnapshot(snap.id)} title={t('shared.versions.delete')} aria-label={t('shared.versions.delete')} disabled={acting === snap.id}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 3, display: 'flex' }}>
                       <Trash2 size={12} />
                     </button>

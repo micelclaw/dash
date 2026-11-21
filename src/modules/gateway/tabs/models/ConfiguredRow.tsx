@@ -12,6 +12,8 @@
 
 import { Star, Cpu, Image, Undo2, X, SlidersHorizontal } from 'lucide-react';
 import { getProviderIcon } from '@/config/provider-icons';
+import { useGatewayStore } from '@/stores/gateway.store';
+import { canonicalModelAddKey } from '@/stores/gateway-model-add.store';
 import { AgentAvatar } from '@/components/shared/AgentAvatar';
 import type { ManagedAgent } from '@/modules/agents/types';
 import { StatusPill } from '../../components/StatusPill';
@@ -61,6 +63,12 @@ export function ConfiguredRow({ model, isMobile, isHovered, onHover, agents, ass
   // testear: se conservan esos warnings y se oculta el TestButton.
   const testable = model.status !== 'no_auth' && !model.orphan;
   const modelKey = model.id || `${model.provider}/${model.model}`;
+  const removal = useGatewayStore(state => state.removalOperation);
+  const checkRemoval = useGatewayStore(state => state.checkRemovalOperation);
+  const modelIdentity = canonicalModelAddKey(modelKey);
+  const queuedForModel = useGatewayStore(state => !!modelIdentity && state.queuedRemovals.some(key => canonicalModelAddKey(key) === modelIdentity));
+  const removalForModel = modelIdentity && removal?.models.some(key => canonicalModelAddKey(key) === modelIdentity) ? removal : null;
+  const removalPending = removalQueued || queuedForModel || !!removalForModel;
   const assignedIds = new Set(assignedAgents.map((a) => a.id));
   const assignable = !model.orphan && model.status !== 'no_auth';
 
@@ -193,9 +201,9 @@ export function ConfiguredRow({ model, isMobile, isHovered, onHover, agents, ass
       {/* Actions — también en columnas fijas (desktop): Test encima de Test,
           Editar encima de Editar, Set Default encima de Set Default… */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, ...(isMobile ? { width: '100%', flexWrap: 'wrap' as const } : {}) }}>
-        <Slot w={isMobile ? undefined : 30}><AaLinkButton slug={aaSlug} /></Slot>
+        <Slot w={isMobile ? undefined : 30}>{!removalPending && <AaLinkButton slug={aaSlug} />}</Slot>
         <Slot w={isMobile ? undefined : 66}>
-          {onTest && testable ? (
+          {onTest && testable && !removalPending ? (
             <TestButton
               onClick={() => onTest(model.id || `${model.provider}/${model.model}`)}
               loading={!!isTesting}
@@ -203,7 +211,7 @@ export function ConfiguredRow({ model, isMobile, isHovered, onHover, agents, ass
           ) : null}
         </Slot>
         <Slot w={isMobile ? undefined : 78}>
-          {model.provider === 'ollama' && onEditOllama ? (
+          {model.provider === 'ollama' && onEditOllama && !removalPending ? (
             <ActionButton
               icon={<SlidersHorizontal size={12} />}
               label="Editar"
@@ -214,7 +222,7 @@ export function ConfiguredRow({ model, isMobile, isHovered, onHover, agents, ass
           ) : null}
         </Slot>
         <Slot w={isMobile ? undefined : 96}>
-          <AssignAgentButton
+          {!removalPending && <AssignAgentButton
             agents={agents}
             assignedAgentIds={assignedIds}
             disabled={!assignable}
@@ -223,12 +231,20 @@ export function ConfiguredRow({ model, isMobile, isHovered, onHover, agents, ass
               : 'Provider sin credencial — añade su API key primero'}
             assigningAgentId={assigning?.model === modelKey ? assigning.agentId : null}
             onAssign={(agent) => onAssignAgent(agent, model)}
-          />
+          />}
         </Slot>
         <Slot w={isMobile ? undefined : 92}>
           {/* El default no se puede borrar desde aquí (el backend no reasigna
               agents.defaults.model.primary — quedaría un puntero roto). */}
-          {model.is_default ? null : removalQueued ? (
+          {removalForModel?.state === 'preparing' ? (
+            <ActionButton icon={<Undo2 size={12} />} label="Deshacer" loading={false} onClick={() => onUndoRemove(modelKey)} variant="secondary" />
+          ) : removalForModel?.state === 'running' ? (
+            <button type="button" disabled style={{ background: 'transparent', border: 0, color: 'var(--text-dim)' }}>Retirando…</button>
+          ) : removalForModel?.state === 'uncertain' && (removalForModel.canReconcile === false || (removalForModel.code === 'MODEL_OPERATION_MODEL_BUSY' && !removalForModel.canonicalId)) ? (
+            <span role="status" style={{ fontSize: '0.75rem' }}>{removalForModel.message}</span>
+          ) : removalForModel?.state === 'uncertain' ? (
+            <ActionButton icon={null} label="Comprobar retirada" loading={false} onClick={() => { void checkRemoval(); }} variant="secondary" />
+          ) : model.is_default ? null : (removalQueued || queuedForModel) ? (
             <ActionButton
               icon={<Undo2 size={12} />}
               label="Deshacer"
