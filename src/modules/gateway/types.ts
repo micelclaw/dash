@@ -464,6 +464,9 @@ export interface CronRun {
 // ─── Usage ──────────────────────────────────────────────────────────
 
 export interface GatewayUsage {
+  observed_at?: string;
+  period_start?: string;
+  today_reported?: boolean;
   total_messages: number;
   total_tokens: number;
   total_cost_usd: number;

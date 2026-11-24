@@ -25,6 +25,11 @@ import { ChannelConfigPanel } from '../components/ChannelConfigPanel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayChannel } from '../types';
 import { useI18n } from '@/i18n';
+import { useSearchParams } from 'react-router';
+import { useAuthStore } from '@/stores/auth.store';
+import { NativeOpenclawHost } from '@/components/openclaw/NativeOpenclawHost';
+import { api } from '@/services/api';
+import { NATIVE_HOST_ADAPTER_DIGEST, type NativeChannelWrite, type NativeHostTarget } from '@/services/openclaw-host-bridge';
 
 const CHANNEL_ICONS: Record<string, typeof MessageCircle> = {
   telegram: Send,
@@ -49,7 +54,49 @@ const CHANNEL_COLORS: Record<string, string> = {
   mattermost: '#0058CC',
 };
 
+const nativeChannelTarget = async (): Promise<NativeHostTarget> => ({ surface: 'channels' });
+async function saveNativeChannel({ channelId, ...draft }: NativeChannelWrite, signal: AbortSignal) {
+  if (draft.method === 'wizard.confirm') {
+    const { accountId, baseHash, sessionId, stepId } = draft;
+    const { data } = await api.post<{ data: {
+      done: true;
+      status: 'done';
+      scoped_channel_commit: {
+        base_hash: string;
+        hash: string;
+        accounts: { channel: string; account_id: string }[];
+      };
+    } }>(
+      `/gateway/channels/${encodeURIComponent(channelId)}/wizard-commit`,
+      { accountId, baseHash, sessionId, stepId }, { timeout: 68_000, signal });
+    const receipt = data.scoped_channel_commit;
+    return {
+      done: data.done,
+      status: data.status,
+      scopedChannelCommit: {
+        baseHash: receipt.base_hash,
+        hash: receipt.hash,
+        accounts: receipt.accounts.map(account => ({ channel: account.channel, accountId: account.account_id })),
+      },
+    };
+  }
+  const { data } = await api.post<{ data: unknown }>(`/gateway/channels/${encodeURIComponent(channelId)}/native-config`,
+    draft, { timeout: 68_000, signal });
+  return data;
+}
+
 export function ChannelsTab() {
+  const [route] = useSearchParams();
+  const role = useAuthStore((state) => state.user?.role);
+  const useNative = import.meta.env.DEV && route.get('native') === '1';
+  if (useNative && (role === 'admin' || role === 'owner')) {
+    return <NativeOpenclawHost artifactDigest={NATIVE_HOST_ADAPTER_DIGEST}
+      title="Canales nativos de Gateway" resolveTarget={nativeChannelTarget} onChannelDraft={saveNativeChannel} />;
+  }
+  return <ExistingChannelsTab />;
+}
+
+function ExistingChannelsTab() {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const { channels, channelsLoading, channelsError, fetchChannels } = useGatewayStore();

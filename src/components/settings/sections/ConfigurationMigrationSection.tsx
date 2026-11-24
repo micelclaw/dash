@@ -266,7 +266,7 @@ export function ConfigurationMigrationSection() {
           <p className="text-xs text-[var(--text-muted)]">Abrir y previsualizar no modifica tus ajustes.</p>
           <Button type="submit" disabled={state.busy || !file || !password}>{state.busy && <Loader2 className="h-4 w-4 animate-spin" />}Abrir y descifrar</Button>
         </form>}
-        {(!importing || preview) && <fieldset disabled={state.busy || state.operation?.status === 'applying' || state.operation?.status === 'completed'}>
+        {(!importing || preview) && <fieldset disabled={state.busy || state.operation?.status === 'applying' || (importing && state.operation?.status === 'completed')}>
           <legend className="mb-3 text-sm font-medium">Bloques de configuración</legend>
           <div className="grid gap-3 sm:grid-cols-2">{blocks.map(block => {
             const absent = 'present' in block && !block.present;

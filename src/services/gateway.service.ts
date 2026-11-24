@@ -157,12 +157,15 @@ function validateGatewayOperation(value: GatewayOperation): GatewayOperation {
 
 // ─── Channels ───────────────────────────────────────────────────────
 
-export async function getChannels(): Promise<GatewayChannel[]> {
-  const res = await api.get<{ data: { channels: GatewayChannel[] } | GatewayChannel[] }>('/gateway/channels');
+export type GatewayChannelObservation = { connected: number; observed_at: string };
+export async function getChannels(live = false): Promise<{ channels: GatewayChannel[]; runtime: GatewayChannelObservation | null }> {
+  const res = await api.get<{ data: { channels: GatewayChannel[]; runtime?: GatewayChannelObservation | null } | GatewayChannel[] }>(
+    '/gateway/channels', live ? { runtime: 'true' } : undefined,
+  );
   const d = res.data;
-  if (Array.isArray(d)) return d;
-  if (d && typeof d === 'object' && 'channels' in d) return (d as { channels: GatewayChannel[] }).channels;
-  return [];
+  if (Array.isArray(d)) return { channels: d, runtime: null };
+  if (Array.isArray(d?.channels)) return { channels: d.channels, runtime: d.runtime ?? null };
+  throw new Error('El inventario de canales no está disponible.');
 }
 
 export async function addChannel(params: {
@@ -739,24 +742,19 @@ export async function rescueProviderKey(provider: string): Promise<{ rescued: bo
 // ─── Sessions ───────────────────────────────────────────────────────
 
 export async function getSessions(verbose = false): Promise<GatewaySession[]> {
-  try {
-    const res = await api.get<{ data: GatewaySession[] | { sessions: GatewaySession[] } }>(
-      '/gateway/sessions',
-      { verbose: verbose ? 'true' : undefined },
-    );
-    const d = res.data;
-    if (Array.isArray(d)) return d;
-    if (d && typeof d === 'object' && 'sessions' in d) return (d as { sessions: GatewaySession[] }).sessions;
-    return [];
-  } catch {
-    return [];
-  }
+  const res = await api.get<{ data: GatewaySession[] | { sessions: GatewaySession[] } }>(
+    '/gateway/sessions',
+    { verbose: verbose ? 'true' : undefined },
+  );
+  if (Array.isArray(res.data)) return res.data;
+  if (Array.isArray(res.data?.sessions)) return res.data.sessions;
+  throw new Error('El inventario de sesiones no está disponible.');
 }
 
 // ─── Usage ──────────────────────────────────────────────────────────
 
-export async function getUsage(): Promise<GatewayUsage> {
-  const res = await api.get<{ data: GatewayUsage }>('/gateway/usage');
+export async function getUsage(): Promise<GatewayUsage | null> {
+  const res = await api.get<{ data: GatewayUsage | null }>('/gateway/usage');
   return res.data;
 }
 

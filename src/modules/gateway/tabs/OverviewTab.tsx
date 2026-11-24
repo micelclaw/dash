@@ -13,13 +13,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Radio, RotateCw, Play, Square,
+  Radio, Play,
   Cable, MessageSquare, Bot,
   Stethoscope, ShieldCheck,
   RefreshCw, DollarSign, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { StatusPill } from '../components/StatusPill';
@@ -27,6 +27,22 @@ import { MetricCard } from '../components/MetricCard';
 import { HealthCheckList } from '../components/HealthCheckList';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { useAuthStore } from '@/stores/auth.store';
+import { NativeOpenclawHost } from '@/components/openclaw/NativeOpenclawHost';
+import { NATIVE_HOST_ADAPTER_DIGEST, type NativeHostTarget } from '@/services/openclaw-host-bridge';
+
+const connectionTarget = async (): Promise<NativeHostTarget> => ({ surface: 'connection' });
+type DoctorReport = {
+  blocked: boolean; incomplete: boolean; passed: boolean;
+  inspections_reported: number; checks_skipped: number | null;
+  severities: { info: number; warning: number; error: number };
+};
+type Audit = {
+  summary: { critical: number; warn: number; info: number };
+  findings: Array<{ checkId: string; severity: string; title: string; detail: string; remediation?: string }>;
+};
+const diagnosedAt = (value: string) => new Date(value).toLocaleTimeString('es-ES');
 
 const safeUncertainOperationErrors = new Set([
   'No se puede guardar el seguimiento en esta pestaña. No se ha enviado ninguna acción.',
@@ -39,22 +55,31 @@ const safeUncertainOperationErrors = new Set([
 ]);
 
 export function OverviewTab() {
+  const user = useAuthStore((state) => state.user);
+  const generation = useAuthStore((state) => state.sessionGeneration);
+  if (user?.role !== 'owner' && user?.role !== 'admin') return <p role="status" className="p-4">Se necesita acceso de administración para ver Gateway.</p>;
+  return <GatewayOverview key={`${user.id}:${generation}:${user.role}`} />;
+}
+
+function GatewayOverview() {
   const isMobile = useIsMobile();
   const {
-    status, health, usage, models, channels, sessions, channelsCheckedAt, sessionsCheckedAt, modelsCheckedAt, modelsLoading, modelsError, statusLoading, statusError,
+    status, health, usage, usageLoading, usageError, models, channelsRuntime, sessions, sessionsCheckedAt, modelsCheckedAt,
+    channelsError, channelsLoading, sessionsError, sessionsLoading, modelsLoading, modelsError, statusLoading, statusError,
     gatewayOperation, pendingGatewayRequestId, operationUncertain, operationError,
     fetchSnapshot, fetchUsage, fetchModels, fetchChannels, fetchSessions, checkGatewayOperation,
-    gatewayStart, gatewayStop, gatewayRestart, gatewayRecover,
+    gatewayStart,
   } = useGatewayStore();
 
   const navigate = useNavigate();
   const [refreshHover, setRefreshHover] = useState(false);
-  const [restartConfirmationOpen, setRestartConfirmationOpen] = useState(false);
-  const [doctorOutput, setDoctorOutput] = useState<string | null>(null);
+  const [doctorConfirmationOpen, setDoctorConfirmationOpen] = useState(false);
+  const [doctorReport, setDoctorReport] = useState<DoctorReport | null>(null);
   const [doctorLoading, setDoctorLoading] = useState(false);
-  const [doctorHasFixes, setDoctorHasFixes] = useState(false);
-  const [auditResult, setAuditResult] = useState<{ summary: { critical: number; warn: number; info: number }; findings: Array<{ check_id: string; severity: string; title: string; detail: string; remediation?: string }> } | null>(null);
+  const [auditResult, setAuditResult] = useState<Audit | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [auditConfirmationOpen, setAuditConfirmationOpen] = useState(false);
+  const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
 
   // Poll status every 15s using snapshot (fast, cached)
   useEffect(() => {
@@ -71,26 +96,55 @@ export function OverviewTab() {
     // Inventories load independently, and a remount does not duplicate an
     // outstanding read or present a prior list as a current availability check.
     if (!current.modelsLoading && !current.modelsCheckedAt) void fetchModels();
-    if (!current.channelsLoading && !current.channelsCheckedAt) void fetchChannels();
+    void fetchChannels(true);
     if (!current.sessionsLoading && !current.sessionsCheckedAt) void fetchSessions();
   }, [fetchUsage, fetchModels, fetchChannels, fetchSessions]);
 
-  const handleAction = async (action: 'start' | 'recover' | 'stop' | 'restart') => {
-    const operation = action === 'start' ? await gatewayStart() : action === 'recover' ? await gatewayRecover()
-      : action === 'stop' ? await gatewayStop() : await gatewayRestart();
+  const startGateway = async () => {
+    const operation = await gatewayStart();
     if (operation?.state === 'succeeded') toast.success(operation.message);
     // An accepted/in-progress request is shown below; it is never a success toast.
   };
   const checkAgain = async () => {
     if (pendingGatewayRequestId || gatewayOperation?.state === 'running' || operationUncertain) await checkGatewayOperation();
-    await fetchSnapshot();
+    await Promise.all([fetchSnapshot(), fetchUsage(), fetchModels(), fetchChannels(true), fetchSessions()]);
   };
-  const availability = status?.availability === 'available' && status.stale ? 'unknown' : status?.availability ?? 'unknown';
-  const isRunning = status?.running === true;
+  const runDoctor = async () => {
+    setDoctorConfirmationOpen(false);
+    setDoctorLoading(true);
+    setDoctorReport(null);
+    setAuditResult(null);
+    setDiagnosticError(null);
+    try {
+      const { data } = await api.post<{ data: { report: DoctorReport } }>('/gateway/doctor/inspect', undefined, { timeout: 70_000 });
+      setDoctorReport(data.report);
+    } catch (error) {
+      setDiagnosticError(error instanceof ApiError && (error.status === 404 || error.code === 'DOCTOR_VERSION_UNREVIEWED')
+        ? 'La versión activa no ofrece un diagnóstico de lectura verificado.'
+        : 'No se pudo ejecutar Doctor.');
+    } finally {
+      setDoctorLoading(false);
+    }
+  };
+  const runAudit = async () => {
+    setAuditConfirmationOpen(false);
+    setAuditLoading(true);
+    setAuditResult(null);
+    setDoctorReport(null);
+    setDiagnosticError(null);
+    try {
+      const { data } = await api.get<{ data: Audit }>('/gateway/security-audit', undefined, { timeout: 35_000 });
+      setAuditResult(data);
+    } catch {
+      setDiagnosticError('No se pudo completar la auditoría de seguridad.');
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+  const availability = statusError || status?.stale ? 'unknown' : status?.availability ?? 'unknown';
   const operational = availability === 'available';
   const busy = !!pendingGatewayRequestId || gatewayOperation?.state === 'running' || operationUncertain;
   const needsAction = ['configuration_required', 'pairing_required', 'auth_required'].includes(availability);
-  const canRequestRestart = isRunning && !status?.stale && (operational || availability === 'disconnected') && !busy;
   const safeUncertainError = operationError && safeUncertainOperationErrors.has(operationError) && operationError !== gatewayOperation?.message ? operationError : null;
   const stateLabel = gatewayOperation?.state === 'running' ? 'Recuperación en curso'
     : availability === 'available' ? 'Disponible'
@@ -101,7 +155,7 @@ export function OverviewTab() {
   const explanation = status?.message ?? (availability === 'available'
     ? 'Gateway responde a una consulta autenticada. La disponibilidad de los modelos se comprueba por separado.'
     : availability === 'stopped' ? 'El servicio está detenido. Puedes iniciarlo desde aquí.'
-    : availability === 'disconnected' ? 'El proceso está iniciado, pero Core no ha confirmado la conexión. Puedes volver a conectarlo.'
+    : availability === 'disconnected' ? 'El proceso está iniciado, pero Core no ha confirmado la conexión. Puedes volver a comprobarla.'
     : availability === 'pairing_required' ? 'La identidad interna de Core necesita revisión. Revisa el dispositivo antes de autorizarlo.'
     : availability === 'auth_required' ? 'Gateway necesita autorización. Revisa su configuración; reconectar no cambia los permisos.'
     : availability === 'configuration_required' ? 'La configuración no es válida o todavía no está preparada. Puedes revisarla en Settings.'
@@ -117,17 +171,18 @@ export function OverviewTab() {
   const defaultIsConfigured = !!defaultModelId &&
     models.some(m => m.id === defaultModelId || m.model === defaultModelId);
   const defaultModelValue = !defaultModelId
-    ? 'None'
+    ? modelInventoryCurrent ? 'Sin configurar' : 'No disponible'
     : !modelInventoryCurrent
       ? defaultModelId
       : defaultIsConfigured
       ? defaultModelId
-      : `${defaultModelId} (invalid)`;
+      : `${defaultModelId} (no configurado)`;
   const defaultModelSubtitle = !modelInventoryCurrent ? (modelsCheckedAt ? `Último inventario: ${new Date(modelsCheckedAt).toLocaleString()}` : 'Inventario sin comprobar') : !defaultModelId
-    ? `${configuredCount} configured`
+    ? `${configuredCount} configurados`
     : defaultIsConfigured
-      ? `${configuredCount} configured`
-      : 'Not in configured list';
+      ? `${configuredCount} configurados`
+      : 'Ausente del inventario';
+  const usageReported = usage?.today_reported === true && !!usage.period_start && !!usage.observed_at;
 
   return (
     <ScrollArea style={{ height: '100%' }}>
@@ -136,10 +191,11 @@ export function OverviewTab() {
         display: 'flex',
         flexDirection: 'column',
         gap: 20,
-        maxWidth: 1100,
+        maxWidth: 1280,
+        marginInline: 'auto',
       }}>
         {/* ─── Status Hero ─────────────────────────────────── */}
-        <div style={{
+        <section aria-label="Estado del servicio Gateway" style={{
           background: 'var(--card)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)',
@@ -187,8 +243,8 @@ export function OverviewTab() {
                 }}>
                   {status?.version && <span>v{status.version}</span>}
                   {status?.service_status && <span>{status.service_status}</span>}
-                  {status?.port && <span>Port: {status.port}</span>}
-                  {status?.bind && <span>Bind: {status.bind}</span>}
+                  {status?.port && <span>Puerto {status.port}</span>}
+                  {status?.bind && <span>Escucha en {status.bind}</span>}
                 </div>
               </div>
             </div>
@@ -218,19 +274,10 @@ export function OverviewTab() {
               </button>
 
               {availability === 'stopped' && (
-                <ActionButton icon={Play} label="Iniciar" onClick={() => void handleAction('start')} loading={busy} color="var(--success)" />
-              )}
-              {availability === 'disconnected' && (
-                <ActionButton icon={Cable} label="Reconectar" onClick={() => void handleAction('recover')} loading={busy} color="var(--amber)" />
+                <ActionButton icon={Play} label="Iniciar" onClick={() => void startGateway()} loading={busy} color="var(--success)" />
               )}
               {needsAction && (
                 <ActionButton icon={ShieldCheck} label="Resolver el problema" onClick={() => { void navigate(availability === 'pairing_required' ? '/gateway?tab=devices' : '/settings?group=connectivity&section=gateway-auth'); }} loading={false} color="var(--warning)" />
-              )}
-              {(operational || availability === 'disconnected') && isRunning && !status?.stale && (
-                <ActionButton icon={RotateCw} label="Reiniciar" onClick={() => setRestartConfirmationOpen(true)} loading={busy} color="var(--warning)" />
-              )}
-              {operational && isRunning && (
-                <ActionButton icon={Square} label="Stop" onClick={() => void handleAction('stop')} loading={busy} color="var(--error)" />
               )}
             </div>
           </div>
@@ -244,19 +291,12 @@ export function OverviewTab() {
               {operationUncertain ? <>{safeUncertainError !== 'No se puede guardar el seguimiento en esta pestaña. No se ha enviado ninguna acción.' && <p>El resultado todavía no se ha confirmado. Usa Comprobar de nuevo; no se repetirá la operación automáticamente.</p>}{safeUncertainError && <p>{safeUncertainError}</p>}</> : operationError && <p>{operationError}</p>}
             </div>
           )}
-          <Dialog open={restartConfirmationOpen} onOpenChange={setRestartConfirmationOpen}>
-            <DialogContent style={{ width: 'min(90vw, 440px)' }}>
-              <DialogTitle>¿Reiniciar Gateway?</DialogTitle>
-              <DialogDescription>
-                La conexión se interrumpirá brevemente. Antes de continuar, comprueba que no haya cambios pendientes o de resultado desconocido; Micelclaw no puede verificarlos todos. El reinicio no vuelve a enviar esos cambios.
-              </DialogDescription>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-                <button style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', cursor: 'pointer' }} onClick={() => setRestartConfirmationOpen(false)}>Cancelar</button>
-                <button style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', border: 0, background: 'var(--warning)', color: 'var(--card)', cursor: canRequestRestart ? 'pointer' : 'not-allowed', opacity: canRequestRestart ? 1 : 0.6 }} disabled={!canRequestRestart} onClick={() => { if (!canRequestRestart) return; setRestartConfirmationOpen(false); void handleAction('restart'); }}>Confirmar reinicio</button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+        </section>
+
+        {availability !== 'stopped' && <div data-testid="gateway-native-connection" className="min-w-0 overflow-hidden rounded-md border has-[iframe]:h-[min(1100px,max(600px,80dvh))]">
+          <NativeOpenclawHost artifactDigest={NATIVE_HOST_ADAPTER_DIGEST}
+            resolveTarget={connectionTarget} title="Conexión nativa de Gateway" />
+        </div>}
 
         {/* ─── Metrics Grid ────────────────────────────────── */}
         <div style={{
@@ -268,40 +308,39 @@ export function OverviewTab() {
         }}>
           <MetricCard
             icon={Cable}
-            label="Channels"
-            value={channelsCheckedAt ? channels.filter(channel => channel.status === 'connected').length : '—'}
-            subtitle={channelsCheckedAt ? `Conectados · lista ${new Date(channelsCheckedAt).toLocaleTimeString()}` : 'Inventario sin comprobar'}
+            label="Canales"
+            value={!channelsError && channelsRuntime ? channelsRuntime.connected : '—'}
+            subtitle={channelsError ? 'Error de lectura' : channelsLoading ? 'Comprobando…' : channelsRuntime
+              ? `Conectados · ${diagnosedAt(channelsRuntime.observed_at)}` : 'La conexión de los canales no está confirmada'}
             accentColor="#06b6d4"
           />
           <MetricCard
             icon={MessageSquare}
             label="Sesiones recientes"
-            value={sessionsCheckedAt ? sessions.length : '—'}
-            subtitle={sessionsCheckedAt ? `Lista ${new Date(sessionsCheckedAt).toLocaleTimeString()}` : 'Inventario sin comprobar'}
+            value={sessionsCheckedAt && !sessionsError ? sessions.length : '—'}
+            subtitle={sessionsError ? 'Error de lectura' : sessionsLoading ? 'Comprobando…' : sessionsCheckedAt ? `Sesiones de la lista recibida · ${diagnosedAt(sessionsCheckedAt)}` : 'Inventario sin comprobar'}
             accentColor="#8b5cf6"
           />
           <MetricCard
             icon={Bot}
-            label="Default Model"
+            label="Modelo predeterminado"
             value={defaultModelValue}
             subtitle={defaultModelSubtitle}
             accentColor={modelInventoryCurrent && defaultModelId && !defaultIsConfigured ? '#f43f5e' : '#f59e0b'}
           />
           <MetricCard
             icon={DollarSign}
-            label="Usage Today"
-            value={usage?.total_tokens != null
-              ? `${(usage.total_tokens / 1000).toFixed(1)}k`
-              : '—'}
-            subtitle={usage?.total_cost_usd != null
-              ? `$${usage.total_cost_usd.toFixed(4)}`
-              : undefined}
+            label="Consumo del día UTC"
+            value={usageReported ? `${usage.total_tokens.toLocaleString('es-ES')} tokens` : '—'}
+            subtitle={usageReported
+              ? `${usage.total_cost_usd.toLocaleString('es-ES', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })} · ${usage.period_start} · ${diagnosedAt(usage.observed_at!)}`
+              : usageLoading ? 'Comprobando…' : usageError ? 'Error de lectura' : 'Sin datos de consumo para el día'}
             accentColor="#10b981"
           />
         </div>
 
         {/* ─── Health Checks ───────────────────────────────── */}
-        {health && health.checks.length > 0 && (
+        {health && (
           <div>
             <div style={{
               display: 'flex',
@@ -316,10 +355,12 @@ export function OverviewTab() {
                 color: 'var(--text)',
                 fontFamily: 'var(--font-sans)',
               }}>
-                Health Checks
+                Salud de Core, configuración y Gateway
               </span>
               <StatusPill status={health.status} size="sm" />
             </div>
+            {health.checked_at && <p className="mb-2 text-xs text-muted-foreground">{health.stale ? 'Datos anteriores' : 'Comprobado'} · {diagnosedAt(health.checked_at)}</p>}
+            {health.error && <p className="mb-2 text-sm text-muted-foreground">No se pudo verificar la salud de todos los componentes.</p>}
             <HealthCheckList checks={health.checks} />
           </div>
         )}
@@ -334,137 +375,64 @@ export function OverviewTab() {
             display: 'block',
             marginBottom: 10,
           }}>
-            Quick Actions
+            Diagnósticos
           </span>
           <div style={{
             display: 'flex',
             gap: 8,
             flexWrap: 'wrap',
           }}>
-            <QuickActionBtn icon={Stethoscope} label="Run Doctor" loading={doctorLoading} onClick={async () => {
-              setDoctorLoading(true);
-              setDoctorOutput(null);
-              setAuditResult(null);
-              try {
-                const res = await api.post<{ data: { output: string; has_fixes: boolean } }>('/gateway/doctor');
-                const d = (res as any).data ?? res;
-                setDoctorOutput(d.output);
-                setDoctorHasFixes(d.has_fixes);
-              } catch { toast.error('Failed to run doctor'); }
-              finally { setDoctorLoading(false); }
-            }} />
-            <QuickActionBtn icon={ShieldCheck} label="Security Audit" loading={auditLoading} onClick={async () => {
-              setAuditLoading(true);
-              setAuditResult(null);
-              setDoctorOutput(null);
-              try {
-                const res = await api.get<{ data: { summary: any; findings: any[] } }>('/gateway/security-audit');
-                setAuditResult((res as any).data ?? res);
-              } catch { toast.error('Failed to run security audit'); }
-              finally { setAuditLoading(false); }
-            }} />
+            <QuickActionBtn icon={Stethoscope} label="Ejecutar Doctor" loading={doctorLoading || auditLoading} onClick={() => setDoctorConfirmationOpen(true)} />
+            <QuickActionBtn icon={ShieldCheck} label="Auditoría de seguridad" loading={auditLoading || doctorLoading} onClick={() => setAuditConfirmationOpen(true)} />
           </div>
         </div>
 
-        {/* Doctor output panel */}
-        {doctorOutput && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginBottom: 6,
-            }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Doctor Diagnostic
-              </span>
-              {doctorHasFixes && (
-                <button
-                  onClick={async () => {
-                    setDoctorLoading(true);
-                    try {
-                      const res = await api.post<{ data: { output: string; has_fixes: boolean } }>('/gateway/doctor', undefined, { timeout: 60000 } as any);
-                      const d = (res as any).data ?? res;
-                      setDoctorOutput(d.output);
-                      setDoctorHasFixes(d.has_fixes);
-                      toast.success('Fixes applied');
-                    } catch { toast.error('Failed to apply fixes'); }
-                    finally { setDoctorLoading(false); }
-                  }}
-                  style={{
-                    padding: '4px 10px', fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
-                    background: 'var(--amber)', color: '#000', border: 'none',
-                    borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  Apply Fixes
-                </button>
-              )}
+        <Dialog open={doctorConfirmationOpen} onOpenChange={setDoctorConfirmationOpen}>
+          <DialogContent style={{ width: 'min(90vw, 440px)' }}>
+            <DialogTitle>¿Ejecutar Doctor?</DialogTitle>
+            <DialogDescription>
+              Se inspeccionará la configuración con el diagnóstico de lectura de la versión activa.
+            </DialogDescription>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDoctorConfirmationOpen(false)}>Cancelar</Button>
+              <Button onClick={() => void runDoctor()} disabled={doctorLoading}>Ejecutar Doctor</Button>
             </div>
-            <div style={{
-              background: '#0d0d0d', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)', padding: '10px 14px',
-              maxHeight: 320, overflowY: 'auto', overflowX: 'auto',
-              fontFamily: 'var(--font-mono)', fontSize: '0.625rem',
-              lineHeight: 1.5, color: 'var(--text-dim)', whiteSpace: 'pre-wrap',
-            }}>
-              {doctorOutput}
-            </div>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
 
-        {/* Security Audit results */}
+        <Dialog open={auditConfirmationOpen} onOpenChange={setAuditConfirmationOpen}>
+          <DialogContent>
+            <DialogTitle>¿Ejecutar la auditoría de seguridad?</DialogTitle>
+            <DialogDescription>Se inspeccionará la configuración y se comprobará la conexión con Gateway.</DialogDescription>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAuditConfirmationOpen(false)}>Cancelar</Button>
+              <Button onClick={() => void runAudit()}>Ejecutar auditoría</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {diagnosticError && <p role="alert" className="text-sm text-destructive">{diagnosticError}</p>}
+        {doctorReport && (
+          <section role="status" className="rounded-md border p-3 text-sm">
+            <h3 className="font-semibold">Informe de Doctor</h3>
+            <p>{doctorReport.blocked ? 'Inspección bloqueada' : doctorReport.incomplete
+              ? 'Inspección incompleta' : doctorReport.passed ? 'Comprobación completada' : 'Hallazgos que requieren revisión'}</p>
+            <p>{doctorReport.inspections_reported} comprobaciones · {doctorReport.checks_skipped ?? 0} omitidas · {doctorReport.severities.error} errores · {doctorReport.severities.warning} avisos</p>
+          </section>
+        )}
         {auditResult && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginBottom: 6,
-            }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Security Audit — {auditResult.summary.critical} critical · {auditResult.summary.warn} warnings · {auditResult.summary.info} info
-              </span>
-              {auditResult.findings.length > 0 && (
-                <button
-                  onClick={async () => {
-                    setAuditLoading(true);
-                    try {
-                      const res = await api.post<{ data: any }>('/gateway/security-audit/fix');
-                      setAuditResult((res as any).data ?? res);
-                      toast.success('Safe fixes applied');
-                    } catch { toast.error('Failed to apply fixes'); }
-                    finally { setAuditLoading(false); }
-                  }}
-                  style={{
-                    padding: '4px 10px', fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
-                    background: 'var(--amber)', color: '#000', border: 'none',
-                    borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
-                  }}
-                >
-                  Apply Safe Fixes
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {auditResult.findings.map((f, i) => (
-                <div key={i} style={{
-                  padding: '8px 12px', background: 'var(--surface)',
-                  borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
-                  fontFamily: 'var(--font-sans)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: f.severity === 'critical' ? '#f43f5e' : f.severity === 'warn' ? '#f97316' : '#3b82f6',
-                    }} />
-                    <span style={{ color: 'var(--text)', fontWeight: 500 }}>{f.title}</span>
-                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginLeft: 'auto', textTransform: 'uppercase' }}>{f.severity}</span>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{f.detail}</div>
-                  {f.remediation && (
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--amber)', marginTop: 4 }}>Fix: {f.remediation}</div>
-                  )}
-                </div>
+          <section className="space-y-2 text-sm">
+            <h3 className="font-semibold">Resultado de la auditoría de seguridad</h3>
+            <p>{auditResult.summary.critical} críticos · {auditResult.summary.warn} avisos · {auditResult.summary.info} informativos</p>
+            <ul className="space-y-2">
+              {auditResult.findings.map((finding, index) => (
+                <li key={finding.checkId + index} className="break-words rounded-md border p-3">
+                  <span className="font-semibold">{finding.title}</span>
+                  <p className="whitespace-pre-wrap text-muted-foreground">{finding.detail}</p>
+                  {finding.remediation && <p>{finding.remediation}</p>}
+                </li>
               ))}
-            </div>
-          </div>
+            </ul>
+          </section>
         )}
       </div>
     </ScrollArea>

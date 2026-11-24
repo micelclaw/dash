@@ -4,16 +4,17 @@ Todos los ficheros de este directorio son **logos de terceros**, propiedad de su
 respectivos dueños. Se usan aquí para **identificar visualmente** el proveedor de
 correo/calendario/contactos que el usuario está conectando en la pantalla de
 integraciones de Micelclaw (p. ej. "Conectar con iCloud", tarjeta de Gmail en la
-lista de proveedores) — es **uso descriptivo / nominativo estándar** (igual que un
-navegador muestra el favicon de un sitio, o un cliente de correo el logo del
-proveedor SMTP), **no promocional**: Micelclaw no está afiliado, patrocinado ni
+lista de proveedores) — intención descriptiva y no promocional: Micelclaw no está afiliado, patrocinado ni
 respaldado por ninguna de estas marcas.
 
-Se descargaron **una sola vez** (script `dash/scripts/fetch-brand-icons.mjs`) y se
+Se registraron descargas mediante el script `dash/scripts/fetch-brand-icons.mjs` y se
 versionan en el repo — nada se sirve desde un CDN en tiempo de ejecución (CSP /
 offline-first).
 
-Regenerar: `node scripts/fetch-brand-icons.mjs` desde `dash/`.
+El script `node scripts/fetch-brand-icons.mjs` descarga URLs externas y sobrescribe
+archivos uno a uno: un fallo puede dejar una actualización parcial. Las URLs no fijan
+revisión ni se comparan hashes, por lo que no acredita reproducción idéntica. Revisar
+procedencia, condiciones y autorización antes de usarlo.
 
 ---
 
@@ -67,26 +68,31 @@ relicenciar las marcas. Servido vía jsDelivr
 Estos tres **no** estaban en dashboard-icons ni selfh.st con calidad/actualidad
 aceptable (ver sección "Investigación" más abajo), así que se resolvieron yendo
 directamente a los assets públicos que cada proveedor sirve para su propia
-app/PWA — la fuente más autorizada posible, y explícitamente pensada por el
-proveedor para ser embebida por terceros (favicons/app-icons son recursos
-públicos de identificación, sin control de acceso ni robots.txt que lo prohíba).
+app/PWA. Que un recurso sea público o que `robots.txt` no lo prohíba no acredita
+autorización para redistribuirlo; procedencia y condiciones de uso externas quedan
+pendientes de revisión del titular.
 
 | Fichero | Proveedor | URL de origen | Qué es |
 |---|---|---|---|
-| `aol.png` | AOL (proveedor + correo) | `https://s.yimg.com/cv/apiv2/aolfp/images/favicon/v4/180.png` | apple-touch-icon 180×180 de aol.com (CDN de Yahoo Inc., dueño actual de la marca AOL). Fondo amarillo `#FFD800` + wordmark "AOL" en negro — identidad visual actual. |
-| `posteo.png` | Posteo (proveedor + correo) | `https://posteo.de/images/app-icons/android-chrome-512x512.png` | Icono 512×512 declarado en `posteo.de/site.webmanifest`. Círculo verde `#a4ce4e`-ish con la marca "//P." y punto naranja — identidad visual actual de Posteo. |
+| `aol.png` | AOL (proveedor + correo) | `https://s.yimg.com/cv/apiv2/aolfp/images/favicon/v4/180.png` | apple-touch-icon 180×180 de aol.com (CDN de Yahoo Inc., dueño actual de la marca AOL). Fondo amarillo `#FFD800` + wordmark "AOL" en negro — identidad visual descrita en la investigación histórica. |
+| `posteo.png` | Posteo (proveedor + correo) | `https://posteo.de/images/app-icons/android-chrome-512x512.png` | Icono 512×512 declarado en `posteo.de/site.webmanifest`. Círculo verde `#a4ce4e`-ish con la marca "//P." y punto naranja — identidad visual descrita entonces para Posteo. |
 | `webde.png` | WEB.DE (proveedor + correo) | `https://s.uicdn.com/uimag/1.0.0/assets/favicon/webde/android-chrome-512x512.png` | Icono 512×512 resuelto siguiendo el redirect de `web.de/apple-touch-icon.png` hasta el CDN de United Internet. Cuadrado amarillo `#FFD800` con la Puerta de Brandenburgo + wordmark "WEB.DE". |
 
 **Licencia/uso de estos tres:** logo de marca registrada de su respectivo dueño
 (AOL → Yahoo Inc.; Posteo → Posteo e.K.; WEB.DE → 1&1/United Internet). No hay
-licencia libre explícita — se usan bajo uso nominativo (identificar el servicio de
-un tercero al que el usuario se conecta), igual que el resto de logos de este
-directorio. Si en el futuro algún proveedor objeta el uso, sustituir por el
+licencia libre explícita acreditada aquí. Se usan para identificar el servicio, pero
+la admisibilidad y las condiciones de redistribución requieren revisión del titular. Si en el futuro algún proveedor objeta el uso, sustituir por el
 lettermark de fallback ya existente en el consumidor.
 
 ---
 
 ## No vendorizados a propósito (van por `simple-icons`, ya en package.json)
+
+Esta tabla recoge los cuatro proveedores examinados en la investigación original
+de correo/calendario/contactos; no es una lista completa de los consumidores actuales.
+El código inspeccionado también usa `simple-icons` para Todoist, Notion, Trello,
+TickTick, Asana, ClickUp y Jira. El código marca Notion y Disroot como riesgos de
+contraste; esta actualización no incluye una nueva prueba visual ni revisión legal.
 
 Estos cuatro **no tienen fichero** en este directorio — el componente consumidor
 los pinta por código con `import * as si from 'simple-icons'` y
@@ -102,7 +108,7 @@ de vendorizar un SVG aparte.
 | `disroot` | `siDisroot` | `#50162D` | Disroot |
 
 `simple-icons` es **CC0** (dominio público) — <https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md>.
-Sin roce de licencia con el resto del repo (propietario).
+La licencia del paquete no concede por sí sola derechos sobre las marcas representadas.
 
 ⚠️ **Nota de contraste (tema oscuro):** `disroot` (`#50162D`, granate muy oscuro)
 tiene una luminancia relativa baja, cercana a la de un fondo de UI oscuro típico
@@ -127,9 +133,10 @@ para él.
 fichero independiente ni en dashboard-icons ni en selfh.st/icons. Se probaron los
 slugs `outlook-calendar`, `microsoft-outlook-calendar`, `microsoft-people`,
 `microsoft-calendar`, `outlook`, `microsoft-contacts`, `microsoft-365-calendar`
-(los siete devuelven 404). El consumidor debe caer a `microsoft--outlook.svg` +
-un glifo pequeño superpuesto (calendario/contacto) para diferenciar el servicio,
-tal y como ya contempla el encargo original.
+(en la investigación histórica se anotaron siete respuestas 404). El consumidor inspeccionado usa `microsoft.svg` +
+un glifo pequeño superpuesto (calendario/contacto) para diferenciar el servicio.
+El encargo y el comentario histórico del generador mencionaban Outlook; el comportamiento
+actual descrito aquí se basa en el consumidor inspeccionado.
 
 ---
 
@@ -162,7 +169,7 @@ en sí no eran la mejor fuente disponible por los motivos de arriba.
 
 ## Riesgo de contraste en tema oscuro
 
-Verificado renderizando cada fichero con Chrome headless sobre fondo claro y
+En la muestra histórica se registró un render de cada fichero con Chrome headless sobre fondo claro y
 oscuro (no solo inspección de código — el renderizador de ImageMagick usado en
 una primera pasada dio falsos positivos en `icloud.svg` y `proton--calendar.svg`,
 mostrándolos como negro sólido cuando en realidad usan gradientes de color; se
@@ -189,11 +196,8 @@ descartó ese método y se repitió con Chrome).
   `#50d9ff`, blanco) dominan visualmente el glifo. Contraste bajo pero
   **aceptable**, no se marca como riesgo alto.
 - **`disroot`** (vía `simple-icons`, sin fichero): hex `#50162D` (granate muy
-  oscuro) — este es el que de verdad tiene luminancia baja y comparable a un
-  fondo oscuro típico. Es el único caso real de riesgo detectado. Ver nota en
-  la tabla de `simple-icons` arriba.
+  oscuro) — es el riesgo identificado en la muestra original. El consumidor actual
+  también marca Notion; este documento no certifica visualmente el conjunto completo.
 
-Ningún fichero vendorizado en este directorio es mayoritariamente negro/casi
-negro sin fondo propio. El único riesgo real de contraste detectado es
-`disroot` por su hex de marca oscuro (no es un fichero, es el color que pinta
-el consumidor vía `simple-icons`).
+La investigación original no identificó otro riesgo en los ficheros examinados;
+no debe extrapolarse a proveedores incorporados después ni a todas las superficies.

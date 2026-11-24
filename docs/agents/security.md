@@ -2,10 +2,15 @@
 doc_type: reference
 status: vigente
 created: 2026-10-28
-updated: 2026-11-17
+updated: 2026-11-24
 ---
 
 # Seguridad del agente · diseño v3 implementado
+
+> **Alcance del contraste:** las descripciones siguientes se basan en fuentes y
+> pruebas de la entrega indicadas al final. No acreditan por sí solas que esa
+> revisión esté cargada ni que el aislamiento o los permisos funcionen en el
+> entorno habitual.
 
 La pestaña Seguridad de los detalles de agente y Settings → Agent security
 comparten el mismo editor: aislamiento del agente, comandos y estado/diagnóstico.
@@ -42,8 +47,9 @@ no hay almacenamiento global nuevo de borradores.
 Las interrogaciones grises abren explicaciones sencillas inline mediante clic,
 toque o teclado. Enter/Espacio abre o cierra y Escape cierra sin perder foco. El
 resumen abre Avanzado si es necesario y lleva el foco al título de su sección.
-Los riesgos y accesos temporales abiertos, con alcance y vencimiento, permanecen
-en el resumen. El perfil se asigna con un selector compacto. La reorganización
+Con lectura vigente, el resumen detalla los accesos temporales abiertos y su
+vencimiento; si hay error de aplicación o lectura no vigente, muestra un estado
+de fallo o sin comprobar que puede no incluir ese detalle. El perfil se asigna con un selector compacto. La reorganización
 no añade pestañas internas ni pantallas auxiliares al editor del agente.
 
 ## Borrador, guardado y comprobación
@@ -51,7 +57,7 @@ no añade pestañas internas ni pantallas auxiliares al editor del agente.
 Cambiar una opción prepara un borrador. Revisar presenta antes/después y el impacto
 devuelto por el servidor. Guardar conserva CAS y la revisión vigente. Un conflicto
 mantiene las ediciones propias, adopta los cambios de campos intactos y exige
-revisión nueva. El preview se vincula a los metadatos publicados y se releen antes de guardar. La comprobación atómica de versión se envía sólo si el servidor anuncia su soporte; en el backend anterior se explica el límite de una publicación concurrente. Refrescar no guarda ni pisa una edición local. Consultar ayudas o
+revisión nueva. El preview se vincula a los metadatos publicados y se releen antes de guardar. La comprobación atómica de versión se envía sólo si el servidor anuncia su soporte; en el backend anterior se explica el límite de una publicación concurrente. Una actualización autorizada no guarda ni pisa una edición local; ante respuestas 401, 403 o 404 que indican pérdida de acceso, el editor descarta los datos privados y el borrador. Consultar ayudas o
 abrir Avanzado no escribe política ni invalida una revisión vigente.
 
 Avanzado no se cierra con campos avanzados modificados, formularios o revisiones
@@ -105,3 +111,10 @@ se entrega separada para S01, en copia con base/resultado/parche/pruebas. No est
 aplicada a Core por esta sesión y debe validarse antes de afirmar cerrado ese
 riesgo. La interfaz ya conserva los valores no editados y detecta un read-back
 que no coincide. [Contrato canónico de seguridad](../../../micelclaw-os/docs/reference/unified-security-approvals.md).
+
+Ese párrafo describe la entrega histórica de S06. En el código contrastado el
+24/11, la ruta `core/src/routes/managed-agents/skills.routes.ts` comprueba propietario y
+actor humano y `core/src/services/managed-agent-security.service.ts` relee la
+revisión al construir el parche nativo; `security-policy.service.ts` anuncia y
+comprueba el guard de versión del perfil. La inspección estática no demuestra
+equivalencia completa con aquella candidata ni carga o cierre funcional.

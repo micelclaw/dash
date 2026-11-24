@@ -42,12 +42,15 @@ NOT vendored (and stripped from `view.js`, see below): `comic-book.js`,
    `UnsupportedTypeError`, and the PDF/MOBI/bare-FB2 branches were removed
    so Vite never tries to resolve the non-vendored modules.
 
-Everything else is byte-identical to upstream at the commit above.
+The original import record states that everything else is byte-identical to
+upstream at the commit above. That comparison has not been repeated in the
+2026-11-24 local documentation review; verify the pinned upstream files before
+relying on it for a distribution.
 
 ## TypeScript
 
 This directory is excluded from typecheck (`tsconfig.app.json` →
-`exclude: ["src/vendor"]`). The bits the dash uses are declared in
+`exclude` includes `src/vendor`). The bits the dash uses are declared in
 `src/modules/books/reader/foliate.d.ts`.
 
 ## Upstream license (MIT)

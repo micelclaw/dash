@@ -13,14 +13,27 @@
 import { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { getAgentColor } from './agent-colors';
+import { usageForTurn, type ConversationTurnUsage, type UsageTurnReference } from './conversation-usage';
 import type { AgentConversation, ManagedAgent } from './types';
 
 interface ConversationMessageProps {
   message: AgentConversation;
   agents: ManagedAgent[];
+  turnUsage?: { data: ConversationTurnUsage; reference: UsageTurnReference };
 }
 
-export function ConversationMessage({ message, agents }: ConversationMessageProps) {
+function turnUsageLabel(measurement: ConversationTurnUsage['inferences'][number]['tokens']['total_tokens']) {
+  if (measurement.value === null) return 'Tokens desconocidos';
+  const quality = measurement.method === 'estimated' ? 'estimados' : 'medidos';
+  return `${measurement.value.toLocaleString()} tokens ${quality}`;
+}
+
+const operations = { generation: 'Generación', embedding: 'Embeddings', extraction: 'Extracción', other: 'Otra inferencia' };
+const tokenBreakdown = [
+  ['input', 'Entrada'], ['output', 'Salida'], ['cache_read', 'Lectura de caché'], ['cache_write', 'Escritura de caché'],
+] as const;
+
+export function ConversationMessage({ message, agents, turnUsage }: ConversationMessageProps) {
   const [hovered, setHovered] = useState(false);
 
   const fromAgent = agents.find(a => a.name === message.from_agent);
@@ -43,6 +56,28 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
   const costNum = message.cost_usd != null ? Number(message.cost_usd) : null;
   const costFormatted = costNum != null && !Number.isNaN(costNum) ? `$${costNum.toFixed(3)}` : '—';
   const toolCount = message.tool_calls?.length ?? 0;
+  const usage = turnUsage && usageForTurn(turnUsage.data, turnUsage.reference);
+  const stats = usage ? (
+    <details className="text-xs text-muted-foreground">
+      <summary>Uso del turno · {usage.coverage === 'unavailable' ? 'Desconocido' : usage.coverage === 'partial' ? 'Parcial' : 'Completo'}</summary>
+      {usage.inferences.length > 0 && <ul className="mt-1 space-y-1">
+        {usage.inferences.map(item => (
+          <li key={`${item.producer_origin}:${item.inference_id}`}>
+            {item.producer_origin === 'core' ? 'Core' : 'OpenClaw'} · {operations[item.operation]} ·{' '}
+            {item.observation === 'completed' ? turnUsageLabel(item.tokens.total_tokens) : 'Tokens desconocidos'}
+            {' · '}
+            {item.observation !== 'completed' || item.cost.value === null
+              ? 'Coste desconocido'
+              : `${item.cost.value} ${item.cost.currency}${item.cost.method === 'estimated' ? ' (estimado)' : ''}`}
+            {item.observation === 'completed' && tokenBreakdown.some(([key]) => item.tokens[key].value !== null) &&
+              <div className="mt-0.5">
+                {tokenBreakdown.map(([key, label]) => `${label} · ${turnUsageLabel(item.tokens[key])}`).join(' / ')}
+              </div>}
+          </li>
+        ))}
+      </ul>}
+    </details>
+  ) : <>{tokensFormatted} tok &middot; {costFormatted}</>;
 
   return (
     <div
@@ -161,15 +196,15 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
               {JSON.stringify(message.tool_calls, null, 2)}
             </pre>
           </details>
-          <span style={{
+          <div style={{
             fontSize: '0.75rem',
             color: 'var(--text-dim)',
-            whiteSpace: 'nowrap',
+            whiteSpace: usage ? 'normal' : 'nowrap',
             marginLeft: 12,
-            flexShrink: 0,
+            flexShrink: usage ? 1 : 0,
           }}>
-            {tokensFormatted} tok &middot; {costFormatted}
-          </span>
+            {stats}
+          </div>
         </div>
       )}
 
@@ -180,12 +215,12 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
           justifyContent: 'flex-end',
           marginTop: 4,
         }}>
-          <span style={{
+          <div style={{
             fontSize: '0.75rem',
             color: 'var(--text-dim)',
           }}>
-            {tokensFormatted} tok &middot; {costFormatted}
-          </span>
+            {stats}
+          </div>
         </div>
       )}
     </div>

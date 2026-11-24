@@ -2,7 +2,7 @@
 doc_type: as-built
 status: vigente
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-11-24
 ---
 
 # Gateway → Models
@@ -15,7 +15,9 @@ Control UI upstream de OpenClaw.
 
 La pantalla muestra la cabecera `Gateway`; los tabs `Overview`, `Channels`,
 `Models`, `Sessions`, `Cron`, `Devices`, `Heartbeat`; y, dentro de Models,
-`Configured`, `Catalog`, `Advanced` y `Search providers…`.
+las vistas `Chat`, `Decision`, `Catalog` y `Advanced` (en español, `Conversación`,
+`Decisión`, `Catálogo` y `Avanzado`). `Configured` es el identificador interno de
+la primera vista y una etiqueta histórica. Contraste estático del checkout; no acredita carga.
 
 ## Código propietario
 
@@ -29,19 +31,23 @@ La pantalla muestra la cabecera `Gateway`; los tabs `Overview`, `Channels`,
 | Estado | `src/stores/gateway.store.ts` |
 | Cliente HTTP | `src/services/gateway.service.ts` |
 
-El grid consume un catálogo unificado propiedad de OpenClaw. Muestra dos
-secciones: proveedores instalados y plugins oficiales disponibles para instalar.
-Los modelos estáticos de los manifiestos se muestran incluso antes de autenticar
-el proveedor; el catálogo vivo gana cuando está disponible. `Custom Provider` y
+El grid consume un catálogo unificado propiedad de OpenClaw. Puede mostrar dos
+secciones: proveedores instalados y plugins oficiales disponibles para instalar;
+la segunda se muestra solo cuando quedan resultados tras el filtro.
+Los datos del catálogo pueden incluir modelos estáticos de manifiestos antes de autenticar,
+pero las tarjetas que pasan por `handleProviderClick` abren el asistente sin credencial,
+no la lista del proveedor. La tarjeta de respaldo de Ollama desconectado abre Avanzado. El catálogo vivo tiene prioridad cuando está disponible. `Custom Provider` y
 `OmniRoute` son las dos extensiones explícitas de Micelclaw.
 
 ## Contrato con Core
 
-El Dash carga modelos, proveedores instalados, métodos de autenticación y
-proveedores instalables mediante `GET /gateway/models/catalog` a través de
-`getModelCatalog()`. `?refresh=1` fuerza la reconstrucción. Core conserva el
-último snapshot válido si OpenClaw está temporalmente inaccesible y expone el
-resultado desde:
+El catálogo de proveedores y métodos de autenticación se consulta mediante
+`GET /gateway/models/catalog` a través de `getModelCatalog()`. Conversación consulta
+los modelos configurados mediante `GET /gateway/models`; el resumen de proveedores
+tiene lectura independiente. Una respuesta de catálogo no acredita las demás. `?refresh=1` solicita reconstrucción. El servicio de metadatos
+de proveedores puede conservar un snapshot degradado previo si falla su actualización;
+eso no garantiza que el endpoint completo responda con datos previos si falla otra
+parte de la construcción. Contraste de fuente, sin prueba en runtime:
 
 - `micelclaw-os/core/src/routes/gateway/models.routes.ts`
 - `micelclaw-os/core/src/routes/gateway/models-registry.routes.ts`
@@ -50,12 +56,15 @@ Las mutaciones normales de modelos y proveedores pasan por Core y su límite
 Gateway RPC/config-patch. No escribas `~/.openclaw/openclaw.json` ni invoques
 la CLI de OpenClaw para mutar configuración de producto.
 
-Los flujos de API key, OAuth y device code se ejecutan dentro de OpenClaw a
-través de `claw-provider-bridge`; el Dash solo representa prompts opacos y nunca
-recibe credenciales ya almacenadas. Los ids que OpenClaw clasifica como
+Los flujos genéricos de autenticación de proveedores OpenClaw (API key, OAuth y
+device code) usan `claw-provider-bridge`. El formulario de proveedor personalizado
+recibe la clave y envía la configuración por otro recorrido; este contraste no
+certifica todos los caminos ni la carga del runtime. Los ids que OpenClaw clasifica como
 `cliBackendIds` se ocultan del catálogo general, salvo referencias legacy ya
 configuradas. Esas tarjetas ofrecen una migración al proveedor canónico que
-conserva la ejecución CLI mediante una política `agentRuntime` por modelo.
+asigna una política CLI por modelo si `agentRuntime` falta o es `auto`; una política
+explícita existente se conserva incluso si selecciona otro runtime. Esto no acredita
+ejecución efectiva ni carga.
 
 ## Diagnóstico
 
@@ -63,4 +72,5 @@ conserva la ejecución CLI mediante una política `agentRuntime` por modelo.
 2. Sigue el estado por `gateway.store.ts` y el request por `gateway.service.ts`.
 3. Solo después cruza el endpoint de Core y el estado real del Gateway.
 4. Para una discrepancia de catálogo, distingue UI, respuesta de Core y runtime
-   antes de aplicar un arreglo.
+   antes de aplicar un arreglo. El botón de refresco recarga modelos configurados en
+   Conversación, Decisión por separado y catálogo con refresh en las demás vistas.

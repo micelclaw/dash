@@ -1,8 +1,26 @@
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
-import { __test__ } from './openclaw-control-ui.service.ts';
-import { openOpenclawControlUi } from './openclaw-control-ui.service.ts';
+class DiscoveryApiError extends Error {
+  constructor(public code: string, message: string, public details?: Record<string, unknown>, public status?: number) { super(message); }
+}
+let fixtureDiscovery: { data: { host: string; bootstrap_path: string; ready: boolean; https_port?: unknown } };
+let fixtureGeneration = 1;
+let fixtureOwner = 'synthetic-human-fixture';
+let afterDiscovery = () => {};
+const authListeners = new Set<() => void>();
+function changeFixtureOwner(): void {
+  fixtureGeneration++; fixtureOwner = 'synthetic-next-human';
+  for (const listener of authListeners) listener();
+}
+mock.module(new URL('./api.ts', import.meta.url).href, { namedExports: { ApiError: DiscoveryApiError, api: { post: async (path: string) => {
+  assert.equal(path, '/auth/openclaw-control-ui'); afterDiscovery(); return fixtureDiscovery;
+} } } });
+mock.module(new URL('../stores/auth.store.ts', import.meta.url).href, { namedExports: { useAuthStore: {
+  getState: () => ({ sessionGeneration: fixtureGeneration, user: { id: fixtureOwner }, logoutState: 'idle', tokens: { accessToken: 'synthetic-discovery-credential' } }),
+  subscribe: (listener: () => void) => { authListeners.add(listener); return () => authListeners.delete(listener); },
+} } });
+const { __test__, openOpenclawControlUi, prepareOpenclawControlUi } = await import('./openclaw-control-ui.service.ts');
 
 describe('OpenClaw Control UI Dash handoff', () => {
   class TestApiError extends Error {
@@ -53,6 +71,27 @@ describe('OpenClaw Control UI Dash handoff', () => {
     assert.equal(calls, 1);
   });
 
+  it('rejects a successful late bootstrap after its host was disposed', async () => {
+    let closed = false;
+    await assert.rejects(__test__.bootstrapControlUi('https://openclaw.qa.claw/__micelclaw__/control-ui/bootstrap',
+      () => 'synthetic-bootstrap-only', TestApiError, {
+        isClosed: () => closed,
+        fetcher: async () => { closed = true; return new Response(null, { status: 204 }); },
+      }), (error: unknown) => error instanceof DiscoveryApiError && error.code === 'OPENCLAW_CONTROL_UI_CLOSED');
+  });
+
+  it('does not treat cancellation as a transient network failure', async () => {
+    const abort = new AbortController();
+    let calls = 0;
+    await assert.rejects(__test__.bootstrapControlUi('https://openclaw.qa.claw/__micelclaw__/control-ui/bootstrap',
+      () => 'synthetic-bootstrap-only', TestApiError, {
+        signal: abort.signal,
+        fetcher: async () => { calls++; abort.abort(); throw new TypeError('interrupted'); },
+        wait: async () => { throw new Error('must not retry'); },
+      }));
+    assert.equal(calls, 1);
+  });
+
   it('stops after repeated browser network failures instead of leaving a blank tab', async () => {
     let calls = 0;
     let elapsed = 0;
@@ -84,15 +123,6 @@ describe('effective Control UI discovery origin', () => {
   });
 });
 
-class DiscoveryApiError extends Error {
-  constructor(public code: string, message: string, public details?: Record<string, unknown>, public status?: number) { super(message); }
-}
-let fixtureDiscovery: { data: { host: string; bootstrap_path: string; ready: boolean; https_port?: unknown } };
-mock.module(new URL('./api.ts', import.meta.url).href, { namedExports: { ApiError: DiscoveryApiError, api: { post: async (path: string) => {
-  assert.equal(path, '/auth/openclaw-control-ui'); return fixtureDiscovery;
-} } } });
-mock.module(new URL('../stores/auth.store.ts', import.meta.url).href, { namedExports: { useAuthStore: { getState: () => ({ tokens: { accessToken: 'synthetic-discovery-credential' } }) } } });
-
 describe('real Dash open handoff with popup/HTTP fixtures, no browser window', () => {
   for (const port of [18666, undefined]) it(`bootstraps and navigates only after success with discovered port ${port ?? 'legacy443'}`, async (t) => {
     fixtureDiscovery = { data: { host: 'openclaw.qa107.claw', bootstrap_path: '/__micelclaw__/control-ui/bootstrap', ready: true, https_port: port } };
@@ -121,5 +151,46 @@ describe('real Dash open handoff with popup/HTTP fixtures, no browser window', (
       await assert.rejects(openOpenclawControlUi());
     }
     assert.equal(calls, 0); assert.equal(navigations, 0);
+  });
+  it('rejects discovery from a prior identity before bootstrapping another cookie', async (t) => {
+    fixtureDiscovery = { data: { host: 'openclaw.qa.claw', bootstrap_path: '/__micelclaw__/control-ui/bootstrap', ready: true } };
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => { calls++; throw Error('must not bootstrap'); });
+    afterDiscovery = changeFixtureOwner;
+    t.after(() => { afterDiscovery = () => {}; });
+    await assert.rejects(prepareOpenclawControlUi());
+    assert.equal(calls, 0);
+  });
+  it('rejects successful bootstrap from a prior identity without returning a frame URL', async (t) => {
+    fixtureDiscovery = { data: { host: 'openclaw.qa.claw', bootstrap_path: '/__micelclaw__/control-ui/bootstrap', ready: true } };
+    t.mock.method(globalThis, 'fetch', async () => { changeFixtureOwner(); return new Response(null, { status: 204 }); });
+    await assert.rejects(prepareOpenclawControlUi());
+  });
+  it('cancels A before preparing B and a delayed A response cannot overwrite the fixture cookie', async (t) => {
+    fixtureDiscovery = { data: { host: 'openclaw.qa.claw', bootstrap_path: '/__micelclaw__/control-ui/bootstrap', ready: true } };
+    let notifyStarted!: () => void, completeA!: () => void;
+    const started = new Promise<void>((resolve) => { notifyStarted = resolve; });
+    let calls = 0, cookieOwner: string | null = null;
+    t.mock.method(globalThis, 'fetch', async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const owner = fixtureOwner;
+      calls++;
+      if (calls === 1) return new Promise<Response>((resolve, reject) => {
+        const signal = init!.signal!;
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        completeA = () => { if (!signal.aborted) { cookieOwner = owner; resolve(new Response(null, { status: 204 })); } };
+        notifyStarted();
+      });
+      cookieOwner = owner;
+      return new Response(null, { status: 204 });
+    });
+    const old = prepareOpenclawControlUi();
+    const rejected = assert.rejects(old);
+    await started; changeFixtureOwner();
+    const current = prepareOpenclawControlUi();
+    await rejected; await current;
+    completeA();
+    assert.equal(cookieOwner, fixtureOwner);
+    assert.equal(calls, 2);
+    assert.equal(authListeners.size, 0);
   });
 });

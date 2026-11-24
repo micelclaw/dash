@@ -2,10 +2,24 @@
 doc_type: plan
 status: implemented
 created: 2026-11-17
-updated: 2026-11-17
+updated: 2026-11-24
 ---
 
+> Contraste documental puntual: 2026-11-24; sin prueba del entorno habitual.
+
 # MicelHub: recorrido de aplicaciones y presentación común (S11)
+
+> **Contraste posterior de fuente, sin ejecución:** este documento registra decisiones y resultados de S11 en su fecha; este contraste no
+> modifica las decisiones. La rama de inventario sin fila DB disponible para el cruce
+> construye un manifiesto
+> sintético con `verified`, `free` y `0.0.0`; eso no acredita procedencia ni plan
+> real y contradice la intención de no inferirlos. La medición de tamaño excluye
+> rutas/extensiones personales conocidas, enlaces y archivos con múltiples enlaces,
+> pero no demuestra que todos los demás archivos pertenezcan al paquete. La retirada
+> física se hace por pasos y por archivo: un error puede dejar efectos parciales pese
+> al fallo de respuesta. S01/S03 deben revisar estos límites; no se ha probado el
+> entorno cargado ni se ha retirado contenido.
+
 
 ## Alcance aprobado y evidencia
 
@@ -36,7 +50,8 @@ Fuentes: `MicelHubPage`, `RegistryBrowser`, `AppCard`, `AppListRow`, `AppDetail`
 `routes/app-public-registry`, `apps/public-registry`, `app-display.service`;
 `registry/catalog.json` y sus generadores.
 
-Recorrido actual comprobado: descarga pública hace integridad, procedencia y
+Diagnóstico de la base inspeccionada antes de la implementación descrita más abajo:
+descarga pública hace integridad, procedencia y
 análisis y guarda `.claw`/metadatos; NO crea fila installed_apps. Disponibles
 consulta installed_apps y skills.status: hoy no recoge la descarga. POST install
 con activate:true activa. PATCH available desactiva sin retirar código. DELETE
@@ -58,7 +73,7 @@ las destacadas. No hay tamaño instalado ni progreso real en el contrato actual.
 | I08 | adaptadas/copias → catálogos y Taller/editor | T2 integrar por estado, trasladar acceso editor/copias a Taller sin perder borradores del editor | V2, V5 |
 | I09 | display app/manifest → AppIcon/chips/Asignadas/Office | T2 blanco/verde/amarillo/rojo por identidad Office, resolver color del módulo y display | V5 |
 | I10 | Workshop → biblioteca/equipo/aprendidas | T3 superficies, jerarquía y contraste; conservar operaciones/revisiones/permisos | V5 |
-| I11 | roles/actor → stores/rutas | conservar admin/owner para mutaciones/inventario local y usuario autenticado para público; limpiar estado al cambiar actor | V1, V3 |
+| I11 | roles/actor → stores/rutas | conservar admin/owner para ciclo de instalación/descarga e inventario local y usuario autenticado para público; las asignaciones siguen la propiedad del agente y las políticas de su ruta; limpiar estado al cambiar actor | V1, V3 |
 
 No cambia esquema DB, configuración, defaults, tools, políticas,
 infraestructura ni dependencias instaladas. Las dependencias de una app mantienen
@@ -163,7 +178,8 @@ envueltos/recogidos sin nuevos tipos; una columna de tarjetas, detalle con Volve
 - Lint de archivos afectados, typecheck/build Dash y comprobación Core acotada.
   Si falla por cambios previos ajenos, registrar y comprobar empaquetado pertinente.
 
-Pruebas todavía no ejecutadas. No equiparar fixtures a integración runtime real.
+En el momento de redactar el plan estas pruebas aún no estaban ejecutadas; el resultado
+posterior está más abajo. No equiparar fixtures a integración runtime real.
 
 ## Activación, reversión y revisión
 

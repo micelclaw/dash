@@ -4,12 +4,17 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { RefreshCw, Check, X, Settings2, Monitor, Smartphone, Terminal, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import * as gwService from '@/services/gateway.service';
 import { useI18n } from '@/i18n';
+import { NativeOpenclawHost } from '@/components/openclaw/NativeOpenclawHost';
+import { useAuthStore } from '@/stores/auth.store';
+import { NATIVE_HOST_ADAPTER_DIGEST, type NativeHostTarget } from '@/services/openclaw-host-bridge';
+
+const resolveDevices = async (): Promise<NativeHostTarget> => ({ surface: 'devices' });
 
 const PLATFORM_ICONS: Record<string, typeof Monitor> = {
   linux: Terminal,
@@ -29,6 +34,16 @@ function formatTimestamp(ms: number | undefined, t: (key: string, values?: Recor
 }
 
 export function DevicesTab() {
+  const [query] = useSearchParams();
+  const role = useAuthStore((state) => state.user?.role);
+  if (import.meta.env.DEV && query.get('native') === '1' && (role === 'owner' || role === 'admin')) {
+    return <NativeOpenclawHost artifactDigest={NATIVE_HOST_ADAPTER_DIGEST}
+      title="Dispositivos y aprobaciones de Gateway" resolveTarget={resolveDevices} />;
+  }
+  return <ExistingDevicesTab />;
+}
+
+function ExistingDevicesTab() {
   const { t } = useI18n();
   const tRef = useRef(t);
   useEffect(() => { tRef.current = t; }, [t]);

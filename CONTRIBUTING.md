@@ -1,8 +1,8 @@
 # Contributing to Micelclaw Dash
 
-Core and Dash contributions are open. Build the linked mail UI first, then run `corepack pnpm@9.15.4 build` and `corepack pnpm@9.15.4 lint` from Dash. See README.md for the three-repository layout.
+Core and Dash contributions are open. Build the linked mail UI first, then run `corepack pnpm@9.15.4 build` and `corepack pnpm@9.15.4 lint` from Dash. See README.md for the linked mail prerequisite and cross-repository test workspace.
 
-For a UI change, include a small wireframe of the affected states/actions, preserve the typed Core contract and provide a meaningful regression or precise manual reproduction. Check keyboard and the mobile viewport relevant to the advertised surface. Preserve origins, ownership, ACLs, persistence and error visibility. Do not guess backend fields or add undocumented API fallbacks.
+For a UI change, include a small wireframe of the affected states/actions and preserve the typed Core contract. Provide a meaningful regression or precise manual reproduction; changes to data or permissions require a functional regression, as in the Core guide. For visible text changes, run the relevant local `test:i18n` checks. Check keyboard and the mobile viewport relevant to the advertised surface. Preserve origins, ownership, ACLs, persistence and error visibility. Do not guess backend fields or add undocumented API fallbacks.
 
 For changes crossing Core, follow the full [Core contribution guide](https://github.com/micelclaw/micelclaw-os/blob/main/CONTRIBUTING.md). Changes to Core belong in that repository and must identify the compatible Dash revision. Do not include unrelated generated files or installation changes in a UI fix.
 
@@ -10,4 +10,4 @@ The e2e/contract scripts expect a separate maintainer workspace; it is not an av
 
 You retain copyright. For original first-party code or documentation, include the manual acceptance statement in [CONTRIBUTOR_AGREEMENT.md](CONTRIBUTOR_AGREEMENT.md); a maintainer records it before merge. Third-party adaptations keep their licenses, and you must identify their source. Do not claim third-party code as your own or replace its notices with a BSL header.
 
-Use the bug template without personal data, unredacted logs or credentials. Report security-sensitive issues using [SECURITY.md](SECURITY.md).
+Describe reproducible non-sensitive bugs without personal data, unredacted logs or credentials. For security-sensitive issues, consult the [alpha security reporting guidance](../micelclaw-os/deploy/alpha/source-overlays/dash/SECURITY.md) in the sibling OS workspace; this link requires that checkout and is unavailable in a Dash-only clone. Availability of its private reporting channel has not been checked here.

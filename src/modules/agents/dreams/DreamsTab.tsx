@@ -169,8 +169,6 @@ export function DreamsTab({ agents }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-        <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>Memory</h3>
-        {!isMobile && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>memoria activa y consolidación durante el sueño</span>}
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.64rem', fontWeight: 700,
           letterSpacing: '0.04em', padding: '2px 9px', borderRadius: 999,

@@ -293,6 +293,9 @@ export function Component() {
           </button>
 
           <ConversationCollaboration conversationId={activeConvId} compact={isMobile} />
+          {activeConvId && <button type="button" className="px-2 py-1 text-xs underline" onClick={() => {
+            void navigate(`/chat?view=native&conversation=${encodeURIComponent(activeConvId)}`);
+          }}>Abrir Chat nativo</button>}
 
           {/* The same Canvas dashboard opens as a split pane on desktop and a
               full-screen overlay on PWA/Android. */}

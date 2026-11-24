@@ -27,7 +27,8 @@
 - **Sidebar izquierda** (`ActivityModule.tsx`): 6 tabs fijos, badge de
   uso (%) por bucket calculado vía `GET /activity/stats` — **solo los
   4 tabs que tienen bucket** (`events`, `gateway`, `containers`,
-  `core`); `live` y `notifications` no persisten nada propio. El botón
+  `core`); el cálculo inspeccionado devuelve cero bytes para Events y no mide
+  su uso real de base de datos. `live` y `notifications` no persisten nada propio. El botón
   ⚙ abre el modal de Settings. En móvil (`useIsMobile()`) el rail
   vertical se convierte en una tira horizontal.
 - **Header** (`ActivityHeader.tsx`): **gráfico de líneas** (recharts)
@@ -35,10 +36,13 @@
   línea por bucket que el adapter proyecta con `histogramOf`
   (severity / log level / stream de docker…). La granularidad se elige
   sola según el rango de datos: `< 3h` → minuto, `< 7d` → hora,
-  `≥ 7d` → día; los huecos se rellenan con cero explícito para que la
+  `≥ 7d` → día; agrupa intervalos si se superan 500 puntos. Los huecos se rellenan con cero explícito para que la
   línea no se rompa. Junto al gráfico: `TimeRangePicker` (ventana
-  explícita `from`/`to` que se propaga a `fetchSnapshot` de todos los
-  tabs), los filtros que declara el adapter, la búsqueda y el toggle
+  explícita `from`/`to` que se propaga a los adapters, aunque Live devuelve
+  snapshot vacío. Los presets fijan `to` al seleccionarlos y el hook descarta
+  filas WS posteriores cuando tienen fecha válida; las fechas ausentes o inválidas
+  pasan. Un snapshot tardío puede sustituir filas WS ya recibidas. Límites de snapshot y búfer impiden acreditar cobertura
+  completa del intervalo), los filtros, la búsqueda y el toggle
   Pausar/Reanudar.
 - **Table** (`ActivityTable.tsx`): tabla genérica con drawer detalle
   al hacer click en una fila. Las columnas vienen del adapter.
@@ -69,7 +73,7 @@ existe en el repo):
 
 | Tab           | Adapter                              | Origen de datos |
 |---------------|--------------------------------------|-----------------|
-| Live          | `adapters/live.adapter.ts`           | **Solo WS** (`activity.tool`) — sin snapshot REST, sin bucket, sin persistencia: se reinicia al recargar la página |
+| Live          | `adapters/live.adapter.ts`           | **Solo WS** (`activity.tool`) — sin snapshot REST ni persistencia; el estado local se pierde al desmontar el tab y filtros/búsqueda pueden pedir un snapshot vacío. |
 | Events        | `adapters/events.adapter.ts`         | `GET /agent-events` + WS `agent.event` |
 | Notifications | `adapters/notifications.adapter.ts`  | `GET /activity/notifications-history` + WS `notification.new` |
 | Gateway logs  | `adapters/gateway-logs.adapter.ts`   | `GET /gateway/logs` + WS `gateway.logs.entry` |
@@ -81,8 +85,18 @@ existe en el repo):
 `services/activity.service.ts` reúne todos los endpoints Core
 (`/activity/stats`, `/activity/settings`, `/activity/notification-rules`,
 `/agent-events`, `/core/logs`, `/lifecycle/services/...`, `/gateway/logs`).
-Cada adapter consume desde aquí — los componentes no hablan con `api.ts`
-directamente.
+Los adapters REST consumen desde aquí. El modal `ActivitySettingsModal.tsx`
+importa `api.ts` directamente para la solicitud de borrado; Live tampoco usa
+este servicio REST.
+
+El snapshot de Notifications aproxima historial por tipos de eventos, no prueba
+entrega. La consulta Core inspeccionada no filtra por `user_id` y devuelve
+payloads al rol `admin` literal; Events REST sí se filtra por usuario. S01/S03
+deben revisar alcance y privacidad con fixtures, sin leer datos reales.
+Los eventos WS usan visibilidad del bus: públicos y `user` sin usuario pueden
+difundirse globalmente, `admin` llega a administradores e `internal` no se difunde
+por WS. El frame canónico inspeccionado no incluye `user_id`; no se ha probado
+una exposición concreta.
 
 ## Admin-gate
 
@@ -98,13 +112,18 @@ es de **dos capas**:
    mensaje claro — eso cubre la **navegación directa por URL**, que es
    lo único que el filtro del sidebar no puede impedir.
 
-El backend enforce con el middleware `requireAdmin`.
+Las rutas de Activity, Core logs y logs de contenedores inspeccionadas comprueban el rol localmente y
+exigen literalmente `admin`; `/gateway/logs` hereda `requireAdmin`, que admite
+`admin` y `owner`, y `/agent-events` filtra por usuario autenticado. La UI también
+admite `owner`: su recorrido completo queda pendiente de comprobación funcional.
 
 ## Routing
 
 - Ruta: `/activity` (lazy import).
 - Query string: `?tab=live|events|notifications|gateway|containers|core`
-  sincronizado bidireccionalmente con el estado interno. **Sin `?tab=`,
+  inicializa el estado al montar el módulo; los cambios de pestaña escriben la URL.
+  La lectura estática del 2026-11-23 no acredita que una navegación del historial
+  actualice la pestaña mientras el módulo sigue montado. **Sin `?tab=`,
   el tab por defecto es `live`** (`ActivityModule.tsx:69`); un valor
   desconocido también cae en `live`.
 - `?svc=jellyfin` (preset del tab containers).

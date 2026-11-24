@@ -8,6 +8,7 @@ interface SessionBoardsState {
 const initial = { owner: null as string | null, generation: 0, request: 0, boards: [] as SessionBoard[], agents: [] as WorkboardAgentOption[], selected: '', snapshot: null as SessionSnapshot | null, pins: [] as string[], view: { involving_me: false, agent_id: null } as SessionView, loading: false, error: '' };
 export const useSessionsBoardStore = create<SessionBoardsState>((set, get) => {
   let preferenceQueue = Promise.resolve();
+  let activeRead: { ownerGeneration: number; boardId: string; view: SessionView; request: number } | undefined;
   const queuedPreference = (run: () => Promise<void>) => { const task = preferenceQueue.then(run); preferenceQueue = task.catch(() => {}); return task; };
   const fail = (error: unknown) => { const denied = error instanceof ApiError && [401, 403, 404].includes(error.status ?? 0); set({ error: error instanceof Error ? error.message : 'No se pudo leer el tablero.', loading: false, ...(denied ? { snapshot: null, boards: [], selected: '', request: get().request + 1 } : {}) }); };
   return { ...initial,
@@ -26,10 +27,16 @@ export const useSessionsBoardStore = create<SessionBoardsState>((set, get) => {
     },
     async refresh(full = false) {
       const { selected, generation, view, snapshot } = get(); if (!selected) return;
-      const request = get().request + 1; set({ request });
+      if (!full && (get().loading || (
+        activeRead?.ownerGeneration === generation && activeRead.boardId === selected && activeRead.view === view
+      ))) return;
+      const request = get().request + 1;
+      activeRead = { ownerGeneration: generation, boardId: selected, view, request };
+      set({ request });
       try { const result = await service.read(selected, view, full ? undefined : snapshot?.revision); if (get().generation !== generation || get().request !== request || get().selected !== selected) return;
         set({ ...('unchanged' in result ? {} : { snapshot: result }), loading: false, error: '' });
       } catch (error) { if (get().generation === generation && get().request === request) fail(error); }
+      finally { if (activeRead?.ownerGeneration === generation && activeRead.request === request) activeRead = undefined; }
     },
     async setView(view) { const { selected, generation } = get(); set({ view, snapshot: null }); try { await service.saveView(selected, view); if (get().generation === generation && get().selected === selected) await get().refresh(true); } catch (error) { if (get().generation === generation) fail(error); } },
     async pin(id) { const generation = get().generation; try { await queuedPreference(async () => { if (get().generation !== generation) return; const pins = get().pins; const result = await service.savePins(pins.includes(id) ? pins.filter(pin => pin !== id) : [...pins, id]); if (get().generation === generation) set({ pins: result }); }); } catch (error) { if (get().generation === generation) fail(error); } },

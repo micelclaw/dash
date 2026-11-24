@@ -51,6 +51,7 @@ const fixture = window.readableFixture = {
     else throw Error('Unknown fixture change');
   },
   allowFormTransition() { useConfigurationStore.setState({busy:false}); },
+  markImportCompleted() { useConfigurationStore.setState({operation:{id:'completed-import',scope:'personal',status:'completed',results:[]}}); },
 };
 URL.createObjectURL = blob => {const url='blob:readable-fixture/'+fixture.created.length;fixture.created.push({url,blob});return url};
 URL.revokeObjectURL = url => fixture.revoked.push(url);
@@ -105,6 +106,19 @@ async function submit(page, scope = 'personal') {
   return before;
 }
 const downloads = page => page.evaluate(()=>Promise.all(window.readableFixture.downloads.map(async item=>({filename:item.filename,type:item.type,text:await item.text()}))));
+
+test('a completed import keeps the next export selection editable', {timeout:30_000}, async()=>{
+  const f=await environment();
+  try {
+    await f.page.evaluate(()=>window.readableFixture.markImportCompleted());
+    await f.page.getByRole('button',{name:'Exportar configuración',exact:true}).click();
+    const block = f.page.getByRole('checkbox',{name:'Preferencias',exact:true});
+    await block.waitFor();
+    assert.equal(await block.isEnabled(),true);
+    await block.uncheck();
+    assert.equal(await block.isChecked(),false);
+  } finally { await f.close(); }
+});
 
 test('one real component export clears credentials before IO and downloads both exact response files without another GET', {timeout:30_000}, async()=>{
   const f=await environment();
