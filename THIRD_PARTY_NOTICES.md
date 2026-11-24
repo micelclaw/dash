@@ -1,8 +1,9 @@
 # Third-Party Notices
 
-Attribution for third-party code **adapted** into this repository's source
-tree. Unmodified npm dependencies are covered by their own licenses under
-`node_modules/` and are not listed here.
+Attribution for selected third-party code adapted or used in this repository,
+including a regular npm dependency listed below. This is not a complete inventory
+of npm dependencies or a particular distribution: their own licenses apply, and
+`node_modules/` exists only after dependencies are installed.
 
 ## foliate-js — MIT
 
@@ -65,7 +66,10 @@ tree. Unmodified npm dependencies are covered by their own licenses under
 - Per-file provenance, source URL and use justification:
   `src/assets/brand-icons/ATTRIBUTION.md` (it also documents the four logos that
   are *not* vendored and are painted from the CC0 `simple-icons` package
-  instead). Regenerate: `node scripts/fetch-brand-icons.mjs`.
+  instead). The regeneration script `scripts/fetch-brand-icons.mjs` downloads
+  external assets and writes the vendored files; review provenance, changes and
+  authorization before running it. This notice does not establish redistribution
+  rights for a particular release.
 
 ## Source alpha licensing boundary
 

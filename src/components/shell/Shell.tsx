@@ -60,6 +60,7 @@ import { useAppAccessStore } from '@/stores/app-access.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { useEntityTypesStore } from '@/stores/entity-types.store';
 import { AppAccessGate } from '@/components/shell/AppAccessGate';
+import { NativeChatEntry } from '@/components/openclaw/NativeChatEntry';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
 import { useChatWorkspaceAccess } from '@/hooks/use-chat-workspace-access';
 import { useChatStreamSubscription } from '@/hooks/use-chat-stream-subscription';
@@ -88,6 +89,8 @@ export function Shell() {
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'owner' || userRole === 'admin';
   const isChatPage = location.pathname === '/chat';
+  const chatParams = new URLSearchParams(location.search);
+  const nativeConversationId = isChatPage && chatParams.get('view') === 'native' ? chatParams.get('conversation') : null;
 
   // Rutas "inmersivas": interfaces ricas de dibujo (whiteboard/Excalidraw y editor de
   // diagramas/ReactFlow) que necesitan todo el lienzo. En ellas ocultamos TopBar y la
@@ -687,7 +690,7 @@ export function Shell() {
           {/* Content + BottomBar */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ flex: 1, overflow: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <AppAccessGate><Outlet /></AppAccessGate>
+              <AppAccessGate>{nativeConversationId ? <NativeChatEntry conversationId={nativeConversationId} /> : <Outlet />}</AppAccessGate>
             </div>
             {/* Móvil (teléfono, cualquier orientación): nav inferior de 5 slots
                 (Hoy/Chat/+/Buscar/Más). Escritorio: la BottomBar de chat acoplada

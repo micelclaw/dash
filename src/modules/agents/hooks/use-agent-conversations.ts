@@ -12,42 +12,56 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
+import { useAuthStore } from '@/stores/auth.store';
 import type { AgentConversation, ConversationStats } from '../types';
 
 interface UseAgentConversationsParams {
   period: string;
   agent?: string;
+  query?: string;
 }
 
-export function useAgentConversations({ period, agent }: UseAgentConversationsParams) {
-  const [conversations, setConversations] = useState<AgentConversation[]>([]);
-  const [stats, setStats] = useState<ConversationStats | null>(null);
-  const [loading, setLoading] = useState(true);
+type ConversationRead =
+  | { kind: 'loaded'; conversations: AgentConversation[]; stats: ConversationStats | null }
+  | { kind: 'error' };
+
+export function useAgentConversations({ period, agent, query }: UseAgentConversationsParams) {
+  const [request, setRequest] = useState(0);
+  const [settled, setSettled] = useState<{ key: string; result: ConversationRead }>();
+  const sessionGeneration = useAuthStore(state => state.sessionGeneration);
+  const key = JSON.stringify([sessionGeneration, period, agent, query, request]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const isCurrent = () => !signal.aborted && useAuthStore.getState().sessionGeneration === sessionGeneration;
     async function load() {
-      setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (agent) params.set('from_agent', agent);
+        if (agent) params.set('participant', agent);
         if (period) params.set('period', period);
+        if (query) params.set('q', query);
         const [convRes, statsRes] = await Promise.all([
-          api.get<{ data: AgentConversation[] }>(`/conversations?${params}`),
-          api.get<{ data: ConversationStats }>(`/conversations/stats?period=${encodeURIComponent(period)}`),
+          api.get<{ data: AgentConversation[] }>(`/conversations?${params}`, undefined, { signal }),
+          api.get<{ data: ConversationStats | null }>(`/conversations/stats?${params}`, undefined, { signal }),
         ]);
-        if (!cancelled) {
-          setConversations(convRes.data);
-          setStats(statsRes.data);
-          setLoading(false);
+        if (isCurrent()) {
+          setSettled({ key, result: { kind: 'loaded', conversations: convRes.data, stats: statsRes.data } });
         }
       } catch {
-        if (!cancelled) setLoading(false);
+        if (isCurrent()) setSettled({ key, result: { kind: 'error' } });
       }
     }
-    load();
-    return () => { cancelled = true; };
-  }, [period, agent]);
+    void load();
+    return () => controller.abort();
+  }, [period, agent, query, key, sessionGeneration]);
 
-  return { conversations, stats, loading };
+  const current = settled?.key === key ? settled.result : undefined;
+  return {
+    conversations: current?.kind === 'loaded' ? current.conversations : [],
+    stats: current?.kind === 'loaded' ? current.stats : null,
+    loading: !current,
+    failed: current?.kind === 'error',
+    retry: () => setRequest(value => value + 1),
+  };
 }

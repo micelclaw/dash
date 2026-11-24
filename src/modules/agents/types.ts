@@ -123,6 +123,7 @@ export interface SkillProposalDetail extends SkillProposal {
 
 export interface AgentConversation {
   id: string;
+  conversation_id?: string | null;
   session_id: string;
   from_agent: string;
   to_agent: string;

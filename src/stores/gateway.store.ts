@@ -60,9 +60,12 @@ interface GatewayStore {
   status: GatewayStatus | null;
   health: GatewayHealth | null;
   channels: GatewayChannel[];
+  channelsRuntime: gw.GatewayChannelObservation | null;
   models: GatewayModel[];
   sessions: GatewaySession[];
   usage: GatewayUsage | null;
+  usageLoading: boolean;
+  usageError: boolean;
   cronJobs: CronJob[];
   logs: LogEntry[];
 
@@ -117,7 +120,7 @@ interface GatewayStore {
   fetchSnapshot: () => Promise<void>;
   fetchStatus: () => Promise<void>;
   fetchHealth: () => Promise<void>;
-  fetchChannels: () => Promise<void>;
+  fetchChannels: (observeRuntime?: boolean) => Promise<void>;
   fetchModels: () => Promise<void>;
   fetchSessions: () => Promise<void>;
   fetchUsage: () => Promise<void>;
@@ -346,7 +349,7 @@ let availabilityEpoch = 0;
 let operationEpoch = 0;
 let availabilityFlight: { auth: string; epoch: number; controller: AbortController; promise: Promise<void> } | null = null;
 let operationFlight: { auth: string; action: GatewayOperation['action']; promise: Promise<GatewayOperation | null> } | null = null;
-const inventoryReads = { channels: 0, models: 0, sessions: 0, catalog: 0, providers: 0 };
+const inventoryReads = { channels: 0, models: 0, sessions: 0, usage: 0, catalog: 0, providers: 0 };
 function gatewayAuthKey(): string {
   const { user, sessionGeneration } = useAuthStore.getState();
   return `${sessionGeneration}:${user?.id ?? ''}:${user?.role ?? ''}`;
@@ -606,9 +609,12 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
   status: null,
   health: null,
   channels: [],
+  channelsRuntime: null,
   models: [],
   sessions: [],
   usage: null,
+  usageLoading: false,
+  usageError: false,
   cronJobs: [],
   logs: [],
 
@@ -649,15 +655,16 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
   fetchStatus: readAvailability,
   fetchHealth: readAvailability,
 
-  fetchChannels: async () => {
+  fetchChannels: async (observeRuntime = false) => {
     const sequence = ++inventoryReads.channels;
     const auth = gatewayAuthKey();
     const epoch = availabilityEpoch;
     set({ channelsLoading: true, channelsError: null });
     try {
-      const channels = await gw.getChannels();
+      const { channels, runtime } = await gw.getChannels(observeRuntime);
       if (sequence !== inventoryReads.channels || auth !== gatewayAuthKey() || epoch !== availabilityEpoch) return;
-      set({ channels, channelsLoading: false, channelsCheckedAt: new Date().toISOString() });
+      set({ channels, ...(observeRuntime ? { channelsRuntime: runtime } : {}),
+        channelsLoading: false, channelsCheckedAt: new Date().toISOString() });
     } catch (err) {
       if (sequence !== inventoryReads.channels || auth !== gatewayAuthKey() || epoch !== availabilityEpoch) return;
       set({
@@ -704,11 +711,17 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
   },
 
   fetchUsage: async () => {
+    const sequence = ++inventoryReads.usage;
+    const auth = gatewayAuthKey();
+    const epoch = availabilityEpoch;
+    set({ usageLoading: true, usageError: false });
     try {
       const usage = await gw.getUsage();
-      set({ usage });
+      if (sequence === inventoryReads.usage && auth === gatewayAuthKey() && epoch === availabilityEpoch)
+        set({ usage, usageLoading: false, usageError: usage === null });
     } catch {
-      // Non-critical
+      if (sequence === inventoryReads.usage && auth === gatewayAuthKey() && epoch === availabilityEpoch)
+        set({ usage: null, usageLoading: false, usageError: true });
     }
   },
 
@@ -912,7 +925,8 @@ useAuthStore.subscribe((state, previous) => {
     configured: null, configuration: null, status: null, health: null,
     statusLoading: false, statusError: null,
     gatewayOperation: null, pendingGatewayRequestId: null, operationUncertain: false, operationError: null, operationPermissionDenied: false,
-    channels: [], models: [], sessions: [], usage: null, providersOverview: null,
+    channels: [], channelsRuntime: null, models: [], sessions: [], usage: null, providersOverview: null,
+    usageLoading: false, usageError: false,
     catalog: [], catalogProviders: [], installableProviders: [], catalogLoading: false, catalogError: null,
     providersOverviewLoading: false, providersOverviewError: null, queuedRemovals: [], inflightRemovals: [],
     modelsCheckedAt: null, channelsCheckedAt: null, sessionsCheckedAt: null,

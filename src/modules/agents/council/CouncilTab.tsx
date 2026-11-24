@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMeetings } from './hooks/use-meetings';
@@ -22,6 +23,7 @@ import type { ManagedAgent, Meeting, ActionItem } from '../types';
 
 interface CouncilTabProps {
   agents: ManagedAgent[];
+  headerActions: HTMLDivElement | null;
 }
 
 type PendingItemRow = ActionItem & {
@@ -30,7 +32,7 @@ type PendingItemRow = ActionItem & {
   meeting_completed_at: string | null;
 };
 
-export function CouncilTab({ agents }: CouncilTabProps) {
+export function CouncilTab({ agents, headerActions }: CouncilTabProps) {
   const {
     meetings, loading, awaitingUser,
     createMeeting, editMeeting,
@@ -119,85 +121,50 @@ export function CouncilTab({ agents }: CouncilTabProps) {
       height: '100%',
       overflow: 'hidden',
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '16px 20px',
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0,
-        flexWrap: 'wrap' as const,
-        gap: 8,
-      }}>
-        {/* Left: Title + subtitle */}
-        <div>
-          <h2 style={{
-            margin: 0,
-            fontSize: '1.125rem',
-            fontWeight: 700,
-            color: 'var(--text)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <span role="img" aria-label="council">🏛️</span>
-            Council
-          </h2>
-          <p style={{
-            margin: '4px 0 0',
-            fontSize: '0.8125rem',
-            color: 'var(--text-dim)',
-          }}>
-            Board meetings with your chief agents
-          </p>
-        </div>
-
-        {/* Right: Buttons */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {selectedMeeting && (
-            <button
-              onClick={() => setSelectedMeetingId(null)}
-              onMouseEnter={() => setArchiveBtnHover(true)}
-              onMouseLeave={() => setArchiveBtnHover(false)}
-              style={{
-                background: archiveBtnHover ? 'var(--surface-hover)' : 'var(--surface)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 14px',
-                fontSize: '0.8125rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'var(--transition-fast)',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              Meeting Archive
-            </button>
-          )}
+      {headerActions && createPortal(<>
+        {selectedMeeting && (
           <button
-            onClick={() => setShowNewMeeting(true)}
-            onMouseEnter={() => setNewBtnHover(true)}
-            onMouseLeave={() => setNewBtnHover(false)}
+            onClick={() => setSelectedMeetingId(null)}
+            onMouseEnter={() => setArchiveBtnHover(true)}
+            onMouseLeave={() => setArchiveBtnHover(false)}
             style={{
-              background: 'var(--amber)',
-              color: '#000',
-              border: 'none',
+              background: archiveBtnHover ? 'var(--surface-hover)' : 'var(--surface)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
               padding: '6px 14px',
               fontSize: '0.8125rem',
-              fontWeight: 600,
+              fontWeight: 500,
               cursor: 'pointer',
               transition: 'var(--transition-fast)',
               fontFamily: 'var(--font-sans)',
-              opacity: newBtnHover ? 0.9 : 1,
             }}
           >
-            + New Meeting
+            Meeting Archive
           </button>
-        </div>
-      </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setShowNewMeeting(true)}
+          onMouseEnter={() => setNewBtnHover(true)}
+          onMouseLeave={() => setNewBtnHover(false)}
+          style={{
+            background: 'var(--amber)',
+            color: '#000',
+            border: 'none',
+            borderRadius: 'var(--radius-sm)',
+            padding: '6px 14px',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'var(--transition-fast)',
+            fontFamily: 'var(--font-sans)',
+            opacity: newBtnHover ? 0.9 : 1,
+          }}
+        >
+          + New Meeting
+        </button>
+      </>, headerActions)}
 
       {/* Global "My pending items" panel — only when no meeting is selected */}
       {!selectedMeeting && pendingUserItems.length > 0 && (

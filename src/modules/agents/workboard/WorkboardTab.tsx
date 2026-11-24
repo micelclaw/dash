@@ -39,11 +39,15 @@ const readLS = (k: string, fallback: string) => {
   try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; }
 };
 
-export function WorkboardTab({ agents }: Props) {
-  const [tab, setTab] = useState<'coordination' | 'sessions'>('coordination');
+type WorkboardView = 'coordination' | 'sessions';
+
+export function WorkboardTab({ agents, tab, onTabChange }: Props & {
+  tab: WorkboardView;
+  onTabChange: (tab: WorkboardView) => void;
+}) {
   return <div className="flex min-w-0 flex-col gap-4"><div className="flex gap-2" role="tablist" aria-label="Tipo de Workboard">
-    <Button role="tab" aria-selected={tab === 'coordination'} variant={tab === 'coordination' ? 'secondary' : 'ghost'} onClick={() => setTab('coordination')}>Coordinación</Button>
-    <Button role="tab" aria-selected={tab === 'sessions'} variant={tab === 'sessions' ? 'secondary' : 'ghost'} onClick={() => setTab('sessions')}>Conversaciones</Button>
+    <Button role="tab" aria-selected={tab === 'coordination'} variant={tab === 'coordination' ? 'secondary' : 'ghost'} onClick={() => onTabChange('coordination')}>Coordinación</Button>
+    <Button role="tab" aria-selected={tab === 'sessions'} variant={tab === 'sessions' ? 'secondary' : 'ghost'} onClick={() => onTabChange('sessions')}>Conversaciones</Button>
   </div>{tab === 'coordination' ? <CoordinationWorkboardTab agents={agents} /> : <SessionsBoardPanel />}</div>;
 }
 
@@ -109,13 +113,6 @@ function CoordinationWorkboardTab({ agents }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 8 : 10 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>Workboard</h3>
-        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-          {isMobile ? 'coordinación de agentes' : 'coordinación de agentes · cola de trabajo y traspaso de sesión'}
-        </span>
-      </div>
-
       {isMobile ? (
         <>
           {/* Fila compacta: buscar + filtros + nueva */}

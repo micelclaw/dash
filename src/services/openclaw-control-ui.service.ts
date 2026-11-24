@@ -1,8 +1,32 @@
+import { useAuthStore } from '../stores/auth.store';
+import { api, ApiError } from './api';
+
 type ControlUiDiscovery = { data: { host: string; bootstrap_path: string; ready: boolean; https_port?: number } };
 // The 9.4 Gateway can take 4–5 minutes to apply an identity roster change.
 // Leave margin for its second automatic reload without retrying forever.
 const BOOTSTRAP_WAIT_MS = 8 * 60_000;
 const MAX_NETWORK_FAILURES = 3;
+const preparations = new Map<string, Promise<void>>();
+
+export type ControlUiPreparationOptions = {
+  signal?: AbortSignal;
+  isClosed?: () => boolean;
+  onProgress?: (message: string) => void;
+};
+
+function checkPreparation(options: ControlUiPreparationOptions): void {
+  options.signal?.throwIfAborted();
+  if (options.isClosed?.()) throw new ApiError('OPENCLAW_CONTROL_UI_CLOSED', 'Se cerró la vista o cambió tu sesión personal de Control UI.');
+}
+
+function waitForRetry(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const cancel = () => { clearTimeout(timer); reject(signal?.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', cancel); resolve(); }, ms);
+    signal?.addEventListener('abort', cancel, { once: true });
+  });
+}
 
 function controlUiUrl(host: string, path: string, httpsPort = 443): string {
   if (typeof host !== 'string' || !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(host) || !host.includes('.') || host.includes('..')
@@ -29,15 +53,19 @@ async function bootstrapControlUi(
     isClosed?: () => boolean;
     maxWaitMs?: number;
     onProgress?: (message: string) => void;
+    signal?: AbortSignal;
   } = {},
 ): Promise<void> {
+  // This existing cross-origin cookie bootstrap targets the validated personal
+  // host; api.ts deliberately prefixes ordinary requests with same-origin /api.
+  // eslint-disable-next-line no-restricted-globals
   const fetcher = options.fetcher ?? fetch;
-  const wait = options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const wait = options.wait ?? ((ms: number) => waitForRetry(ms, options.signal));
   const now = options.now ?? Date.now;
   const deadline = now() + (options.maxWaitMs ?? BOOTSTRAP_WAIT_MS);
   let networkFailures = 0;
   while (true) {
-    if (options.isClosed?.()) throw new ApiErrorType('OPENCLAW_CONTROL_UI_CLOSED', 'Se cerró la pestaña de Control UI.');
+    checkPreparation(options);
     const token = getToken();
     if (!token) throw new ApiErrorType('OPENCLAW_CONTROL_UI_UNAVAILABLE', 'Vuelve a iniciar sesión en Micelclaw antes de abrir la Control UI.');
     let response: Response | undefined;
@@ -47,9 +75,10 @@ async function bootstrapControlUi(
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
         cache: 'no-store',
-        signal: AbortSignal.timeout(15_000),
+        signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
       });
     } catch {
+      checkPreparation(options);
       // A single network error can happen during an automatic proxy reload.
       // Repeated errors are usually DNS/TLS/CORS/Brave blocking the request;
       // waiting eight minutes in an about:blank tab cannot fix those cases.
@@ -62,6 +91,7 @@ async function bootstrapControlUi(
       }
       options.onProgress?.(`Reconectando con Control UI (${networkFailures}/${MAX_NETWORK_FAILURES})…`);
     }
+    checkPreparation(options);
     if (response) networkFailures = 0;
     if (response?.ok) return;
     if (response && !retryableBootstrapStatus(response.status)) {
@@ -84,6 +114,47 @@ async function bootstrapControlUi(
       : 3_000;
     await wait(Math.min(delay, Math.max(0, deadline - now())));
   }
+}
+
+/** Same personal bootstrap for the native host and the separate-tab handoff. */
+export async function prepareOpenclawControlUi(options: ControlUiPreparationOptions = {}): Promise<{ origin: string; homeUrl: string }> {
+  checkPreparation(options);
+  // Capture before the first await. Imports must not let an A request adopt B.
+  const starting = useAuthStore.getState();
+  const generation = starting.sessionGeneration;
+  const owner = starting.user?.id;
+  if (!owner || !Number.isInteger(generation)) throw new ApiError('OPENCLAW_CONTROL_UI_UNAVAILABLE', 'Vuelve a iniciar sesión en Micelclaw antes de abrir la Control UI.');
+  const isClosed = () => options.isClosed?.() === true
+    || useAuthStore.getState().sessionGeneration !== generation
+    || useAuthStore.getState().user?.id !== owner
+    || useAuthStore.getState().logoutState !== 'idle';
+  const cancellation = new AbortController();
+  const signal = options.signal ? AbortSignal.any([options.signal, cancellation.signal]) : cancellation.signal;
+  const unsubscribe = useAuthStore.subscribe(() => { if (isClosed()) cancellation.abort(); });
+  const currentOptions = { ...options, signal, isClosed };
+  try {
+    checkPreparation(currentOptions);
+    const discovery = await api.post<ControlUiDiscovery>('/auth/openclaw-control-ui', undefined, { signal });
+    checkPreparation(currentOptions);
+    const { host, bootstrap_path: bootstrapPath, ready, https_port: httpsPort } = discovery.data;
+    if (ready !== true) throw new ApiError('OPENCLAW_CONTROL_UI_UNAVAILABLE', 'La Control UI todavía no está disponible.');
+    const bootstrapUrl = controlUiUrl(host, bootstrapPath, httpsPort);
+    const homeUrl = controlUiUrl(host, '/', httpsPort);
+    const origin = new URL(homeUrl).origin;
+    // A retired preparation settles before the next owner prepares this host's
+    // cookie. Cancellation is synchronous with the auth transition, not merely
+    // a JavaScript check after a stale Set-Cookie has already been processed.
+    const previous = preparations.get(origin) ?? Promise.resolve();
+    const operation = previous.catch(() => {}).then(async () => {
+      checkPreparation(currentOptions);
+      await bootstrapControlUi(bootstrapUrl, () => useAuthStore.getState().tokens?.accessToken, ApiError, currentOptions);
+    });
+    preparations.set(origin, operation);
+    try { await operation; }
+    finally { if (preparations.get(origin) === operation) preparations.delete(origin); }
+    checkPreparation(currentOptions);
+    return { origin, homeUrl };
+  } finally { unsubscribe(); }
 }
 
 function showPopupStatus(popup: Window, message: string): void {
@@ -115,20 +186,9 @@ export async function openOpenclawControlUi(): Promise<void> {
   popup.document.close();
 
   try {
-    const [{ api, ApiError }, { useAuthStore }] = await Promise.all([
-      import('./api'),
-      import('../stores/auth.store'),
-    ]);
-    const discovery = await api.post<ControlUiDiscovery>('/auth/openclaw-control-ui');
-    const { host, bootstrap_path: bootstrapPath, ready, https_port: httpsPort } = discovery.data;
-    if (ready !== true) throw new ApiError('OPENCLAW_CONTROL_UI_UNAVAILABLE', 'La Control UI todavía no está disponible.');
-    const bootstrapUrl = controlUiUrl(host, bootstrapPath, httpsPort), homeUrl = controlUiUrl(host, '/', httpsPort);
-    await bootstrapControlUi(
-      bootstrapUrl,
-      () => useAuthStore.getState().tokens?.accessToken,
-      ApiError,
-      { isClosed: () => popup.closed, onProgress: (message) => showPopupStatus(popup, message) },
-    );
+    const { homeUrl } = await prepareOpenclawControlUi({
+      isClosed: () => popup.closed, onProgress: (message) => showPopupStatus(popup, message),
+    });
     showPopupStatus(popup, 'Abriendo Control UI…');
     popup.location.replace(homeUrl);
   } catch (error) {

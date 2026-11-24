@@ -10,8 +10,12 @@
  * https://micelclaw.com
  */
 
-import { useState, useMemo } from 'react';
+import { useId, useMemo } from 'react';
+import { Link } from 'react-router';
+import { createPortal } from 'react-dom';
 import { BarChart3 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { useAgentConversations } from './hooks/use-agent-conversations';
 import { ConversationMessage } from './ConversationMessage';
 import { ConversationCharts } from './ConversationCharts';
@@ -19,6 +23,9 @@ import type { ManagedAgent } from './types';
 
 interface AgentConversationsProps {
   agents: ManagedAgent[];
+  headerActions: HTMLDivElement | null;
+  searchParams: URLSearchParams;
+  onPreferenceChange: (key: 'agents_period' | 'agents_participant' | 'agents_charts' | 'agents_query', value: string) => void;
 }
 
 const PERIOD_OPTIONS = [
@@ -30,7 +37,7 @@ const PERIOD_OPTIONS = [
 ] as const;
 
 function formatTokens(tokens: number | null | undefined): string {
-  if (tokens == null) return '0';
+  if (tokens == null) return '—';
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`;
   }
@@ -42,14 +49,21 @@ function formatPeriodLabel(period: string): string {
   return match ? match.label : period;
 }
 
-export function AgentConversations({ agents }: AgentConversationsProps) {
-  const [period, setPeriod] = useState('month');
-  const [agentFilter, setAgentFilter] = useState('');
-  const [showCharts, setShowCharts] = useState(true);
+export function AgentConversations({ agents, headerActions, searchParams, onPreferenceChange }: AgentConversationsProps) {
+  const periodId = useId();
+  const agentId = useId();
+  const selectedPeriod = searchParams.get('agents_period');
+  const period = PERIOD_OPTIONS.find(option => option.value === selectedPeriod)?.value ?? 'month';
+  const selectedAgent = searchParams.get('agents_participant');
+  const agentFilter = agents.find(agent => agent.name === selectedAgent)?.name ?? '';
+  const showCharts = searchParams.get('agents_charts') !== '0';
+  const query = (searchParams.get('agents_query') ?? '').slice(0, 120).trim();
 
-  const { conversations, stats, loading } = useAgentConversations({
+
+  const { conversations, stats, loading, failed, retry } = useAgentConversations({
     period,
     agent: agentFilter || undefined,
+    query,
   });
 
   // Group conversations by session_id
@@ -85,66 +99,55 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
       height: '100%',
       overflow: 'hidden',
     }}>
-      {/* Toolbar */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0,
-        flexWrap: 'wrap' as const,
-        gap: 8,
-      }}>
-        <h3 style={{
-          margin: 0,
-          fontSize: '1rem',
-          fontWeight: 600,
-          color: 'var(--text)',
+      {headerActions && createPortal(<>
+        <form role="search" className="flex max-w-full min-w-0 items-center gap-1" onSubmit={event => {
+          event.preventDefault();
+          const value = new FormData(event.currentTarget).get('query');
+          if (typeof value === 'string') onPreferenceChange('agents_query', value.trim());
         }}>
-          Conversations
-        </h3>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            onClick={() => setShowCharts(v => !v)}
-            title={showCharts ? 'Ocultar gráficas' : 'Mostrar gráficas'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              background: showCharts ? 'var(--surface-hover)' : 'var(--surface)',
-              border: showCharts ? '1px solid var(--amber)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', color: showCharts ? 'var(--amber)' : 'var(--text-dim)',
-              fontSize: '0.75rem', padding: '4px 8px', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-            }}
-          >
-            <BarChart3 size={13} /> Gráficas
-          </button>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Period:
-          </label>
-          <select
-            value={period}
-            onChange={e => setPeriod(e.target.value)}
-            style={selectStyle}
-          >
-            {PERIOD_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Agent:
-          </label>
-          <select
-            value={agentFilter}
-            onChange={e => setAgentFilter(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">All</option>
-            {agents.map(a => (
-              <option key={a.id} value={a.name}>{a.display_name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+          <Input key={query} name="query" type="search" aria-label="Buscar intercambios" defaultValue={query}
+            maxLength={120} className="h-7 min-w-0 w-32" />
+          <Button type="submit" size="sm" variant="outline" className="h-7">Buscar</Button>
+        </form>
+        <button
+          type="button"
+          aria-pressed={showCharts}
+          onClick={() => onPreferenceChange('agents_charts', showCharts ? '0' : '')}
+          title={showCharts ? 'Ocultar gráficas' : 'Mostrar gráficas'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            background: showCharts ? 'var(--surface-hover)' : 'var(--surface)',
+            border: showCharts ? '1px solid var(--amber)' : '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: showCharts ? 'var(--amber)' : 'var(--text-dim)',
+            fontSize: '0.75rem', padding: '4px 8px', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <BarChart3 size={13} /> Gráficas
+        </button>
+        <label htmlFor={periodId} className="text-xs text-muted-foreground">Period</label>
+        <select
+          id={periodId}
+          value={period}
+          onChange={e => onPreferenceChange('agents_period', e.target.value)}
+          style={selectStyle}
+        >
+          {PERIOD_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <label htmlFor={agentId} className="text-xs text-muted-foreground">Agent</label>
+        <select
+          id={agentId}
+          value={agentFilter}
+          onChange={e => onPreferenceChange('agents_participant', e.target.value)}
+          style={selectStyle}
+        >
+          <option value="">All</option>
+          {agents.map(a => (
+            <option key={a.id} value={a.name}>{a.display_name}</option>
+          ))}
+        </select>
+      </>, headerActions)}
 
       {/* Charts panel (recharts) */}
       {showCharts && stats && (
@@ -170,24 +173,36 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
           </div>
         )}
 
-        {!loading && conversations.length === 0 && (
+        {failed && (
+          <div role="alert" className="flex flex-wrap items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+            No se pudieron cargar las conversaciones de este filtro.
+            <button type="button" className="underline" onClick={retry}>Reintentar</button>
+          </div>
+        )}
+
+        {!loading && !failed && conversations.length === 0 && (
           <div style={{
             padding: 24,
             textAlign: 'center',
             color: 'var(--text-dim)',
             fontSize: '0.875rem',
           }}>
-            No conversations found for this period.
+            {query ? 'No hay intercambios que coincidan con la búsqueda.' : 'No conversations found for this period.'}
           </div>
         )}
 
         {!loading && Array.from(grouped.entries()).map(([sessionId, messages]) => {
+          const conversationId = messages[0]?.conversation_id;
+          const hasConversation = !!conversationId &&
+            /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(conversationId) &&
+            messages.every(message => message.conversation_id === conversationId);
           const firstTime = messages[0]
             ? new Date(messages[0].created_at).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
               })
             : '';
+          const sessionLabel = `Session ${sessionId ?? '—'} · ${firstTime}`;
 
           return (
             <div key={sessionId}>
@@ -202,9 +217,12 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
                   fontSize: '0.75rem',
                   color: 'var(--text-muted)',
                   fontWeight: 600,
-                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                  overflowWrap: 'anywhere',
                 }}>
-                  Session {sessionId} &middot; {firstTime}
+                  {hasConversation
+                    ? <Link className="underline" to={`/chat?conversation=${encodeURIComponent(conversationId)}`}>{sessionLabel}</Link>
+                    : sessionLabel}
                 </div>
                 <div style={{
                   flex: 1,

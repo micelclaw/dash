@@ -10,7 +10,8 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Bot, Package } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useAgents } from './hooks/use-agents';
@@ -26,11 +27,12 @@ import { ImportAgentModal } from './ImportAgentModal';
 import { useChatStore } from '@/stores/chat.store';
 import type { AgentTab } from './types';
 
-const TABS: { key: AgentTab; label: string }[] = [
+type Section = { key: AgentTab; label: string; description?: string };
+const TABS: readonly [Section, ...Section[]] = [
   { key: 'tree', label: 'Tree' },
-  { key: 'council', label: 'Council' },
-  { key: 'workboard', label: 'Workboard' },
-  { key: 'memory', label: 'Memory' },
+  { key: 'council', label: 'Council', description: 'Board meetings with your chief agents' },
+  { key: 'workboard', label: 'Workboard', description: 'Coordinación de agentes · cola de trabajo y traspaso de sesión' },
+  { key: 'memory', label: 'Memory', description: 'Memoria activa y consolidación durante el sueño' },
   { key: 'conversations', label: 'Conversations' },
   { key: 'workspaces', label: 'Workspaces' },
   { key: 'fleet', label: 'Fleet' },
@@ -39,31 +41,36 @@ const TABS: { key: AgentTab; label: string }[] = [
 export function Component() {
   const { agents, loading, error, addAgent, refetch } = useAgents();
   const isMobile = useIsMobile();
-  // ?tab= permite deep-linkear a un tab top-level. `dreams` era el nombre
-  // anterior; se conserva sólo como redirección de enlaces existentes.
-  // los valores per-agente (tools/memory/…) los consume AgentDetail, no aquí.
-  const [activeTab, setActiveTab] = useState<AgentTab>(() => {
-    if (typeof window === 'undefined') return 'tree';
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('tab');
-    if (t === 'dreams') {
-      params.set('tab', 'memory');
-      params.set('memory_tab', 'dreams');
-      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-      return 'memory';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const active = TABS.find(tab => tab.key === (requestedTab === 'dreams' ? 'memory' : requestedTab)) ?? TABS[0];
+  const activeTab = active.key;
+  const updateSearch = useCallback((values: Record<string, string>, replace: boolean) => {
+    // Browser history already reflects a rapid replace or Back even while
+    // React Router is still committing the corresponding render.
+    const next = new URLSearchParams(window.location.search);
+    const base = next.toString();
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
     }
-    return TABS.some(x => x.key === t) ? (t as AgentTab) : 'tree';
-  });
-  // Salto de tab desde componentes anidados (p.ej. AgentMemory → "Ver Sueños").
+    if (next.toString() !== base) setSearchParams(next, { replace });
+  }, [setSearchParams]);
+  const setActiveTab = useCallback((requested: AgentTab | 'dreams', replace = false) => {
+    updateSearch(requested === 'dreams' ? { tab: 'memory', memory_tab: 'dreams' } : { tab: requested }, replace);
+  }, [updateSearch]);
   useEffect(() => {
-    const onJump = (e: Event) => {
-      const tab = (e as CustomEvent<string>).detail;
-      if (tab === 'dreams') setActiveTab('memory');
-      else if (TABS.some(x => x.key === tab)) setActiveTab(tab as AgentTab);
+    if (requestedTab === 'dreams') setActiveTab('dreams', true);
+  }, [requestedTab, setActiveTab]);
+  useEffect(() => {
+    const onJump = (event: Event) => {
+      const tab = (event as CustomEvent<string>).detail;
+      if (tab === 'dreams') setActiveTab('dreams');
+      else if (TABS.some(item => item.key === tab)) setActiveTab(tab as AgentTab);
     };
     window.addEventListener('claw:agents-tab', onJump);
     return () => window.removeEventListener('claw:agents-tab', onJump);
-  }, []);
+  }, [setActiveTab]);
   // Read ?selected= so deep-links from elsewhere (e.g. Settings →
   // Sandbox per-agent table) can land on a specific agent. The
   // ?tab= param is consumed inside AgentDetail.
@@ -79,6 +86,7 @@ export function Component() {
   const [newBtnHover, setNewBtnHover] = useState(false);
   const [importBtnHover, setImportBtnHover] = useState(false);
   const [hoveredTab, setHoveredTab] = useState<AgentTab | null>(null);
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
 
   if (loading) {
     return (
@@ -117,64 +125,31 @@ export function Component() {
       height: '100%',
       overflow: 'hidden',
     }}>
-      {/* Header */}
-      <div style={{
+      <header aria-label="Sección de agentes" style={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: isMobile ? '10px 12px' : '12px 16px',
+        gap: 8,
+        padding: isMobile ? '8px 12px' : '8px 16px',
         borderBottom: '1px solid var(--border)',
         flexShrink: 0,
-        ...(isMobile ? { flexWrap: 'wrap' as const, gap: 8 } : {}),
       }}>
-        {/* Left: title + new button on mobile */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          ...(isMobile ? { width: '100%', justifyContent: 'space-between' } : {}),
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Bot size={20} style={{ color: 'var(--mod-agents)' }} />
-            <h1 style={{
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: 'var(--text)',
-              margin: 0,
-            }}>
-              Agents
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <Bot size={20} aria-hidden="true" style={{ color: 'var(--mod-agents)', flexShrink: 0 }} />
+          <div>
+            <h1 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+              {active.label}
             </h1>
+            {active.description && <p style={{ margin: 0, fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+              {active.description}
+            </p>}
           </div>
-          {/* On mobile, move + New button next to title */}
-          {isMobile && (
-            <button
-              onClick={() => setShowCreateWizard(true)}
-              style={{
-                background: 'var(--amber)',
-                color: '#000',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '5px 12px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              + New
-            </button>
-          )}
         </div>
 
-        {/* Center: tabs */}
-        <div style={{
-          display: 'flex',
-          gap: isMobile ? 2 : 4,
-          ...(isMobile ? {
-            width: '100%',
-            overflowX: 'auto' as const,
-            WebkitOverflowScrolling: 'touch' as const,
-          } : {}),
+        <nav aria-label="Pestañas de agentes" style={{
+          display: 'flex', gap: isMobile ? 2 : 4, minWidth: 0, maxWidth: '100%',
+          overflowX: 'auto', width: isMobile ? '100%' : undefined,
         }}>
           {TABS.map(tab => {
             const isActive = activeTab === tab.key;
@@ -182,6 +157,8 @@ export function Component() {
             return (
               <button
                 key={tab.key}
+                type="button"
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => setActiveTab(tab.key)}
                 onMouseEnter={() => setHoveredTab(tab.key)}
                 onMouseLeave={() => setHoveredTab(null)}
@@ -210,55 +187,55 @@ export function Component() {
               </button>
             );
           })}
-        </div>
+        </nav>
 
-        {/* Right: Import + New buttons (desktop only) */}
-        {!isMobile && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              onClick={() => setShowImportModal(true)}
-              onMouseEnter={() => setImportBtnHover(true)}
-              onMouseLeave={() => setImportBtnHover(false)}
-              title="Import a Claws or legacy Agentar package"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: importBtnHover ? 'var(--surface-hover)' : 'transparent',
-                color: 'var(--text-dim)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '5px 12px',
-                fontSize: '0.8125rem',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'var(--transition-fast)',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              <Package size={13} /> Import
-            </button>
-            <button
-              onClick={() => setShowCreateWizard(true)}
-              onMouseEnter={() => setNewBtnHover(true)}
-              onMouseLeave={() => setNewBtnHover(false)}
-              style={{
-                background: 'var(--amber)',
-                color: '#000',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '5px 14px',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'var(--transition-fast)',
-                fontFamily: 'var(--font-sans)',
-                opacity: newBtnHover ? 0.9 : 1,
-              }}
-            >
-              + New
-            </button>
-          </div>
-        )}
-      </div>
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+          <div ref={setHeaderActions} className="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden" />
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            onMouseEnter={() => setImportBtnHover(true)}
+            onMouseLeave={() => setImportBtnHover(false)}
+            title="Import a Claws or legacy Agentar package"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: importBtnHover ? 'var(--surface-hover)' : 'transparent',
+              color: 'var(--text-dim)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 12px',
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'var(--transition-fast)',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Package size={13} /> Import
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreateWizard(true)}
+            onMouseEnter={() => setNewBtnHover(true)}
+            onMouseLeave={() => setNewBtnHover(false)}
+            style={{
+              background: 'var(--amber)',
+              color: '#000',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 14px',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'var(--transition-fast)',
+              fontFamily: 'var(--font-sans)',
+              opacity: newBtnHover ? 0.9 : 1,
+            }}
+          >
+            + New
+          </button>
+        </div>
+      </header>
 
       {/* Tab content */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -275,10 +252,19 @@ export function Component() {
             }}
           />
         )}
-        {activeTab === 'council' && <CouncilTab agents={agents} />}
-        {activeTab === 'workboard' && <WorkboardTab agents={agents} />}
+        {activeTab === 'council' && <CouncilTab agents={agents} headerActions={headerActions} />}
+        {activeTab === 'workboard' && <WorkboardTab
+          agents={agents}
+          tab={searchParams.get('workboard_view') === 'sessions' ? 'sessions' : 'coordination'}
+          onTabChange={tab => updateSearch({ workboard_view: tab === 'sessions' ? tab : '' }, false)}
+        />}
         {activeTab === 'memory' && <DreamsTab agents={agents} />}
-        {activeTab === 'conversations' && <AgentConversations agents={agents} />}
+        {activeTab === 'conversations' && <AgentConversations
+          agents={agents}
+          headerActions={headerActions}
+          searchParams={searchParams}
+          onPreferenceChange={(key, value) => updateSearch({ [key]: value }, true)}
+        />}
         {activeTab === 'workspaces' && (
           <AgentWorkspaces
             agents={agents}

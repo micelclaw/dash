@@ -5,17 +5,18 @@
 > para decidir a qué módulo le toca una pasada de usabilidad: su tabla de cobertura
 > se quedó en la rama `feat/overnight-usability` y no cubre ni los módulos más
 > grandes ni los posteriores (`sketches`, `crypto`, `drive`, `agents/dreams`,
-> `agents/council`, shell móvil). La premisa técnica de su cabecera tampoco se
-> sostiene: decía «~132 errores pre-existentes» y el árbol de trabajo compila hoy
-> con **33 errores en 16 ficheros**.
+> `agents/council`, shell móvil). La premisa técnica de su cabecera tampoco
+> debe usarse como diagnóstico actual: las cifras de errores y las conclusiones
+> de cada iteración son observaciones históricas, no una compilación reciente
+> ni una garantía del estado actual del producto.
 >
-> Lo vigente sobre el estado del dash está en `dash/CLAUDE.md`; la deuda abierta,
-> en `micelclaw-os/docs/roadmap/04_pending-debt.md`. Se conserva por trazabilidad:
+> Para normas actuales consulta `dash/AGENTS.md` y los índices de OS; la deuda
+> histórica está en `micelclaw-os/docs/roadmap/04_pending-debt.md`. Se conserva por trazabilidad:
 > cada iteración documenta qué se cambió, con qué commit y por qué.
 >
-> **Decisión que este log dejó pendiente y sigue abierta:** la política de idioma
-> del producto (ES / EN / mixto por módulo). Está registrada como pregunta a
-> validar en `dash/CLAUDE.md`.
+> **Idioma:** la pregunta que dejó este log tiene decisiones posteriores para
+> inglés y español habilitados en el contrato S07 de localización; eso no acredita
+> que todas las cuestiones de idioma del producto estén resueltas.
 
 Bitácora del loop nocturno de usabilidad (`/loop` cada 30 min, rama
 `feat/overnight-usability`). Cada iteración revisa UN módulo del dash e
