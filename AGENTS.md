@@ -1,8 +1,6 @@
 # Micelclaw Dash
 
-This is the portable, versioned Codex contract for Dash. `CLAUDE.md` and
-`.claude/` are historical supplementary material, never the sole source of a
-current rule.
+This is the portable, versioned Codex contract for Dash.
 
 - Dash is the React/Vite frontend for Micelclaw Core. Preserve the documented
   Core contract and do not guess backend fields or add raw API fallbacks.
@@ -29,8 +27,8 @@ current rule.
   `src/components` and `src/modules` for API/UI-specific work.
 - The Micelclaw Gateway is a Dash module, not the upstream OpenClaw Control UI.
   For a Gateway/Models capture or provider catalog, first read
-  `../micelclaw-os/docs/reference/codex-bootstrap.md`, then begin in
-  `src/modules/gateway/`. Its versioned reference is `docs/gateway/models.md`.
+  the [workspace bootstrap](../micelclaw-os/docs/reference/codex-bootstrap.md),
+  then begin in `src/modules/gateway/`. See the [models reference](docs/gateway/models.md).
 - Do not change unrelated worktree files, generated `dist/` content or secrets.
 - Verify claims and state the validation actually run. Require approval for push,
   publishing and external side effects.
@@ -38,7 +36,7 @@ current rule.
 ## Planificación de implementaciones
 
 - Antes de preparar o revisar un plan, lee y aplica
-  `../micelclaw-os/codex-skills/micelclaw-impact-planner/SKILL.md`, que enlaza el
+  la [skill de planificación](../micelclaw-os/codex-skills/micelclaw-impact-planner/SKILL.md), que enlaza el
   protocolo y la plantilla canónicos. Investiga relaciones en código antes de
   diseñar tareas; vincula impactos, tareas y verificaciones.
 - Plan breve si el alcance local está comprobado; matriz y revisión independiente
@@ -50,7 +48,7 @@ current rule.
 ## Procedencia de entidades
 
 - Reutiliza `SourceBadge`/`EntitySource` (y `PhotoSource` en miniaturas) en nuevos
-  dominios. Contrato: `../micelclaw-os/docs/reference/entity-origins.md`.
+  dominios. [Contrato de procedencia](../micelclaw-os/docs/reference/entity-origins.md).
 - Conserva `origins` en adaptadores, tipos, escrituras/Undo y mezclas de estado;
   su ausencia no prueba origen local. No infieras marcas por nombre o protocolo.
 - Tras cambiar identidad o conexiones, invalida consumidores montados mediante
